@@ -1,0 +1,6 @@
+{
+  "enabledPlugins": {
+    "core@elixir": true,
+    "meta@elixir": true
+  }
+}
