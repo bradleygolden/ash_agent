@@ -1,6 +1,9 @@
 {
+  "includeCoAuthoredBy": false,
   "enabledPlugins": {
     "core@elixir": true,
+    "credo@elixir": true,
+    "ex_unit@elixir": true,
     "meta@elixir": true
   }
 }
