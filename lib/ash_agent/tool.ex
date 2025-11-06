@@ -108,6 +108,19 @@ defmodule AshAgent.Tool do
   def build_properties(nil), do: %{}
 
   @doc """
+  Extracts required field names from parameters.
+  Returns a list of string names for JSON Schema required array.
+  """
+  def extract_required_fields(parameters) when is_list(parameters) do
+    parameters
+    |> Enum.filter(fn param -> param[:required] == true end)
+    |> Enum.map(fn param -> to_string(param[:name]) end)
+  end
+
+  def extract_required_fields([]), do: []
+  def extract_required_fields(nil), do: []
+
+  @doc """
   Builds a JSON Schema compatible tool schema from a tool module.
   """
   def to_json_schema(module) do
