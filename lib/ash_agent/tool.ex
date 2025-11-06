@@ -63,6 +63,20 @@ defmodule AshAgent.Tool do
   end
 
   @doc """
+  Maps parameter types to JSON Schema types per JSON Schema Draft 7.
+  """
+  def map_type_to_json_schema(:string), do: "string"
+  def map_type_to_json_schema(:integer), do: "integer"
+  def map_type_to_json_schema(:float), do: "number"
+  def map_type_to_json_schema(:number), do: "number"
+  def map_type_to_json_schema(:boolean), do: "boolean"
+  def map_type_to_json_schema(:uuid), do: "string"
+  def map_type_to_json_schema(:map), do: "object"
+  def map_type_to_json_schema(:atom), do: "string"
+  def map_type_to_json_schema({:array, _item_type}), do: "array"
+  def map_type_to_json_schema(_unknown), do: "string"
+
+  @doc """
   Builds a JSON Schema compatible tool schema from a tool module.
   """
   def to_json_schema(module) do
