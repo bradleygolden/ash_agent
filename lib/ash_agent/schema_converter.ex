@@ -15,6 +15,24 @@ defmodule AshAgent.SchemaConverter do
       ]
 
   This module reads TypedStruct field definitions and converts them to this format.
+
+  ## Supported Types
+
+  - Basic types: string, integer, float, boolean, map
+  - Arrays: {:array, inner_type}
+  - Nested arrays: {:array, {:array, inner_type}}
+  - Objects: TypedStruct modules
+  - Unions: Ash.Type.Union (converted to oneOf)
+  - Custom types: Via callback mechanism
+
+  ## Extension Point
+
+  Custom types can be handled by implementing the `map_custom_type/1` callback
+  in your module and configuring it via Application config:
+
+      config :ash_agent, :custom_type_mapper, MyApp.CustomTypeMapper
+
+  The callback should accept a type and return a req_llm schema type atom or tuple.
   """
 
   alias Ash.TypedStruct.Info, as: TypedStructInfo
@@ -73,6 +91,19 @@ defmodule AshAgent.SchemaConverter do
 
   defp map_ash_type({:array, inner_type}), do: {:array, map_ash_type(inner_type)}
 
+  defp map_ash_type({Ash.Type.Union, constraints}) do
+    types = Keyword.get(constraints, :types, [])
+    storage = Keyword.get(constraints, :storage, :type_and_value)
+
+    case storage do
+      :map_with_tag ->
+        map_discriminated_union(types)
+
+      :type_and_value ->
+        map_simple_union(types)
+    end
+  end
+
   defp map_ash_type(Ash.Type.String), do: :string
   defp map_ash_type(Ash.Type.Integer), do: :integer
   defp map_ash_type(Ash.Type.Float), do: :float
@@ -90,14 +121,56 @@ defmodule AshAgent.SchemaConverter do
   defp map_ash_type(:map), do: :map
 
   defp map_ash_type(module) when is_atom(module) do
-    if function_exported?(module, :spark_is, 0) do
-      {:object, to_req_llm_schema(module)}
-    else
-      :any
+    cond do
+      function_exported?(module, :spark_is, 0) ->
+        {:object, to_req_llm_schema(module)}
+
+      custom_mapper = Application.get_env(:ash_agent, :custom_type_mapper) ->
+        try do
+          custom_mapper.map_custom_type(module)
+        rescue
+          _ -> :any
+        end
+
+      true ->
+        :any
     end
   rescue
     _ -> :any
   end
 
   defp map_ash_type(_type), do: :any
+
+  defp map_simple_union(types) do
+    type_schemas =
+      types
+      |> Enum.map(fn {_name, config} ->
+        map_ash_type(config[:type])
+      end)
+
+    {:one_of, type_schemas}
+  end
+
+  defp map_discriminated_union(types) do
+    schemas =
+      types
+      |> Enum.map(fn {name, config} ->
+        tag_field = config[:tag] || :type
+        tag_value = config[:tag_value] || to_string(name)
+        base_type = map_ash_type(config[:type])
+
+        case base_type do
+          {:object, fields} ->
+            [{tag_field, [type: :string, required: true, enum: [tag_value]]} | fields]
+
+          _other ->
+            [
+              {tag_field, [type: :string, required: true, enum: [tag_value]]},
+              {:value, [type: base_type, required: true]}
+            ]
+        end
+      end)
+
+    {:one_of, schemas}
+  end
 end
