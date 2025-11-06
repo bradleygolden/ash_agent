@@ -44,13 +44,7 @@ defmodule AshAgent.Domain do
       end
       """
     ],
-    schema: [
-      default_enabled: [
-        type: :boolean,
-        default: true,
-        doc: "Default value for whether agent functionality is enabled."
-      ]
-    ]
+    schema: []
   }
 
   use Spark.Dsl.Extension,

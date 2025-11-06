@@ -1,0 +1,154 @@
+defmodule AshAgent.DSL do
+  @moduledoc """
+  DSL definitions for AshAgent extension.
+
+  Provides the `agent` section for defining LLM agents with type-safe inputs/outputs,
+  prompt templates, and automatic function generation.
+  """
+
+  defmodule Argument do
+    @moduledoc false
+    defstruct [:name, :type, :allow_nil?, :default, :doc, :__spark_metadata__]
+  end
+
+  @argument %Spark.Dsl.Entity{
+    name: :argument,
+    describe: "Defines an input argument for the agent",
+    examples: [
+      "argument :message, :string, allow_nil?: false",
+      "argument :context, :map, default: %{}"
+    ],
+    target: AshAgent.DSL.Argument,
+    args: [:name, :type],
+    schema: [
+      name: [
+        type: :atom,
+        required: true,
+        doc: "The name of the argument"
+      ],
+      type: [
+        type: {:in, [:string, :integer, :float, :boolean, :map, :list, {:array, :any}]},
+        required: true,
+        doc: "The type of the argument"
+      ],
+      allow_nil?: [
+        type: :boolean,
+        default: true,
+        doc: "Whether the argument can be nil"
+      ],
+      default: [
+        type: :any,
+        doc: "Default value for the argument"
+      ],
+      doc: [
+        type: :string,
+        doc: "Documentation for the argument"
+      ]
+    ]
+  }
+
+  @input %Spark.Dsl.Section{
+    name: :input,
+    describe: "Defines the input arguments accepted by the agent",
+    examples: [
+      """
+      input do
+        argument :message, :string, allow_nil?: false
+        argument :context, :map, default: %{}
+      end
+      """
+    ],
+    entities: [@argument]
+  }
+
+  @agent %Spark.Dsl.Section{
+    name: :agent,
+    describe: """
+    Configuration for agent behavior and LLM integration.
+
+    Defines the LLM client, prompt template, input arguments, and output types
+    for the agent.
+    """,
+    examples: [
+      """
+      agent do
+        client "anthropic:claude-3-5-sonnet", temperature: 0.5, max_tokens: 100
+
+        input do
+          argument :message, :string, allow_nil?: false
+        end
+
+        output Reply
+
+        prompt ~p\"\"\"
+        You are a helpful assistant.
+
+        {{ output_format }}
+
+        User: {{ message }}
+        \"\"\"
+      end
+      """
+    ],
+    schema: [
+      client: [
+        type: {:custom, __MODULE__, :validate_client_config, []},
+        required: true,
+        doc: """
+        LLM provider and model configuration with optional parameters.
+
+        Syntax:
+          client "provider:model"
+          client "provider:model", temperature: 0.7, max_tokens: 1000
+
+        The first argument is the provider:model string (required).
+        Additional keyword arguments are passed through to ReqLLM as options.
+        Common options: :temperature, :max_tokens
+        """
+      ],
+      output: [
+        type: :atom,
+        required: true,
+        doc: "Ash.TypedStruct module to use as the output type"
+      ],
+      prompt: [
+        type: {:or, [:string, {:struct, Solid.Template}]},
+        required: true,
+        doc: "Prompt template using Liquid syntax. Use ~p sigil for compile-time validation."
+      ]
+    ],
+    sections: [@input]
+  }
+
+  @doc false
+  def validate_client_config(client_string) when is_binary(client_string) do
+    {:ok, {client_string, []}}
+  end
+
+  def validate_client_config([client_string | opts])
+      when is_binary(client_string) and is_list(opts) do
+    {:ok, {client_string, opts}}
+  end
+
+  def validate_client_config(value) do
+    {:error,
+     "client must be a string optionally followed by keyword options, got: #{inspect(value)}"}
+  end
+
+  @doc """
+  Defines the LLM client with optional parameters.
+
+  ## Examples
+
+      client "anthropic:claude-3-5-sonnet"
+      client "anthropic:claude-3-5-sonnet", temperature: 0.7, max_tokens: 1000
+  """
+  defmacro client(client_string, opts \\ []) do
+    quote do
+      client([unquote(client_string) | unquote(opts)])
+    end
+  end
+
+  def agent, do: @agent
+  def input, do: @input
+end

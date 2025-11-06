@@ -34,6 +34,8 @@ defmodule AshAgent.MixProject do
       # Core dependencies
       {:ash, "~> 3.0"},
       {:spark, "~> 2.2"},
+      {:req_llm, "~> 1.0.0-rc.7"},
+      {:solid, "~> 0.15"},
 
       # Optional dependencies
       {:igniter, "~> 0.3", optional: true},
@@ -42,7 +44,7 @@ defmodule AshAgent.MixProject do
       {:ex_doc, "~> 0.34", only: [:dev, :test], runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
-      {:git_ops, "~> 2.6", only: [:dev, :test], runtime: false}
+      {:plug, "~> 1.16", only: :test}
     ]
   end
 

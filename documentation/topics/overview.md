@@ -33,7 +33,11 @@ defmodule MyApp.MyAgent do
     extensions: [AshAgent.Resource]
 
   agent do
-    enabled true
+    client "anthropic:claude-3-5-sonnet"
+
+    output MyApp.Reply
+
+    prompt "You are a helpful assistant."
   end
 end
 ```
@@ -46,10 +50,6 @@ This extension provides domain-level configuration that applies to all agent res
 defmodule MyApp.Domain do
   use Ash.Domain,
     extensions: [AshAgent.Domain]
-
-  agent do
-    default_enabled true
-  end
 end
 ```
 

@@ -40,3 +40,5 @@ ash_agent-*.tar
 
 # macOS
 .DS_Store
+
+.springfield

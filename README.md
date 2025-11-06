@@ -47,7 +47,14 @@ defmodule MyApp.Agents.Assistant do
     extensions: [AshAgent.Resource]
 
   agent do
-    enabled true
+    client "anthropic:claude-3-5-sonnet"
+
+    output MyApp.Reply
+
+    prompt ~p"""
+    You are a helpful assistant.
+    {{ output_format }}
+    """
   end
 
   attributes do
@@ -64,10 +71,6 @@ defmodule MyApp.Agents do
   use Ash.Domain,
     extensions: [AshAgent.Domain]
 
-  agent do
-    default_enabled true
-  end
-
   resources do
     resource MyApp.Agents.Assistant
   end
@@ -81,10 +84,6 @@ end
 {:ok, agent} = MyApp.Agents.Assistant
   |> Ash.Changeset.for_create(:create, %{name: "My Assistant"})
   |> Ash.create()
-
-# Check if agent is enabled
-AshAgent.Info.agent_enabled?(MyApp.Agents.Assistant)
-# => true
 ```
 
 ## Documentation
