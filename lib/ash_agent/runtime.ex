@@ -10,6 +10,7 @@ defmodule AshAgent.Runtime do
   5. Parsing and returning structured results
   """
 
+  alias AshAgent.Runtime.Hooks
   alias AshAgent.Runtime.LLMClient
   alias AshAgent.Runtime.PromptRenderer
   alias AshAgent.SchemaConverter
@@ -56,12 +57,42 @@ defmodule AshAgent.Runtime do
   """
   @spec call(module(), keyword() | map()) :: {:ok, struct()} | {:error, term()}
   def call(module, args) do
-    with {:ok, config} <- get_agent_config(module),
-         {:ok, prompt} <- render_prompt(config, args),
+    case get_agent_config(module) do
+      {:ok, config} ->
+        call_with_hooks(config, module, args)
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  defp call_with_hooks(config, module, args) do
+    context = Hooks.build_context(module, args)
+
+    with {:ok, context} <- Hooks.execute(config.hooks, :before_call, context),
+         {:ok, prompt} <- render_prompt(config, context.input),
+         context = Hooks.with_prompt(context, prompt),
+         {:ok, context} <- Hooks.execute(config.hooks, :after_render, context),
          {:ok, schema} <- build_schema(config),
          {:ok, response} <-
-           LLMClient.generate_object(config.client, prompt, schema, config.client_opts) do
-      LLMClient.parse_response(config.output_type, response)
+           LLMClient.generate_object(
+             config.client,
+             context.rendered_prompt,
+             schema,
+             config.client_opts
+           ),
+         {:ok, result} <- LLMClient.parse_response(config.output_type, response),
+         context = Hooks.with_response(context, result),
+         {:ok, context} <- Hooks.execute(config.hooks, :after_call, context) do
+      {:ok, context.response}
+    else
+      {:error, error} = result ->
+        context = Hooks.with_error(context, error)
+
+        case Hooks.execute(config.hooks, :on_error, context) do
+          {:ok, _context} -> result
+          {:error, transformed_error} -> {:error, transformed_error}
+        end
     end
   end
 
@@ -101,12 +132,51 @@ defmodule AshAgent.Runtime do
   """
   @spec stream(module(), keyword() | map()) :: {:ok, Enumerable.t()} | {:error, term()}
   def stream(module, args) do
-    with {:ok, config} <- get_agent_config(module),
-         {:ok, prompt} <- render_prompt(config, args),
+    case get_agent_config(module) do
+      {:ok, config} ->
+        stream_with_hooks(config, module, args)
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  defp stream_with_hooks(config, module, args) do
+    context = Hooks.build_context(module, args)
+
+    with {:ok, context} <- Hooks.execute(config.hooks, :before_call, context),
+         {:ok, prompt} <- render_prompt(config, context.input),
+         context = Hooks.with_prompt(context, prompt),
+         {:ok, context} <- Hooks.execute(config.hooks, :after_render, context),
          {:ok, schema} <- build_schema(config),
          {:ok, stream_response} <-
-           LLMClient.stream_object(config.client, prompt, schema, config.client_opts) do
-      {:ok, LLMClient.stream_to_structs(stream_response, config.output_type)}
+           LLMClient.stream_object(
+             config.client,
+             context.rendered_prompt,
+             schema,
+             config.client_opts
+           ) do
+      stream = LLMClient.stream_to_structs(stream_response, config.output_type)
+
+      wrapped_stream =
+        Stream.map(stream, fn result ->
+          context = Hooks.with_response(context, result)
+
+          case Hooks.execute(config.hooks, :after_call, context) do
+            {:ok, context} -> context.response
+            {:error, _} -> result
+          end
+        end)
+
+      {:ok, wrapped_stream}
+    else
+      {:error, error} = result ->
+        context = Hooks.with_error(context, error)
+
+        case Hooks.execute(config.hooks, :on_error, context) do
+          {:ok, _context} -> result
+          {:error, transformed_error} -> {:error, transformed_error}
+        end
     end
   end
 
@@ -131,7 +201,8 @@ defmodule AshAgent.Runtime do
       client_opts: client_opts,
       prompt: Extension.get_opt(module, [:agent], :prompt, nil, true),
       output_type: get_output_type(module),
-      input_args: get_input_args(module)
+      input_args: get_input_args(module),
+      hooks: Extension.get_opt(module, [:agent], :hooks, nil, true)
     }
 
     {:ok, config}

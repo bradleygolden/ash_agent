@@ -115,6 +115,21 @@ defmodule AshAgent.DSL do
         type: {:or, [:string, {:struct, Solid.Template}]},
         required: true,
         doc: "Prompt template using Liquid syntax. Use ~p sigil for compile-time validation."
+      ],
+      hooks: [
+        type: :atom,
+        required: false,
+        doc: """
+        Module implementing the AshAgent.Runtime.Hooks behaviour.
+
+        Hooks allow you to inject custom behavior at key points in the agent execution lifecycle:
+        - before_call: Called before rendering prompt or calling LLM
+        - after_render: Called after prompt rendering, before LLM call
+        - after_call: Called after successful LLM response
+        - on_error: Called when any error occurs
+
+        See `AshAgent.Runtime.Hooks` for more details.
+        """
       ]
     ],
     sections: [@input]
