@@ -1,6 +1,7 @@
 defmodule AshAgent.SchemaConverterTest do
   @moduledoc false
   use ExUnit.Case, async: true
+  use ExUnitProperties
 
   alias AshAgent.SchemaConverter
   alias AshAgent.Test.Reply
@@ -101,6 +102,73 @@ defmodule AshAgent.SchemaConverterTest do
 
       optional_opts = schema[:optional_field]
       assert optional_opts[:required] == false
+    end
+  end
+
+  describe "property-based tests" do
+    property "always returns a keyword list" do
+      check all(_iteration <- integer(1..10)) do
+        schema = SchemaConverter.to_req_llm_schema(Reply)
+        assert is_list(schema)
+        assert Keyword.keyword?(schema)
+      end
+    end
+
+    property "all fields have type and required keys" do
+      check all(_iteration <- integer(1..10)) do
+        schema = SchemaConverter.to_req_llm_schema(Reply)
+
+        for {_field_name, field_opts} <- schema do
+          assert Keyword.has_key?(field_opts, :type)
+          assert Keyword.has_key?(field_opts, :required)
+          assert is_boolean(field_opts[:required])
+        end
+      end
+    end
+
+    property "required flag matches field constraints" do
+      check all(_iteration <- integer(1..10)) do
+        schema = SchemaConverter.to_req_llm_schema(ComplexTypes)
+
+        required_field = schema[:required_field]
+        assert required_field[:required] == true
+
+        optional_field = schema[:optional_field]
+        assert optional_field[:required] == false
+      end
+    end
+
+    property "nested arrays maintain structure" do
+      check all(_iteration <- integer(1..10)) do
+        schema = SchemaConverter.to_req_llm_schema(ComplexTypes)
+
+        nested_array = schema[:nested_array]
+        assert {:array, {:array, :string}} = nested_array[:type]
+      end
+    end
+
+    property "nested objects maintain field structure" do
+      check all(_iteration <- integer(1..10)) do
+        schema = SchemaConverter.to_req_llm_schema(ComplexTypes)
+
+        nested_object = schema[:nested_object]
+        assert {:object, fields} = nested_object[:type]
+        assert Keyword.keyword?(fields)
+        assert Keyword.has_key?(fields, :title)
+        assert Keyword.has_key?(fields, :count)
+      end
+    end
+
+    property "type mappings are consistent" do
+      check all(_iteration <- integer(1..20)) do
+        schema = SchemaConverter.to_req_llm_schema(Reply)
+
+        content_type = schema[:content][:type]
+        assert content_type == :string
+
+        confidence_type = schema[:confidence][:type]
+        assert confidence_type == :float
+      end
     end
   end
 end
