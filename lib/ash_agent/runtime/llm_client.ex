@@ -1,27 +1,40 @@
 defmodule AshAgent.Runtime.LLMClient do
   @moduledoc """
-  LLM client interface for AshAgent.
+  LLM client adapter that delegates to configured providers.
 
-  Handles all interactions with the LLM via ReqLLM, including:
-  - Generating structured objects
-  - Streaming structured objects
-  - Building client options
-  - Parsing responses into TypedStruct instances
+  This module no longer calls LLM APIs directly. Instead, it:
+  1. Resolves the provider module from agent configuration
+  2. Delegates calls to the provider
+  3. Handles provider-agnostic concerns (error wrapping, response parsing)
+
+  ## Provider Resolution
+
+  Providers are resolved from the agent's DSL configuration.
+  The provider can be an atom preset (`:req_llm`, `:mock`) or a custom module.
   """
 
   alias AshAgent.Error
+  alias Spark.Dsl.Extension
+  require Logger
 
   @doc """
-  Generates a structured object from the LLM.
+  Generates a structured object from the LLM via the configured provider.
 
-  Returns `{:ok, response}` with the raw ReqLLM response, or `{:error, reason}`.
+  Returns `{:ok, response}` with the provider response, or `{:error, reason}`.
   """
-  def generate_object(client, prompt, schema, opts \\ []) do
+  def generate_object(resource, client, prompt, schema, opts \\ []) do
+    provider = resolve_provider(resource)
     opts = merge_client_opts(opts)
 
-    retry_with_backoff(fn ->
-      ReqLLM.generate_object(client, prompt, schema, opts)
-    end)
+    Logger.debug("LLMClient: Calling provider #{inspect(provider)}")
+
+    case provider.call(client, prompt, schema, opts) do
+      {:ok, response} ->
+        {:ok, response}
+
+      {:error, reason} ->
+        {:error, Error.llm_error("Provider #{inspect(provider)} call failed: #{inspect(reason)}")}
+    end
   rescue
     e ->
       {:error,
@@ -32,13 +45,24 @@ defmodule AshAgent.Runtime.LLMClient do
   end
 
   @doc """
-  Streams a structured object from the LLM.
+  Streams a structured object from the LLM via the configured provider.
 
-  Returns `{:ok, stream}` with the ReqLLM stream response, or `{:error, reason}`.
+  Returns `{:ok, stream}` with the provider stream response, or `{:error, reason}`.
   """
-  def stream_object(client, prompt, schema, opts \\ []) do
+  def stream_object(resource, client, prompt, schema, opts \\ []) do
+    provider = resolve_provider(resource)
     opts = merge_client_opts(opts)
-    ReqLLM.stream_object(client, prompt, schema, opts)
+
+    Logger.debug("LLMClient: Streaming via provider #{inspect(provider)}")
+
+    case provider.stream(client, prompt, schema, opts) do
+      {:ok, stream} ->
+        {:ok, stream}
+
+      {:error, reason} ->
+        {:error,
+         Error.llm_error("Provider #{inspect(provider)} stream failed: #{inspect(reason)}")}
+    end
   rescue
     e ->
       {:error,
@@ -107,22 +131,41 @@ defmodule AshAgent.Runtime.LLMClient do
        })}
   end
 
-  defp retry_with_backoff(fun, max_attempts \\ 3, base_delay \\ 100) do
-    do_retry(fun, max_attempts, base_delay, 1)
+  defp resolve_provider(resource) do
+    provider_option = Extension.get_opt(resource, [:agent], :provider, :req_llm)
+
+    case provider_option do
+      :req_llm -> AshAgent.Providers.ReqLLM
+      :mock -> AshAgent.Providers.Mock
+      module when is_atom(module) -> validate_provider(module)
+      nil -> default_provider()
+    end
   end
 
-  defp do_retry(fun, max_attempts, base_delay, attempt) do
-    case fun.() do
-      {:ok, _} = success ->
-        success
+  defp validate_provider(module) do
+    behaviours = module.module_info(:attributes)[:behaviour] || []
 
-      {:error, _reason} when attempt < max_attempts ->
-        delay = (base_delay * :math.pow(2, attempt - 1)) |> round()
-        Process.sleep(delay)
-        do_retry(fun, max_attempts, base_delay, attempt + 1)
+    if AshAgent.Provider in behaviours do
+      module
+    else
+      raise ArgumentError, """
+      Provider module #{inspect(module)} does not implement AshAgent.Provider behavior.
 
-      {:error, _} = error ->
-        error
+      Please ensure your module defines:
+      - @behaviour AshAgent.Provider
+      - def call(client, prompt, schema, opts)
+      - def stream(client, prompt, schema, opts)
+      """
     end
+  end
+
+  defp default_provider do
+    Logger.warning("""
+    No provider configured, defaulting to ReqLLM.
+    This is for backward compatibility and may be removed in future versions.
+    Please explicitly set a provider in your agent configuration.
+    """)
+
+    AshAgent.Providers.ReqLLM
   end
 end

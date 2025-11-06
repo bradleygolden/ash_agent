@@ -91,6 +91,21 @@ defmodule AshAgent.DSL do
       """
     ],
     schema: [
+      provider: [
+        type: :atom,
+        default: :req_llm,
+        doc: """
+        LLM provider implementation.
+
+        Can be an atom preset (`:req_llm`, `:mock`) or a custom module
+        implementing the `AshAgent.Provider` behavior.
+
+        Examples:
+          provider :req_llm          # Default, uses ReqLLM library
+          provider :mock             # Mock provider for testing
+          provider MyApp.CustomProvider  # Custom provider module
+        """
+      ],
       client: [
         type: {:custom, __MODULE__, :validate_client_config, []},
         required: true,

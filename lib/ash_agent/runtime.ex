@@ -77,6 +77,7 @@ defmodule AshAgent.Runtime do
          {:ok, schema} <- build_schema(config),
          {:ok, response} <-
            LLMClient.generate_object(
+             module,
              config.client,
              context.rendered_prompt,
              schema,
@@ -152,6 +153,7 @@ defmodule AshAgent.Runtime do
          {:ok, schema} <- build_schema(config),
          {:ok, stream_response} <-
            LLMClient.stream_object(
+             module,
              config.client,
              context.rendered_prompt,
              schema,

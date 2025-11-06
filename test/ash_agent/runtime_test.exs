@@ -160,7 +160,7 @@ defmodule AshAgent.RuntimeTest do
     test "raises exception on error" do
       Req.Test.stub(AshAgent.LLMStub, LLMStub.error_response(500))
 
-      assert_raise ReqLLM.Error.API.Request, fn ->
+      assert_raise AshAgent.Error, fn ->
         Runtime.call!(MinimalAgent, %{})
       end
     end

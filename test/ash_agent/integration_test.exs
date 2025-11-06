@@ -182,7 +182,7 @@ defmodule AshAgent.IntegrationTest do
     test "raises on API error" do
       Req.Test.stub(AshAgent.LLMStub, LLMStub.error_response(500))
 
-      assert_raise ReqLLM.Error.API.Request, fn ->
+      assert_raise AshAgent.Error, fn ->
         call!(EchoAgent, message: "test")
       end
     end
@@ -190,7 +190,7 @@ defmodule AshAgent.IntegrationTest do
     test "raises on network error" do
       Req.Test.stub(AshAgent.LLMStub, LLMStub.timeout_error())
 
-      assert_raise ReqLLM.Error.API.Request, fn ->
+      assert_raise AshAgent.Error, fn ->
         call!(EchoAgent, message: "test")
       end
     end
