@@ -144,9 +144,23 @@ defmodule AshAgent.Tool do
   end
 
   @doc """
-  Builds a JSON Schema compatible tool schema from a tool module.
+  Builds a JSON Schema compatible tool schema from a tool module or instance.
+
+  If given a tool instance (struct), checks if the module implements `to_schema/1`
+  and uses that for instance-based schema generation. Otherwise falls back to
+  the module-level `schema/0` callback.
+
+  If given a module atom, calls the module-level `schema/0` callback directly.
   """
-  def to_json_schema(module) do
+  def to_json_schema(%module{} = tool_instance) do
+    if function_exported?(module, :to_schema, 1) do
+      module.to_schema(tool_instance)
+    else
+      module.schema()
+    end
+  end
+
+  def to_json_schema(module) when is_atom(module) do
     module.schema()
   end
 end
