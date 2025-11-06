@@ -93,13 +93,15 @@ defmodule AshAgent.Resource do
   See `AshAgent.DSL` for complete DSL documentation.
   """
 
+  alias AshAgent.DSL
+
   use Spark.Dsl.Extension,
-    sections: [AshAgent.DSL.agent()],
+    sections: [DSL.agent(), DSL.Tools.tools()],
     transformers: [
       AshAgent.Transformers.ValidateAgent,
       AshAgent.Transformers.AddAgentActions
     ],
-    imports: [AshAgent.DSL]
+    imports: [DSL]
 
   @doc false
   defmacro __using__(_opts) do
