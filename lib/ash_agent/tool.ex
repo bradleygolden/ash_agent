@@ -92,6 +92,22 @@ defmodule AshAgent.Tool do
   end
 
   @doc """
+  Builds the properties object for JSON Schema from parameter list.
+  """
+  def build_properties(parameters) when is_list(parameters) do
+    parameters
+    |> Enum.map(fn param ->
+      name = to_string(param[:name])
+      schema = build_property_schema(param)
+      {name, schema}
+    end)
+    |> Map.new()
+  end
+
+  def build_properties([]), do: %{}
+  def build_properties(nil), do: %{}
+
+  @doc """
   Builds a JSON Schema compatible tool schema from a tool module.
   """
   def to_json_schema(module) do
