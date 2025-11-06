@@ -268,8 +268,6 @@ defmodule AshAgent.IntegrationTest do
         })
       )
 
-      {:error, _} = call(EchoAgent, message: "test")
-
       {:ok, result} = call(EchoAgent, message: "test")
       assert result.content == "Success after retry"
     end

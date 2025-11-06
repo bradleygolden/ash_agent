@@ -195,27 +195,25 @@ defmodule AshAgent.Runtime do
   end
 
   defp get_agent_config(module) do
-    try do
-      {client_string, client_opts} = Extension.get_opt(module, [:agent], :client, nil, true)
+    {client_string, client_opts} = Extension.get_opt(module, [:agent], :client, nil, true)
 
-      config = %{
-        client: client_string,
-        client_opts: client_opts,
-        prompt: Extension.get_opt(module, [:agent], :prompt, nil, true),
-        output_type: get_output_type(module),
-        input_args: get_input_args(module),
-        hooks: Extension.get_opt(module, [:agent], :hooks, nil, true)
-      }
+    config = %{
+      client: client_string,
+      client_opts: client_opts,
+      prompt: Extension.get_opt(module, [:agent], :prompt, nil, true),
+      output_type: get_output_type(module),
+      input_args: get_input_args(module),
+      hooks: Extension.get_opt(module, [:agent], :hooks, nil, true)
+    }
 
-      {:ok, config}
-    rescue
-      e ->
-        {:error,
-         Error.config_error("Failed to load agent configuration", %{
-           module: module,
-           exception: e
-         })}
-    end
+    {:ok, config}
+  rescue
+    e ->
+      {:error,
+       Error.config_error("Failed to load agent configuration", %{
+         module: module,
+         exception: e
+       })}
   end
 
   defp get_output_type(module) do
@@ -232,22 +230,20 @@ defmodule AshAgent.Runtime do
   end
 
   defp build_schema(config) do
-    try do
-      case config.output_type do
-        nil ->
-          {:error, Error.schema_error("No output type defined for agent")}
+    case config.output_type do
+      nil ->
+        {:error, Error.schema_error("No output type defined for agent")}
 
-        type_module ->
-          schema = SchemaConverter.to_req_llm_schema(type_module)
-          {:ok, schema}
-      end
-    rescue
-      e ->
-        {:error,
-         Error.schema_error("Failed to build schema", %{
-           output_type: config.output_type,
-           exception: e
-         })}
+      type_module ->
+        schema = SchemaConverter.to_req_llm_schema(type_module)
+        {:ok, schema}
     end
+  rescue
+    e ->
+      {:error,
+       Error.schema_error("Failed to build schema", %{
+         output_type: config.output_type,
+         exception: e
+       })}
   end
 end

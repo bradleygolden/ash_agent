@@ -17,17 +17,18 @@ defmodule AshAgent.Runtime.LLMClient do
   Returns `{:ok, response}` with the raw ReqLLM response, or `{:error, reason}`.
   """
   def generate_object(client, prompt, schema, opts \\ []) do
-    try do
-      opts = merge_client_opts(opts)
+    opts = merge_client_opts(opts)
+
+    retry_with_backoff(fn ->
       ReqLLM.generate_object(client, prompt, schema, opts)
-    rescue
-      e ->
-        {:error,
-         Error.llm_error("LLM generation failed", %{
-           client: client,
-           exception: e
-         })}
-    end
+    end)
+  rescue
+    e ->
+      {:error,
+       Error.llm_error("LLM generation failed", %{
+         client: client,
+         exception: e
+       })}
   end
 
   @doc """
@@ -36,17 +37,15 @@ defmodule AshAgent.Runtime.LLMClient do
   Returns `{:ok, stream}` with the ReqLLM stream response, or `{:error, reason}`.
   """
   def stream_object(client, prompt, schema, opts \\ []) do
-    try do
-      opts = merge_client_opts(opts)
-      ReqLLM.stream_object(client, prompt, schema, opts)
-    rescue
-      e ->
-        {:error,
-         Error.llm_error("LLM streaming failed", %{
-           client: client,
-           exception: e
-         })}
-    end
+    opts = merge_client_opts(opts)
+    ReqLLM.stream_object(client, prompt, schema, opts)
+  rescue
+    e ->
+      {:error,
+       Error.llm_error("LLM streaming failed", %{
+         client: client,
+         exception: e
+       })}
   end
 
   @doc """
@@ -90,23 +89,40 @@ defmodule AshAgent.Runtime.LLMClient do
   end
 
   defp build_typed_struct(module, data) when is_map(data) do
-    try do
-      atom_data =
-        for {k, v} <- data, into: %{} do
-          key = if is_binary(k), do: String.to_existing_atom(k), else: k
-          {key, v}
-        end
+    atom_data =
+      for {k, v} <- data, into: %{} do
+        key = if is_binary(k), do: String.to_existing_atom(k), else: k
+        {key, v}
+      end
 
-      struct = struct(module, atom_data)
-      {:ok, struct}
-    rescue
-      e ->
-        {:error,
-         Error.parse_error("Failed to build struct from LLM response", %{
-           module: module,
-           data: data,
-           exception: e
-         })}
+    struct = struct(module, atom_data)
+    {:ok, struct}
+  rescue
+    e ->
+      {:error,
+       Error.parse_error("Failed to build struct from LLM response", %{
+         module: module,
+         data: data,
+         exception: e
+       })}
+  end
+
+  defp retry_with_backoff(fun, max_attempts \\ 3, base_delay \\ 100) do
+    do_retry(fun, max_attempts, base_delay, 1)
+  end
+
+  defp do_retry(fun, max_attempts, base_delay, attempt) do
+    case fun.() do
+      {:ok, _} = success ->
+        success
+
+      {:error, _reason} when attempt < max_attempts ->
+        delay = (base_delay * :math.pow(2, attempt - 1)) |> round()
+        Process.sleep(delay)
+        do_retry(fun, max_attempts, base_delay, attempt + 1)
+
+      {:error, _} = error ->
+        error
     end
   end
 end
