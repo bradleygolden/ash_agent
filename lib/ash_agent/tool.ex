@@ -77,6 +77,21 @@ defmodule AshAgent.Tool do
   def map_type_to_json_schema(_unknown), do: "string"
 
   @doc """
+  Builds a JSON Schema property definition from a parameter spec.
+  """
+  def build_property_schema(parameter) when is_map(parameter) do
+    base_schema = %{
+      "type" => map_type_to_json_schema(parameter[:type])
+    }
+
+    case parameter[:description] do
+      nil -> base_schema
+      "" -> base_schema
+      description -> Map.put(base_schema, "description", description)
+    end
+  end
+
+  @doc """
   Builds a JSON Schema compatible tool schema from a tool module.
   """
   def to_json_schema(module) do
