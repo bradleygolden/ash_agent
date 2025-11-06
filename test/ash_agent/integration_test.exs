@@ -213,9 +213,10 @@ defmodule AshAgent.IntegrationTest do
       {:ok, result2} = call(EchoAgent, message: "second")
       assert result2.content == "Expected call"
 
-      assert_raise RuntimeError, ~r/no mock or stub/, fn ->
-        call(EchoAgent, message: "third")
-      end
+      {:error, error} = call(EchoAgent, message: "third")
+      assert is_struct(error)
+      error_message = Exception.message(error)
+      assert error_message =~ "LLM generation failed"
     end
 
     test "handles sequential different responses" do

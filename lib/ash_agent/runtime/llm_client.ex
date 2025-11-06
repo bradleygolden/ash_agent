@@ -9,14 +9,25 @@ defmodule AshAgent.Runtime.LLMClient do
   - Parsing responses into TypedStruct instances
   """
 
+  alias AshAgent.Error
+
   @doc """
   Generates a structured object from the LLM.
 
   Returns `{:ok, response}` with the raw ReqLLM response, or `{:error, reason}`.
   """
   def generate_object(client, prompt, schema, opts \\ []) do
-    opts = merge_client_opts(opts)
-    ReqLLM.generate_object(client, prompt, schema, opts)
+    try do
+      opts = merge_client_opts(opts)
+      ReqLLM.generate_object(client, prompt, schema, opts)
+    rescue
+      e ->
+        {:error,
+         Error.llm_error("LLM generation failed", %{
+           client: client,
+           exception: e
+         })}
+    end
   end
 
   @doc """
@@ -25,8 +36,17 @@ defmodule AshAgent.Runtime.LLMClient do
   Returns `{:ok, stream}` with the ReqLLM stream response, or `{:error, reason}`.
   """
   def stream_object(client, prompt, schema, opts \\ []) do
-    opts = merge_client_opts(opts)
-    ReqLLM.stream_object(client, prompt, schema, opts)
+    try do
+      opts = merge_client_opts(opts)
+      ReqLLM.stream_object(client, prompt, schema, opts)
+    rescue
+      e ->
+        {:error,
+         Error.llm_error("LLM streaming failed", %{
+           client: client,
+           exception: e
+         })}
+    end
   end
 
   @doc """
@@ -70,15 +90,23 @@ defmodule AshAgent.Runtime.LLMClient do
   end
 
   defp build_typed_struct(module, data) when is_map(data) do
-    atom_data =
-      for {k, v} <- data, into: %{} do
-        key = if is_binary(k), do: String.to_existing_atom(k), else: k
-        {key, v}
-      end
+    try do
+      atom_data =
+        for {k, v} <- data, into: %{} do
+          key = if is_binary(k), do: String.to_existing_atom(k), else: k
+          {key, v}
+        end
 
-    struct = struct(module, atom_data)
-    {:ok, struct}
-  rescue
-    e -> {:error, "Failed to build #{inspect(module)}: #{inspect(e)}"}
+      struct = struct(module, atom_data)
+      {:ok, struct}
+    rescue
+      e ->
+        {:error,
+         Error.parse_error("Failed to build struct from LLM response", %{
+           module: module,
+           data: data,
+           exception: e
+         })}
+    end
   end
 end

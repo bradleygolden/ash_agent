@@ -6,6 +6,8 @@ defmodule AshAgent.Runtime.PromptRenderer do
   converting user arguments into template context variables.
   """
 
+  alias AshAgent.Error
+
   @doc """
   Renders a prompt template with the given arguments and config.
 
@@ -45,7 +47,7 @@ defmodule AshAgent.Runtime.PromptRenderer do
         {:ok, IO.iodata_to_binary(rendered)}
 
       {:error, errors, _partial} ->
-        {:error, "Template render failed: #{inspect(errors)}"}
+        {:error, Error.prompt_error("Template render failed", %{errors: errors})}
     end
   end
 
@@ -55,8 +57,11 @@ defmodule AshAgent.Runtime.PromptRenderer do
          {:ok, rendered} <- Solid.render(parsed, context, []) do
       {:ok, IO.iodata_to_binary(rendered)}
     else
-      {:error, error} -> {:error, "Template parse failed: #{inspect(error)}"}
-      {:error, errors, _partial} -> {:error, "Template render failed: #{inspect(errors)}"}
+      {:error, error} ->
+        {:error, Error.prompt_error("Template parse failed", %{error: error, template: template})}
+
+      {:error, errors, _partial} ->
+        {:error, Error.prompt_error("Template render failed", %{errors: errors})}
     end
   end
 end
