@@ -14,7 +14,6 @@ defmodule AshAgent.Runtime.LLMClient do
   """
 
   alias AshAgent.Error
-  alias Spark.Dsl.Extension
   require Logger
 
   @doc """
@@ -132,13 +131,12 @@ defmodule AshAgent.Runtime.LLMClient do
   end
 
   defp resolve_provider(resource) do
-    provider_option = Extension.get_opt(resource, [:agent], :provider, :req_llm)
+    provider_option = AshAgent.Info.provider(resource)
 
     case provider_option do
       :req_llm -> AshAgent.Providers.ReqLLM
       :mock -> AshAgent.Providers.Mock
       module when is_atom(module) -> validate_provider(module)
-      nil -> default_provider()
     end
   end
 
@@ -157,15 +155,5 @@ defmodule AshAgent.Runtime.LLMClient do
       - def stream(client, prompt, schema, opts)
       """
     end
-  end
-
-  defp default_provider do
-    Logger.warning("""
-    No provider configured, defaulting to ReqLLM.
-    This is for backward compatibility and may be removed in future versions.
-    Please explicitly set a provider in your agent configuration.
-    """)
-
-    AshAgent.Providers.ReqLLM
   end
 end
