@@ -10,6 +10,7 @@ defmodule AshAgent.Runtime do
   5. Parsing and returning structured results
   """
 
+  alias AshAgent.Runtime.LLMClient
   alias AshAgent.Runtime.PromptRenderer
   alias AshAgent.SchemaConverter
   alias Spark.Dsl.Extension
@@ -58,8 +59,9 @@ defmodule AshAgent.Runtime do
     with {:ok, config} <- get_agent_config(module),
          {:ok, prompt} <- render_prompt(config, args),
          {:ok, schema} <- build_schema(config),
-         {:ok, response} <- generate_object(config, prompt, schema) do
-      build_result(config, response)
+         {:ok, response} <-
+           LLMClient.generate_object(config.client, prompt, schema, config.client_opts) do
+      LLMClient.parse_response(config.output_type, response)
     end
   end
 
@@ -102,8 +104,9 @@ defmodule AshAgent.Runtime do
     with {:ok, config} <- get_agent_config(module),
          {:ok, prompt} <- render_prompt(config, args),
          {:ok, schema} <- build_schema(config),
-         {:ok, stream_response} <- stream_object(config, prompt, schema) do
-      {:ok, stream_to_partials(stream_response)}
+         {:ok, stream_response} <-
+           LLMClient.stream_object(config.client, prompt, schema, config.client_opts) do
+      {:ok, LLMClient.stream_to_structs(stream_response, config.output_type)}
     end
   end
 
@@ -158,59 +161,5 @@ defmodule AshAgent.Runtime do
         schema = SchemaConverter.to_req_llm_schema(type_module)
         {:ok, schema}
     end
-  end
-
-  defp generate_object(config, prompt, schema) do
-    opts = build_client_opts(config)
-    ReqLLM.generate_object(config.client, prompt, schema, opts)
-  end
-
-  defp stream_object(config, prompt, schema) do
-    opts = build_client_opts(config)
-    ReqLLM.stream_object(config.client, prompt, schema, opts)
-  end
-
-  defp build_client_opts(config) do
-    test_opts = Application.get_env(:ash_agent, :req_llm_options, [])
-    Keyword.merge(config.client_opts, test_opts)
-  end
-
-  defp build_result(config, response) do
-    object_data = ReqLLM.Response.object(response)
-    build_typed_struct(config.output_type, object_data)
-  end
-
-  defp build_typed_struct(module, data) when is_map(data) do
-    # Convert string keys to atom keys since JSON responses have string keys
-    atom_data =
-      for {k, v} <- data, into: %{} do
-        key = if is_binary(k), do: String.to_existing_atom(k), else: k
-        {key, v}
-      end
-
-    struct = struct(module, atom_data)
-    {:ok, struct}
-  rescue
-    e -> {:error, "Failed to build #{inspect(module)}: #{inspect(e)}"}
-  end
-
-  defp stream_to_partials(stream_response) do
-    Stream.resource(
-      fn -> stream_response end,
-      fn response ->
-        case ReqLLM.StreamResponse.to_response(response) do
-          {:ok, final_response} ->
-            object = ReqLLM.Response.object(final_response)
-            {[object], :done}
-
-          {:error, _} ->
-            {:halt, response}
-        end
-      end,
-      fn
-        :done -> :ok
-        _ -> :ok
-      end
-    )
   end
 end
