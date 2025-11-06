@@ -36,6 +36,14 @@ defmodule AshAgent.Tools.AshAction do
     }
   end
 
+  @doc """
+  Generates JSON Schema from this AshAction tool instance.
+  Uses the tool's parameter definitions to build complete schema.
+  """
+  def to_schema(%__MODULE__{} = tool) do
+    AshAgent.Tool.build_tool_json_schema(tool.name, tool.description, tool.parameters)
+  end
+
   @impl true
   def name, do: :ash_action
 
