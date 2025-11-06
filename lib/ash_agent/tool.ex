@@ -78,6 +78,8 @@ defmodule AshAgent.Tool do
 
   @doc """
   Builds a JSON Schema property definition from a parameter spec.
+
+  Accepts either a map or keyword list format.
   """
   def build_property_schema(parameter) when is_map(parameter) do
     base_schema = %{
@@ -91,15 +93,36 @@ defmodule AshAgent.Tool do
     end
   end
 
+  def build_property_schema(parameter) when is_list(parameter) do
+    base_schema = %{
+      "type" => map_type_to_json_schema(Keyword.get(parameter, :type))
+    }
+
+    case Keyword.get(parameter, :description) do
+      nil -> base_schema
+      "" -> base_schema
+      description -> Map.put(base_schema, "description", description)
+    end
+  end
+
   @doc """
   Builds the properties object for JSON Schema from parameter list.
+
+  Handles both formats:
+  - Keyword list: [name: [type: :string, ...], age: [type: :integer, ...]]
+  - List of maps: [%{name: :name, type: :string, ...}, ...]
   """
   def build_properties(parameters) when is_list(parameters) do
     parameters
     |> Enum.map(fn param ->
-      name = to_string(param[:name])
-      schema = build_property_schema(param)
-      {name, schema}
+      case param do
+        {name, spec} when is_atom(name) and is_list(spec) ->
+          {to_string(name), build_property_schema(Keyword.put(spec, :name, name))}
+
+        param when is_map(param) ->
+          name = to_string(param[:name])
+          {name, build_property_schema(param)}
+      end
     end)
     |> Map.new()
   end
@@ -110,11 +133,25 @@ defmodule AshAgent.Tool do
   @doc """
   Extracts required field names from parameters.
   Returns a list of string names for JSON Schema required array.
+
+  Handles both formats:
+  - Keyword list: [name: [type: :string, required: true], ...]
+  - List of maps: [%{name: :name, required: true, ...}, ...]
   """
   def extract_required_fields(parameters) when is_list(parameters) do
     parameters
-    |> Enum.filter(fn param -> param[:required] == true end)
-    |> Enum.map(fn param -> to_string(param[:name]) end)
+    |> Enum.filter(fn param ->
+      case param do
+        {_name, spec} when is_list(spec) -> Keyword.get(spec, :required, false)
+        param when is_map(param) -> param[:required] == true
+      end
+    end)
+    |> Enum.map(fn param ->
+      case param do
+        {name, _spec} -> to_string(name)
+        param when is_map(param) -> to_string(param[:name])
+      end
+    end)
   end
 
   def extract_required_fields([]), do: []

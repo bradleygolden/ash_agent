@@ -297,4 +297,94 @@ defmodule AshAgent.Tools.AshActionTest do
       assert result.name == "TenantTest"
     end
   end
+
+  describe "to_schema/1" do
+    test "generates JSON Schema with no parameters" do
+      tool =
+        AshAction.new(
+          name: :list_users,
+          description: "Lists all users",
+          resource: TestResource,
+          action_name: :read,
+          parameters: []
+        )
+
+      schema = AshAction.to_schema(tool)
+
+      assert schema["name"] == "list_users"
+      assert schema["description"] == "Lists all users"
+      assert schema["parameters"]["type"] == "object"
+      assert schema["parameters"]["properties"] == %{}
+      assert schema["parameters"]["required"] == []
+    end
+
+    test "generates JSON Schema with required parameters" do
+      tool =
+        AshAction.new(
+          name: :create_user,
+          description: "Creates a new user",
+          resource: TestResource,
+          action_name: :create,
+          parameters: [
+            name: [type: :string, required: true, description: "User's name"],
+            email: [type: :string, required: true, description: "User's email"]
+          ]
+        )
+
+      schema = AshAction.to_schema(tool)
+
+      assert schema["name"] == "create_user"
+      assert schema["parameters"]["properties"]["name"]["type"] == "string"
+      assert schema["parameters"]["properties"]["name"]["description"] == "User's name"
+      assert schema["parameters"]["properties"]["email"]["type"] == "string"
+      assert schema["parameters"]["properties"]["email"]["description"] == "User's email"
+      assert schema["parameters"]["required"] == ["name", "email"]
+    end
+
+    test "generates JSON Schema with mixed required and optional parameters" do
+      tool =
+        AshAction.new(
+          name: :update_user,
+          description: "Updates a user",
+          resource: TestResource,
+          action_name: :update,
+          parameters: [
+            id: [type: :uuid, required: true, description: "User ID"],
+            name: [type: :string, required: false, description: "New name"],
+            email: [type: :string, required: false, description: "New email"]
+          ]
+        )
+
+      schema = AshAction.to_schema(tool)
+
+      assert schema["parameters"]["properties"]["id"]["type"] == "string"
+      assert schema["parameters"]["properties"]["name"]["type"] == "string"
+      assert schema["parameters"]["properties"]["email"]["type"] == "string"
+      assert schema["parameters"]["required"] == ["id"]
+    end
+
+    test "generates JSON Schema with various parameter types" do
+      tool =
+        AshAction.new(
+          name: :complex_action,
+          description: "A complex action with various types",
+          resource: TestResource,
+          action_name: :create,
+          parameters: [
+            name: [type: :string, required: true, description: "Name"],
+            age: [type: :integer, required: false, description: "Age"],
+            score: [type: :float, required: false, description: "Score"],
+            active: [type: :boolean, required: false, description: "Active status"]
+          ]
+        )
+
+      schema = AshAction.to_schema(tool)
+
+      assert schema["parameters"]["properties"]["name"]["type"] == "string"
+      assert schema["parameters"]["properties"]["age"]["type"] == "integer"
+      assert schema["parameters"]["properties"]["score"]["type"] == "number"
+      assert schema["parameters"]["properties"]["active"]["type"] == "boolean"
+      assert schema["parameters"]["required"] == ["name"]
+    end
+  end
 end
