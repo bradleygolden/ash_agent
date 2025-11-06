@@ -121,6 +121,29 @@ defmodule AshAgent.Tool do
   def extract_required_fields(nil), do: []
 
   @doc """
+  Builds a complete JSON Schema for tool parameters per JSON Schema Draft 7.
+
+  ## Parameters
+    - name: Tool name
+    - description: Tool description
+    - parameters: List of parameter specs
+
+  ## Returns
+  Complete JSON Schema map with string keys.
+  """
+  def build_tool_json_schema(name, description, parameters) do
+    %{
+      "name" => to_string(name),
+      "description" => description || "",
+      "parameters" => %{
+        "type" => "object",
+        "properties" => build_properties(parameters),
+        "required" => extract_required_fields(parameters)
+      }
+    }
+  end
+
+  @doc """
   Builds a JSON Schema compatible tool schema from a tool module.
   """
   def to_json_schema(module) do
