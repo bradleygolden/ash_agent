@@ -54,7 +54,7 @@ defmodule AshAgent.Provider do
 
   @type client :: term()
   @type prompt :: String.t()
-  @type schema :: map()
+  @type schema :: keyword()
   @type opts :: keyword()
   @type response :: term()
   @type stream :: Enumerable.t()
@@ -66,7 +66,7 @@ defmodule AshAgent.Provider do
 
   - `client`: Provider-specific client configuration (opaque to AshAgent)
   - `prompt`: The fully rendered prompt text
-  - `schema`: JSON schema for structured output
+  - `schema`: Schema definition (keyword list or provider-specific format)
   - `opts`: Additional options (temperature, max_tokens, etc.)
 
   ## Returns
@@ -76,7 +76,7 @@ defmodule AshAgent.Provider do
 
   ## Example
 
-      iex> provider.call(client, "Hello", %{type: "object"}, temperature: 0.7)
+      iex> provider.call(client, "Hello", [name: [type: :string]], temperature: 0.7)
       {:ok, %{"greeting" => "Hi there!"}}
   """
   @callback call(client, prompt, schema, opts) ::
