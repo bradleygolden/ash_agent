@@ -58,6 +58,14 @@ defmodule AshAgent.Provider do
   @type opts :: keyword()
   @type response :: term()
   @type stream :: Enumerable.t()
+  @type capability :: :sync_call | :streaming | :tool_calling | :structured_output | atom()
+  @type context :: %{
+          agent: module(),
+          input: map(),
+          rendered_prompt: String.t() | nil,
+          response: term(),
+          error: term()
+        }
 
   @doc """
   Execute a synchronous LLM call with structured output.
@@ -69,6 +77,12 @@ defmodule AshAgent.Provider do
   - `schema`: Schema definition (keyword list or provider-specific format)
   - `opts`: Additional options (temperature, max_tokens, etc.)
 
+  ## Additional Parameters
+
+  - `context`: Execution context containing the agent module, raw input arguments,
+    rendered prompt (if applicable), and hook metadata. Providers like ash_baml
+    can use this to bypass prompt rendering and operate on structured inputs.
+
   ## Returns
 
   - `{:ok, response}` - Successful response (provider-specific format)
@@ -79,7 +93,7 @@ defmodule AshAgent.Provider do
       iex> provider.call(client, "Hello", [name: [type: :string]], temperature: 0.7)
       {:ok, %{"greeting" => "Hi there!"}}
   """
-  @callback call(client, prompt, schema, opts) ::
+  @callback call(client, prompt, schema, opts, context) ::
               {:ok, response} | {:error, term()}
 
   @doc """
@@ -88,6 +102,10 @@ defmodule AshAgent.Provider do
   ## Parameters
 
   Same as `call/4`
+
+  ## Additional Parameters
+
+  - `context`: Same as `call/5`.
 
   ## Returns
 
@@ -100,7 +118,7 @@ defmodule AshAgent.Provider do
       iex> Enum.take(stream, 2)
       [%{delta: "1"}, %{delta: "2"}]
   """
-  @callback stream(client, prompt, schema, opts) ::
+  @callback stream(client, prompt, schema, opts, context) ::
               {:ok, stream} | {:error, term()}
 
   @doc """
@@ -113,7 +131,7 @@ defmodule AshAgent.Provider do
 
   Map with provider metadata:
   - `:provider` - Provider name (atom)
-  - `:features` - List of supported features
+  - `:features` - List of supported features/capabilities
   - `:models` - List of available models (optional)
   - `:constraints` - Known limitations (optional)
 

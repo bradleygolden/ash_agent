@@ -11,6 +11,7 @@ defmodule AshAgent.Transformers.ValidateAgent do
 
   use Spark.Dsl.Transformer
 
+  alias AshAgent.ProviderRegistry
   alias Spark.Dsl.Transformer
   alias Spark.Error.DslError
 
@@ -22,7 +23,8 @@ defmodule AshAgent.Transformers.ValidateAgent do
 
       _client ->
         with :ok <- validate_client(dsl_state),
-             :ok <- validate_prompt(dsl_state) do
+             :ok <- validate_prompt(dsl_state),
+             :ok <- validate_provider_capabilities(dsl_state) do
           {:ok, dsl_state}
         end
     end
@@ -43,6 +45,9 @@ defmodule AshAgent.Transformers.ValidateAgent do
            )}
         end
 
+      {client_atom, _opts} when is_atom(client_atom) ->
+        :ok
+
       _ ->
         {:error,
          DslError.exception(
@@ -54,17 +59,45 @@ defmodule AshAgent.Transformers.ValidateAgent do
   end
 
   defp validate_prompt(dsl_state) do
-    case Transformer.get_option(dsl_state, [:agent], :prompt) do
-      prompt when is_binary(prompt) or is_struct(prompt, Solid.Template) ->
+    prompt = Transformer.get_option(dsl_state, [:agent], :prompt)
+    provider = Transformer.get_option(dsl_state, [:agent], :provider, :req_llm)
+    features = ProviderRegistry.features(provider)
+
+    cond do
+      is_binary(prompt) or is_struct(prompt, Solid.Template) ->
         :ok
 
-      _ ->
+      prompt in [nil, ""] and :prompt_optional in features ->
+        :ok
+
+      true ->
         {:error,
          DslError.exception(
            module: Transformer.get_persisted(dsl_state, :module),
-           message: "Prompt must be a string or Solid.Template",
+           message: "Prompt must be provided unless the provider declares :prompt_optional",
            path: [:agent, :prompt]
          )}
+    end
+  end
+
+  defp validate_provider_capabilities(dsl_state) do
+    provider = Transformer.get_option(dsl_state, [:agent], :provider, :req_llm)
+    features = ProviderRegistry.features(provider)
+
+    tools = Transformer.get_entities(dsl_state, [:tools]) || []
+
+    cond do
+      tools != [] and :tool_calling not in features ->
+        {:error,
+         DslError.exception(
+           module: Transformer.get_persisted(dsl_state, :module),
+           message:
+             "Provider #{inspect(provider)} does not support tool calling. Remove the `tools` section or choose a provider that declares :tool_calling.",
+           path: [:tools]
+         )}
+
+      true ->
+        :ok
     end
   end
 end

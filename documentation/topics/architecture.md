@@ -174,17 +174,51 @@ Same flow as standard call, but step 4 uses `ReqLLM.stream_object` and returns a
 
 - **Ash** (~> 3.4) - Framework foundation
 - **Spark** (~> 2.2) - DSL engine
-- **req_llm** (~> 0.1.14) - LLM client library
+- **req_llm** (~> 0.1.14) - Default LLM provider
 - **solid** (~> 0.15.2) - Liquid template engine
-- **ash_baml** (~> 0.1) - Provides Ash.TypedStruct
+
+### Optional Integrations
+
+- **ash_baml** (~> 0.1, GitHub) - Alternate provider that reuses BAML functions
 
 ### Dependency Purposes
 
 - **Spark** - Provides DSL infrastructure and validation
-- **req_llm** - Abstracts LLM provider differences, handles API calls
+- **req_llm** - Default provider implementation for direct LLM calls
 - **solid** - Liquid template rendering for prompts
-- **Ash.TypedStruct** (via ash_baml) - Type-safe struct definitions
+- **Ash.TypedStruct** (via ash_baml or user modules) - Type-safe struct definitions
 - **Ash** - Action system, authorization, domain modeling
+
+### Provider Registry
+
+Providers are resolved through `AshAgent.ProviderRegistry`, which loads built-in adapters
+(`:req_llm`, `:mock`, `:baml`) and merges any user-defined providers configured via
+
+```elixir
+config :ash_agent,
+  providers: [
+    custom: MyApp.CustomProvider
+  ]
+```
+
+Each provider implements `AshAgent.Provider` and receives the execution context so it can
+render prompts (ReqLLM) or operate on structured inputs (ash_baml).
+
+#### Capabilities
+
+Providers declare capabilities (e.g., `:tool_calling`, `:streaming`) via their `introspect/0`
+implementation. Compile-time validation ensures resource definitions only opt into features
+the selected provider actually supports (for example, defining `tools` requires
+`:tool_calling`). Promptless providers (e.g., `:baml`) advertise `:prompt_optional`, letting
+agents skip the prompt DSL entirely. Custom providers should return a `%{features: [...]}`
+map so the DSL can validate usage.
+
+#### Telemetry
+
+`AshAgent.Telemetry` emits spans for `[:ash_agent, :call]` and `[:ash_agent, :stream]`
+around every provider interaction. Metadata includes the agent module, provider, client,
+status, and—when exposed by the provider—token usage. Consumers can attach telemetry
+handlers to integrate with metrics/observability stacks.
 
 ## Design Patterns
 

@@ -7,8 +7,13 @@
     # AshAgent DSL - agent section
     client: 1,
     client: 2,
+    provider: 1,
+    provider: 2,
+    baml_provider: 2,
+    baml_provider: 3,
     output: 1,
     prompt: 1,
+    hooks: 1,
 
     # AshAgent DSL - input section
     input: 0,
@@ -20,8 +25,13 @@
       # AshAgent DSL - agent section
       client: 1,
       client: 2,
+      provider: 1,
+      provider: 2,
+      baml_provider: 2,
+      baml_provider: 3,
       output: 1,
       prompt: 1,
+      hooks: 1,
 
       # AshAgent DSL - input section
       input: 0,

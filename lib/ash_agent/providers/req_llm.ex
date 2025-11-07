@@ -28,7 +28,7 @@ defmodule AshAgent.Providers.ReqLLM do
   require Logger
 
   @impl true
-  def call(client, prompt, schema, opts) do
+  def call(client, prompt, schema, opts, _context) do
     max_attempts = Keyword.get(opts, :max_retries, 3)
     base_delay_ms = Keyword.get(opts, :retry_base_delay_ms, 100)
 
@@ -40,7 +40,7 @@ defmodule AshAgent.Providers.ReqLLM do
   end
 
   @impl true
-  def stream(client, prompt, schema, opts) do
+  def stream(client, prompt, schema, opts, _context) do
     ReqLLM.stream_object(client, prompt, schema, opts)
   end
 
@@ -53,6 +53,7 @@ defmodule AshAgent.Providers.ReqLLM do
         :streaming,
         :structured_output,
         :function_calling,
+        :tool_calling,
         :auto_retry
       ],
       models: available_models()

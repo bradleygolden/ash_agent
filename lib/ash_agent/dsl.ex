@@ -128,7 +128,7 @@ defmodule AshAgent.DSL do
       ],
       prompt: [
         type: {:or, [:string, {:struct, Solid.Template}]},
-        required: true,
+        required: false,
         doc: "Prompt template using Liquid syntax. Use ~p sigil for compile-time validation."
       ],
       hooks: [
@@ -151,18 +151,22 @@ defmodule AshAgent.DSL do
   }
 
   @doc false
-  def validate_client_config(client_string) when is_binary(client_string) do
-    {:ok, {client_string, []}}
+  def validate_client_config(client) when is_binary(client), do: {:ok, {client, []}}
+  def validate_client_config(client) when is_atom(client), do: {:ok, {client, []}}
+
+  def validate_client_config([client | opts]) when is_list(opts) do
+    cond do
+      is_binary(client) -> {:ok, {client, opts}}
+      is_atom(client) -> {:ok, {client, opts}}
+      true -> error_invalid_client([client | opts])
+    end
   end
 
-  def validate_client_config([client_string | opts])
-      when is_binary(client_string) and is_list(opts) do
-    {:ok, {client_string, opts}}
-  end
+  def validate_client_config(value), do: error_invalid_client(value)
 
-  def validate_client_config(value) do
+  defp error_invalid_client(value) do
     {:error,
-     "client must be a string optionally followed by keyword options, got: #{inspect(value)}"}
+     "client must be a string or atom optionally followed by keyword options, got: #{inspect(value)}"}
   end
 
   @doc """

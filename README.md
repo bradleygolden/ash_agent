@@ -17,6 +17,7 @@ AshAgent provides a declarative DSL for defining AI agents as Ash resources, ena
 - 🚀 **Built on Ash** - Leverage all Ash features (actions, policies, pubsub, etc.)
 - 📚 **Well Documented** - Comprehensive guides and API documentation
 - ⚡ **Extensible** - Add custom transformers and verifiers
+- 🔌 **Provider-Agnostic** - Works with ReqLLM, ash_baml, or custom providers
 
 ## Installation
 
@@ -92,6 +93,78 @@ end
 - [Overview & Concepts](documentation/topics/overview.md)
 - [Full Documentation](https://hexdocs.pm/ash_agent)
 
+## Provider Options
+
+AshAgent ships with a provider abstraction so the orchestration layer is decoupled
+from any specific LLM stack.
+
+> **Note:** Defining `tools` in your agent requires a provider that advertises the
+> `:tool_calling` capability (e.g., `:req_llm`, `:baml`). Choosing a provider without
+> that feature will raise a compile-time error to keep behavior predictable.
+
+### ReqLLM (default)
+
+The default `:req_llm` provider requires only a `provider:model` string:
+
+```elixir
+agent do
+  provider :req_llm
+  client "anthropic:claude-3-5-sonnet", temperature: 0.5
+end
+```
+
+### ash_baml
+
+AshAgent can delegate execution to [ash_baml](https://github.com/bradleygolden/ash_baml)
+by switching to the `:baml` provider. Configure your BAML clients once:
+
+```elixir
+# config/config.exs
+config :ash_baml,
+  clients: [
+    support: {MyApp.BamlClients.Support, baml_src: "baml_src/support"}
+  ]
+```
+
+Then reference the client identifier inside your agent:
+
+```elixir
+agent do
+  provider :baml
+  client :support, function: :ChatAgent
+  output MyApp.BamlClients.Support.Types.ChatAgent
+end
+```
+
+You can also set `client_module: MyApp.BamlClients.Support` if you prefer to reference
+the compiled module directly. Streaming is supported when your BAML function implements
+`stream/2`.
+
+For a more concise declaration, import `AshAgent.Baml` and use `baml_provider/3`:
+
+```elixir
+import AshAgent.Baml
+
+agent do
+  baml_provider :support, :ChatAgent, temperature: 0.3
+  output MyApp.BamlClients.Support.Types.ChatAgent
+end
+```
+
+Because BAML functions already carry their own prompts, the `:baml` provider declares
+`:prompt_optional`, allowing you to omit the `prompt` DSL entirely. Providers that do not
+declare this capability (e.g., `:req_llm`) will still require a prompt at compile time.
+
+### Telemetry
+
+AshAgent emits Telemetry spans for every provider interaction:
+
+- `[:ash_agent, :call]` – fires around synchronous calls
+- `[:ash_agent, :stream]` – fires when streaming sessions are opened
+
+Metadata includes `:agent`, `:provider`, `:client`, `:status`, and (when available) token usage.
+Attach handlers with `:telemetry.attach/4` to feed dashboards or observability pipelines.
+
 ## Development
 
 ### Running Tests
@@ -138,4 +211,3 @@ This project is licensed under the MIT License.
 - [Documentation](https://hexdocs.pm/ash_agent)
 - [Hex Package](https://hex.pm/packages/ash_agent)
 - [Changelog](CHANGELOG.md)
-

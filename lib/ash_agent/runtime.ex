@@ -15,6 +15,7 @@ defmodule AshAgent.Runtime do
   alias AshAgent.Runtime.LLMClient
   alias AshAgent.Runtime.PromptRenderer
   alias AshAgent.SchemaConverter
+  alias AshAgent.Telemetry
   alias Spark.Dsl.Extension
 
   @doc """
@@ -76,12 +77,19 @@ defmodule AshAgent.Runtime do
          {:ok, context} <- Hooks.execute(config.hooks, :after_render, context),
          {:ok, schema} <- build_schema(config),
          {:ok, response} <-
-           LLMClient.generate_object(
-             module,
-             config.client,
-             context.rendered_prompt,
-             schema,
-             config.client_opts
+           Telemetry.span(
+             :call,
+             telemetry_metadata(config, module, :call),
+             fn ->
+               LLMClient.generate_object(
+                 module,
+                 config.client,
+                 context.rendered_prompt,
+                 schema,
+                 config.client_opts,
+                 context
+               )
+             end
            ),
          {:ok, result} <- LLMClient.parse_response(config.output_type, response),
          context = Hooks.with_response(context, result),
@@ -152,12 +160,19 @@ defmodule AshAgent.Runtime do
          {:ok, context} <- Hooks.execute(config.hooks, :after_render, context),
          {:ok, schema} <- build_schema(config),
          {:ok, stream_response} <-
-           LLMClient.stream_object(
-             module,
-             config.client,
-             context.rendered_prompt,
-             schema,
-             config.client_opts
+           Telemetry.span(
+             :stream,
+             telemetry_metadata(config, module, :stream),
+             fn ->
+               LLMClient.stream_object(
+                 module,
+                 config.client,
+                 context.rendered_prompt,
+                 schema,
+                 config.client_opts,
+                 context
+               )
+             end
            ) do
       stream = LLMClient.stream_to_structs(stream_response, config.output_type)
 
@@ -202,6 +217,7 @@ defmodule AshAgent.Runtime do
     config = %{
       client: client_string,
       client_opts: client_opts,
+      provider: Extension.get_opt(module, [:agent], :provider, :req_llm),
       prompt: Extension.get_opt(module, [:agent], :prompt, nil, true),
       output_type: get_output_type(module),
       input_args: get_input_args(module),
@@ -227,6 +243,8 @@ defmodule AshAgent.Runtime do
   end
 
   @spec render_prompt(map(), keyword() | map()) :: {:ok, String.t()} | {:error, String.t()}
+  defp render_prompt(%{prompt: nil}, _args), do: {:ok, nil}
+
   defp render_prompt(config, args) do
     PromptRenderer.render(config.prompt, args, config)
   end
@@ -247,5 +265,14 @@ defmodule AshAgent.Runtime do
          output_type: config.output_type,
          exception: e
        })}
+  end
+
+  defp telemetry_metadata(config, module, type) do
+    %{
+      agent: module,
+      provider: config.provider,
+      client: config.client,
+      type: type
+    }
   end
 end

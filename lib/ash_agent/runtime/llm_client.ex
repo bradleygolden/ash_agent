@@ -14,6 +14,8 @@ defmodule AshAgent.Runtime.LLMClient do
   """
 
   alias AshAgent.Error
+  alias AshAgent.ProviderRegistry
+  alias ReqLLM.StreamResponse
   require Logger
 
   @doc """
@@ -21,18 +23,20 @@ defmodule AshAgent.Runtime.LLMClient do
 
   Returns `{:ok, response}` with the provider response, or `{:error, reason}`.
   """
-  def generate_object(resource, client, prompt, schema, opts \\ []) do
-    provider = resolve_provider(resource)
-    opts = merge_client_opts(opts)
+  def generate_object(resource, client, prompt, schema, opts \\ [], context) do
+    with {:ok, provider} <- resolve_provider(resource) do
+      opts = merge_client_opts(opts)
 
-    Logger.debug("LLMClient: Calling provider #{inspect(provider)}")
+      Logger.debug("LLMClient: Calling provider #{inspect(provider)}")
 
-    case provider.call(client, prompt, schema, opts) do
-      {:ok, response} ->
-        {:ok, response}
+      case provider.call(client, prompt, schema, opts, context) do
+        {:ok, response} ->
+          {:ok, response}
 
-      {:error, reason} ->
-        {:error, Error.llm_error("Provider #{inspect(provider)} call failed: #{inspect(reason)}")}
+        {:error, reason} ->
+          {:error,
+           Error.llm_error("Provider #{inspect(provider)} call failed: #{inspect(reason)}")}
+      end
     end
   rescue
     e ->
@@ -48,19 +52,20 @@ defmodule AshAgent.Runtime.LLMClient do
 
   Returns `{:ok, stream}` with the provider stream response, or `{:error, reason}`.
   """
-  def stream_object(resource, client, prompt, schema, opts \\ []) do
-    provider = resolve_provider(resource)
-    opts = merge_client_opts(opts)
+  def stream_object(resource, client, prompt, schema, opts \\ [], context) do
+    with {:ok, provider} <- resolve_provider(resource) do
+      opts = merge_client_opts(opts)
 
-    Logger.debug("LLMClient: Streaming via provider #{inspect(provider)}")
+      Logger.debug("LLMClient: Streaming via provider #{inspect(provider)}")
 
-    case provider.stream(client, prompt, schema, opts) do
-      {:ok, stream} ->
-        {:ok, stream}
+      case provider.stream(client, prompt, schema, opts, context) do
+        {:ok, stream} ->
+          {:ok, stream}
 
-      {:error, reason} ->
-        {:error,
-         Error.llm_error("Provider #{inspect(provider)} stream failed: #{inspect(reason)}")}
+        {:error, reason} ->
+          {:error,
+           Error.llm_error("Provider #{inspect(provider)} stream failed: #{inspect(reason)}")}
+      end
     end
   rescue
     e ->
@@ -76,6 +81,40 @@ defmodule AshAgent.Runtime.LLMClient do
 
   Returns `{:ok, struct}` with the built TypedStruct, or `{:error, reason}`.
   """
+  def parse_response(output_module, %_{} = response) do
+    cond do
+      response.__struct__ == output_module ->
+        {:ok, response}
+
+      match?(%ReqLLM.Response{}, response) ->
+        case ReqLLM.Response.unwrap_object(response) do
+          {:ok, object} when is_map(object) ->
+            build_typed_struct(output_module, object)
+
+          {:error, reason} ->
+            {:error,
+             Error.parse_error("ReqLLM response did not contain structured output", %{
+               reason: reason
+             })}
+        end
+
+      true ->
+        build_typed_struct(output_module, Map.from_struct(response))
+    end
+  rescue
+    e ->
+      {:error,
+       Error.parse_error("Failed to parse provider response", %{
+         expected: output_module,
+         response: response,
+         exception: e
+       })}
+  end
+
+  def parse_response(output_module, %{} = response) do
+    build_typed_struct(output_module, response)
+  end
+
   def parse_response(output_module, response) do
     object_data = ReqLLM.Response.object(response)
     build_typed_struct(output_module, object_data)
@@ -87,11 +126,22 @@ defmodule AshAgent.Runtime.LLMClient do
   Returns an Enumerable that yields parsed TypedStruct instances.
   """
   def stream_to_structs(stream_response, output_module) do
-    Stream.resource(
-      fn -> stream_response end,
-      &stream_next(&1, output_module),
-      &stream_cleanup/1
-    )
+    cond do
+      enumerable_stream?(stream_response) ->
+        Stream.map(stream_response, fn chunk ->
+          case parse_response(output_module, chunk) do
+            {:ok, struct} -> struct
+            {:error, _} -> chunk
+          end
+        end)
+
+      true ->
+        Stream.resource(
+          fn -> stream_response end,
+          &stream_next(&1, output_module),
+          &stream_cleanup/1
+        )
+    end
   end
 
   defp stream_next(response, output_module) do
@@ -105,6 +155,10 @@ defmodule AshAgent.Runtime.LLMClient do
 
   defp stream_cleanup(:done), do: :ok
   defp stream_cleanup(_), do: :ok
+
+  defp enumerable_stream?(%Stream{}), do: true
+  defp enumerable_stream?(stream) when is_function(stream, 2), do: true
+  defp enumerable_stream?(_), do: false
 
   defp merge_client_opts(opts) do
     test_opts = Application.get_env(:ash_agent, :req_llm_options, [])
@@ -131,29 +185,32 @@ defmodule AshAgent.Runtime.LLMClient do
   end
 
   defp resolve_provider(resource) do
-    provider_option = AshAgent.Info.provider(resource)
+    resource
+    |> AshAgent.Info.provider()
+    |> ProviderRegistry.resolve()
+  end
 
-    case provider_option do
-      :req_llm -> AshAgent.Providers.ReqLLM
-      :mock -> AshAgent.Providers.Mock
-      module when is_atom(module) -> validate_provider(module)
+  @doc """
+  Extracts provider usage metadata from a response or stream response, if available.
+  """
+  @spec response_usage(term()) :: map() | nil
+  def response_usage(%ReqLLM.Response{} = response) do
+    ReqLLM.Response.usage(response)
+  end
+
+  def response_usage(%StreamResponse{} = response) do
+    StreamResponse.usage(response)
+  end
+
+  def response_usage(%module{} = response) do
+    cond do
+      function_exported?(module, :usage, 1) ->
+        module.usage(response)
+
+      true ->
+        nil
     end
   end
 
-  defp validate_provider(module) do
-    behaviours = module.module_info(:attributes)[:behaviour] || []
-
-    if AshAgent.Provider in behaviours do
-      module
-    else
-      raise ArgumentError, """
-      Provider module #{inspect(module)} does not implement AshAgent.Provider behavior.
-
-      Please ensure your module defines:
-      - @behaviour AshAgent.Provider
-      - def call(client, prompt, schema, opts)
-      - def stream(client, prompt, schema, opts)
-      """
-    end
-  end
+  def response_usage(_), do: nil
 end

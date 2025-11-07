@@ -257,4 +257,62 @@ defmodule AshAgent.RuntimeTest do
       assert {:error, _error} = result
     end
   end
+
+  describe "telemetry" do
+    test "emits call span with usage metadata" do
+      handler_id = {:ash_agent_telemetry_call, make_ref()}
+
+      :telemetry.attach(
+        handler_id,
+        [:ash_agent, :call],
+        fn event, measurements, metadata, _ ->
+          send(self(), {:telemetry_event, event, measurements, metadata})
+        end,
+        nil
+      )
+
+      Req.Test.stub(
+        AshAgent.LLMStub,
+        LLMStub.object_response(%{"result" => "Success!"})
+      )
+
+      try do
+        assert {:ok, _} = Runtime.call(MinimalAgent, %{})
+
+        assert_receive {:telemetry_event, [:ash_agent, :call], _measurements, metadata}
+        assert metadata.status == :ok
+        assert metadata.usage["input_tokens"] == 10
+      after
+        :telemetry.detach(handler_id)
+      end
+    end
+
+    test "emits stream span metadata" do
+      handler_id = {:ash_agent_telemetry_stream, make_ref()}
+
+      :telemetry.attach(
+        handler_id,
+        [:ash_agent, :stream],
+        fn event, measurements, metadata, _ ->
+          send(self(), {:telemetry_event, event, measurements, metadata})
+        end,
+        nil
+      )
+
+      Req.Test.stub(
+        AshAgent.LLMStub,
+        LLMStub.object_response(%{"result" => "Stream!"})
+      )
+
+      try do
+        assert {:ok, stream} = Runtime.stream(MinimalAgent, %{})
+        Enum.to_list(stream)
+
+        assert_receive {:telemetry_event, [:ash_agent, :stream], _measurements, metadata}
+        assert metadata.status == :ok
+      after
+        :telemetry.detach(handler_id)
+      end
+    end
+  end
 end
