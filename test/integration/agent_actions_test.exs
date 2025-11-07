@@ -3,18 +3,19 @@ defmodule AshAgent.Integration.AgentActionsTest do
 
   @moduletag :integration
 
-  alias Ash.Resource.Info
-  alias AshAgent.Test.OllamaClient.AgentReply
+  if Code.ensure_loaded?(AshAgent.Test.OllamaClient.AgentReply) do
+    alias Ash.Resource.Info
+    alias AshAgent.Test.OllamaClient.AgentReply
 
-  defmodule OllamaAgent do
-    use Ash.Resource,
-      domain: AshAgent.TestDomain,
-      extensions: [AshAgent.Resource]
+    defmodule OllamaAgent do
+      use Ash.Resource,
+        domain: AshAgent.TestDomain,
+        extensions: [AshAgent.Resource]
 
-    agent do
-      provider :baml
-      client :ollama, function: :AgentEcho
-      output AgentReply
+      agent do
+        provider :baml
+        client :ollama, function: :AgentEcho
+        output AgentReply
 
       input do
         argument :message, :string, allow_nil?: false
@@ -65,6 +66,12 @@ defmodule AshAgent.Integration.AgentActionsTest do
       assert [_ | _] = results
       reply = List.last(results)
       assert String.starts_with?(reply.content, "integration")
+    end
+  end
+  else
+    @tag :skip
+    test "BAML client not available - skipping tests" do
+      :skip
     end
   end
 end

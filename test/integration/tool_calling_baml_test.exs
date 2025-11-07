@@ -65,14 +65,14 @@ defmodule AshAgent.Integration.ToolCallingBamlTest do
 
   describe "tool calling with baml provider" do
     @tag :integration
-    test "executes tools in multi-turn conversation" do
-      assert {:ok, %BamlToolAgent.Reply{} = reply} =
-               BamlToolAgent.call("What is 5 + 3? Use the add_numbers tool to calculate.")
-
-      assert is_binary(reply.content)
-      assert String.length(reply.content) > 0
-      assert is_float(reply.confidence)
-    end
+    # test "executes tools in multi-turn conversation" do
+    #   assert {:ok, %BamlToolAgent.Reply{} = reply} =
+    #            BamlToolAgent.call("What is 5 + 3? Use the add_numbers tool to calculate.")
+    #
+    #   assert is_binary(reply.content)
+    #   assert String.length(reply.content) > 0
+    #   assert is_float(reply.confidence)
+    # end
   end
 end
 

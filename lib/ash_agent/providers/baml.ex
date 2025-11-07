@@ -243,17 +243,23 @@ defmodule AshAgent.Providers.Baml do
 
     case function_exported?(function_module, :stream, 3) do
       true ->
-        case function_module.stream(arguments, opts, stream_fn) do
-          {:ok, stream_pid} -> {ref, stream_pid, :streaming}
+        result = function_module.stream(arguments, opts, stream_fn)
+        case result do
+          {:ok, stream_pid} when is_pid(stream_pid) -> {ref, stream_pid, :streaming}
           pid when is_pid(pid) -> {ref, pid, :streaming}
           {:error, reason} -> {ref, nil, {:error, reason}}
+          other when is_function(other) -> {ref, nil, {:error, "BAML stream function returned a function instead of a stream"}}
+          other -> {ref, nil, {:error, "Unexpected stream result: #{inspect(other)}"}}
         end
 
       false ->
-        case function_module.stream(arguments, stream_fn) do
-          {:ok, stream_pid} -> {ref, stream_pid, :streaming}
+        result = function_module.stream(arguments, stream_fn)
+        case result do
+          {:ok, stream_pid} when is_pid(stream_pid) -> {ref, stream_pid, :streaming}
           pid when is_pid(pid) -> {ref, pid, :streaming}
           {:error, reason} -> {ref, nil, {:error, reason}}
+          other when is_function(other) -> {ref, nil, {:error, "BAML stream function returned a function instead of a stream"}}
+          other -> {ref, nil, {:error, "Unexpected stream result: #{inspect(other)}"}}
         end
     end
   end
