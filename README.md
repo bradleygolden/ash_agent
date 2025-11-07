@@ -100,9 +100,16 @@ MyApp.Agents.Assistant.stream(message: "Hello!")
 ## Roadmap
 
 - [ ] Tool calling support
-- [ ] Agent memory
+- [ ] Agent context persistence
 - [ ] MCP server support
 - [ ] Multi-agent orchestration
+
+### Needs Research
+
+- [ ] Guardrails & safety hooks
+- [ ] Long-term memory architecture
+- [ ] Evaluation harness for agents
+- [ ] Observability dashboards
 
 ## Provider Options
 
