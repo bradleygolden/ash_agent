@@ -19,3 +19,4 @@
 
 - https://www.anthropic.com/engineering/building-effective-agents
 - https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents
+https://www.anthropic.com/engineering/code-execution-with-mcp
