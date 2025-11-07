@@ -87,17 +87,6 @@ agent do
 end
 ```
 
-For convenience, import `AshAgent.Baml` and use `baml_provider/3` to set provider, client, and function in one call:
-
-```elixir
-import AshAgent.Baml
-
-agent do
-  baml_provider :support, :ChatAgent, temperature: 0.2
-  output MyApp.BamlClients.Support.Types.ChatAgent
-end
-```
-
 Since the BAML provider advertises `:prompt_optional`, you can omit the prompt entirely. Providers lacking that capability (e.g., `:req_llm`) will still enforce a prompt at compile time.
 
 ## Next Steps

@@ -23,7 +23,6 @@ defmodule AshAgent.Providers.BamlProviderTest do
 
     resources do
       resource AshAgent.Providers.BamlProviderTest.Agent
-      resource AshAgent.Providers.BamlProviderTest.MacroAgent
     end
   end
 
@@ -36,24 +35,6 @@ defmodule AshAgent.Providers.BamlProviderTest do
     agent do
       provider(:baml)
       client :support, function: :ChatAgent
-      output Reply
-
-      input do
-        argument :message, :string
-      end
-    end
-  end
-
-  defmodule MacroAgent do
-    @moduledoc false
-    use Ash.Resource,
-      domain: AshAgent.Providers.BamlProviderTest.TestDomain,
-      extensions: [AshAgent.Resource]
-
-    import AshAgent.Baml
-
-    agent do
-      baml_provider(:support, :ChatAgent)
       output Reply
 
       input do
@@ -76,13 +57,6 @@ defmodule AshAgent.Providers.BamlProviderTest do
       chunks = Enum.to_list(stream)
       assert Enum.any?(chunks, &match?(%Reply{content: "one"}, &1))
       assert List.last(chunks) == %Reply{content: "one two"}
-    end
-  end
-
-  describe "baml_provider macro" do
-    test "configures provider and client in one call" do
-      assert {:ok, %Reply{content: "BAML reply: macro"}} =
-               Runtime.call(MacroAgent, message: "macro")
     end
   end
 end

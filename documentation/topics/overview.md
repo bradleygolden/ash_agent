@@ -72,13 +72,12 @@ agent do
 end
 ```
 
-ash_baml users can import `AshAgent.Baml` and leverage `baml_provider/3` to configure the provider, client, and BAML function in one shot—with no prompt required because the provider advertises `:prompt_optional`:
+ash_baml users can configure the provider directly and omit the prompt entirely because the provider advertises `:prompt_optional`:
 
 ```elixir
-import AshAgent.Baml
-
 agent do
-  baml_provider :support, :ChatAgent
+  provider :baml
+  client :support, function: :ChatAgent
   output MyApp.BamlClients.Support.Types.ChatAgent
 end
 ```

@@ -140,17 +140,6 @@ You can also set `client_module: MyApp.BamlClients.Support` if you prefer to ref
 the compiled module directly. Streaming is supported when your BAML function implements
 `stream/2`.
 
-For a more concise declaration, import `AshAgent.Baml` and use `baml_provider/3`:
-
-```elixir
-import AshAgent.Baml
-
-agent do
-  baml_provider :support, :ChatAgent, temperature: 0.3
-  output MyApp.BamlClients.Support.Types.ChatAgent
-end
-```
-
 Because BAML functions already carry their own prompts, the `:baml` provider declares
 `:prompt_optional`, allowing you to omit the `prompt` DSL entirely. Providers that do not
 declare this capability (e.g., `:req_llm`) will still require a prompt at compile time.

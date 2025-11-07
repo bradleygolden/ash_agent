@@ -72,10 +72,9 @@ defmodule AshAgent.DSL.ProviderCapabilitiesTest do
       use Ash.Resource,
         extensions: [AshAgent.Resource]
 
-      import AshAgent.Baml
-
       agent do
-        baml_provider(:support, :ChatAgent)
+        provider :baml
+        client :support, function: :ChatAgent
         output Output
       end
     end
