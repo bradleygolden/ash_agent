@@ -64,11 +64,15 @@ end
 
 ### 3. Use the Agent
 
+Declaring an `agent` block automatically generates `:call` and `:stream` actions, so you can invoke it immediately or expose those actions through a `code_interface`.
+
 ```elixir
-# Create an agent
-{:ok, agent} = MyApp.Agents.Assistant
-  |> Ash.Changeset.for_create(:create, %{name: "My Assistant"})
-  |> Ash.create()
+# Synchronous response
+{:ok, reply} = MyApp.Agents.Assistant.call(message: "Hello!")
+
+# Streaming responses
+MyApp.Agents.Assistant.stream(message: "Hello!")
+|> Enum.to_list()
 ```
 
 ## Choosing a Provider

@@ -249,14 +249,18 @@ defmodule AshAgent.Runtime do
     PromptRenderer.render(config.prompt, args, config)
   end
 
-  defp build_schema(config) do
-    case config.output_type do
-      nil ->
-        {:error, Error.schema_error("No output type defined for agent")}
+  defp build_schema(%{provider: provider} = config) do
+    if schema_required?(provider) do
+      case config.output_type do
+        nil ->
+          {:error, Error.schema_error("No output type defined for agent")}
 
-      type_module ->
-        schema = SchemaConverter.to_req_llm_schema(type_module)
-        {:ok, schema}
+        type_module ->
+          schema = SchemaConverter.to_req_llm_schema(type_module)
+          {:ok, schema}
+      end
+    else
+      {:ok, nil}
     end
   rescue
     e ->
@@ -265,6 +269,10 @@ defmodule AshAgent.Runtime do
          output_type: config.output_type,
          exception: e
        })}
+  end
+
+  defp schema_required?(provider) do
+    provider not in [:baml, AshAgent.Providers.Baml]
   end
 
   defp telemetry_metadata(config, module, type) do

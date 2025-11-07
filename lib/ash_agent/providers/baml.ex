@@ -167,7 +167,10 @@ defmodule AshAgent.Providers.Baml do
   end
 
   defp invoke_function(function_module, args, opts) do
-    call_opts = Keyword.get(opts, :baml_opts, [])
+    call_opts =
+      opts
+      |> Keyword.get(:baml_opts, %{})
+      |> to_map_opts()
 
     cond do
       function_exported?(function_module, :call, 2) ->
@@ -208,6 +211,9 @@ defmodule AshAgent.Providers.Baml do
          end) do
       {:ok, stream_pid} ->
         {ref, stream_pid, :streaming}
+
+      pid when is_pid(pid) ->
+        {ref, pid, :streaming}
 
       {:error, reason} ->
         {ref, nil, {:error, reason}}
@@ -261,6 +267,10 @@ defmodule AshAgent.Providers.Baml do
   defp valid_chunk?(chunk) when is_struct(chunk), do: not is_nil(Map.get(chunk, :content))
 
   defp valid_chunk?(_chunk), do: true
+
+  defp to_map_opts(opts) when is_map(opts), do: opts
+  defp to_map_opts(opts) when is_list(opts), do: Map.new(opts)
+  defp to_map_opts(_), do: %{}
 
   @impl true
   def introspect do

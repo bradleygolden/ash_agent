@@ -9,5 +9,17 @@ System.put_env("ANTHROPIC_API_KEY", "test-key-12345")
 
 config :ash_agent, :req_llm_options, req_http_options: [plug: {Req.Test, AshAgent.LLMStub}]
 
+config :ash_baml,
+  clients: [
+    support: {AshAgent.Test.BamlClient, []},
+    ollama: {AshAgent.Test.OllamaClient, baml_src: "test/support/ollama_baml/baml_src"}
+  ]
+
+config :req_llm, :openai, base_url: "http://localhost:11434/v1"
+
+if Code.ensure_loaded?(ReqLLM) do
+  ReqLLM.put_key(:openai_api_key, "ollama")
+end
+
 # Keep test runs to plain ExUnit output (no logger noise)
 config :logger, level: :error

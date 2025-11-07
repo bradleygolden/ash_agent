@@ -80,11 +80,15 @@ end
 
 ### 3. Use Your Agent
 
+When you declare an agent, AshAgent injects `:call` and `:stream` actions so you can invoke it like any other Ash resource action (or expose them via a `code_interface`).
+
 ```elixir
-# Create an agent
-{:ok, agent} = MyApp.Agents.Assistant
-  |> Ash.Changeset.for_create(:create, %{name: "My Assistant"})
-  |> Ash.create()
+# Synchronous call with keyword args
+{:ok, reply} = MyApp.Agents.Assistant.call(message: "Hello!")
+
+# Stream partial responses
+MyApp.Agents.Assistant.stream(message: "Hello!")
+|> Enum.to_list()
 ```
 
 ## Documentation
