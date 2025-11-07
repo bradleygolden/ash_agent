@@ -21,7 +21,7 @@ defmodule AshAgent.Providers.Mock do
   @behaviour AshAgent.Provider
 
   @impl true
-  def call(_client, _prompt, _schema, opts, _context) do
+  def call(_client, _prompt, _schema, opts, _context, _tools, _messages) do
     response = Keyword.get(opts, :mock_response, default_response())
 
     if delay = Keyword.get(opts, :mock_delay_ms) do
@@ -32,7 +32,7 @@ defmodule AshAgent.Providers.Mock do
   end
 
   @impl true
-  def stream(_client, _prompt, _schema, opts, _context) do
+  def stream(_client, _prompt, _schema, opts, _context, _tools, _messages) do
     chunks = Keyword.get(opts, :mock_chunks, default_chunks())
 
     stream =

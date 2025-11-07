@@ -59,6 +59,8 @@ defmodule AshAgent.Provider do
   @type response :: term()
   @type stream :: Enumerable.t()
   @type capability :: :sync_call | :streaming | :tool_calling | :structured_output | atom()
+  @type tools :: [map()] | nil
+  @type messages :: [map()]
   @type context :: %{
           agent: module(),
           input: map(),
@@ -73,27 +75,29 @@ defmodule AshAgent.Provider do
   ## Parameters
 
   - `client`: Provider-specific client configuration (opaque to AshAgent)
-  - `prompt`: The fully rendered prompt text
+  - `prompt`: The fully rendered prompt text (or nil if using messages)
   - `schema`: Schema definition (keyword list or provider-specific format)
   - `opts`: Additional options (temperature, max_tokens, etc.)
-
-  ## Additional Parameters
-
   - `context`: Execution context containing the agent module, raw input arguments,
     rendered prompt (if applicable), and hook metadata. Providers like ash_baml
     can use this to bypass prompt rendering and operate on structured inputs.
+  - `tools`: List of tools in provider-specific format (JSON Schema for ReqLLM)
+  - `messages`: List of messages for multi-turn conversations (if provided, prompt may be nil)
 
   ## Returns
 
   - `{:ok, response}` - Successful response (provider-specific format)
   - `{:error, reason}` - Provider error
 
+  The response may contain tool calls that need to be executed. Providers should
+  return tool calls in a standard format that the runtime can parse.
+
   ## Example
 
-      iex> provider.call(client, "Hello", [name: [type: :string]], temperature: 0.7)
+      iex> provider.call(client, "Hello", [name: [type: :string]], [], context, nil, nil)
       {:ok, %{"greeting" => "Hi there!"}}
   """
-  @callback call(client, prompt, schema, opts, context) ::
+  @callback call(client, prompt, schema, opts, context, tools, messages) ::
               {:ok, response} | {:error, term()}
 
   @doc """
@@ -101,11 +105,7 @@ defmodule AshAgent.Provider do
 
   ## Parameters
 
-  Same as `call/4`
-
-  ## Additional Parameters
-
-  - `context`: Same as `call/5`.
+  Same as `call/7`
 
   ## Returns
 
@@ -114,11 +114,11 @@ defmodule AshAgent.Provider do
 
   ## Example
 
-      iex> {:ok, stream} = provider.stream(client, "Count", schema, [])
+      iex> {:ok, stream} = provider.stream(client, "Count", schema, [], context, nil, nil)
       iex> Enum.take(stream, 2)
       [%{delta: "1"}, %{delta: "2"}]
   """
-  @callback stream(client, prompt, schema, opts, context) ::
+  @callback stream(client, prompt, schema, opts, context, tools, messages) ::
               {:ok, stream} | {:error, term()}
 
   @doc """

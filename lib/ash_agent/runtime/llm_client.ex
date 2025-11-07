@@ -23,13 +23,13 @@ defmodule AshAgent.Runtime.LLMClient do
 
   Returns `{:ok, response}` with the provider response, or `{:error, reason}`.
   """
-  def generate_object(resource, client, prompt, schema, opts \\ [], context) do
+  def generate_object(resource, client, prompt, schema, opts \\ [], context, tools \\ nil, messages \\ nil) do
     with {:ok, provider} <- resolve_provider(resource) do
       opts = merge_client_opts(opts)
 
       Logger.debug("LLMClient: Calling provider #{inspect(provider)}")
 
-      case provider.call(client, prompt, schema, opts, context) do
+      case provider.call(client, prompt, schema, opts, context, tools, messages) do
         {:ok, response} ->
           {:ok, response}
 
@@ -52,13 +52,13 @@ defmodule AshAgent.Runtime.LLMClient do
 
   Returns `{:ok, stream}` with the provider stream response, or `{:error, reason}`.
   """
-  def stream_object(resource, client, prompt, schema, opts \\ [], context) do
+  def stream_object(resource, client, prompt, schema, opts \\ [], context, tools \\ nil, messages \\ nil) do
     with {:ok, provider} <- resolve_provider(resource) do
       opts = merge_client_opts(opts)
 
       Logger.debug("LLMClient: Streaming via provider #{inspect(provider)}")
 
-      case provider.stream(client, prompt, schema, opts, context) do
+      case provider.stream(client, prompt, schema, opts, context, tools, messages) do
         {:ok, stream} ->
           {:ok, stream}
 

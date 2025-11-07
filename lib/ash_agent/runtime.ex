@@ -10,12 +10,12 @@ defmodule AshAgent.Runtime do
   5. Parsing and returning structured results
   """
 
-  alias AshAgent.Error
-  alias AshAgent.Runtime.Hooks
-  alias AshAgent.Runtime.LLMClient
+  alias AshAgent.{Conversation, Error, Info, ToolConverter}
+  alias AshAgent.Runtime.{Hooks, LLMClient, ToolExecutor}
   alias AshAgent.Runtime.PromptRenderer
   alias AshAgent.SchemaConverter
   alias AshAgent.Telemetry
+  alias ReqLLM.Response
   alias Spark.Dsl.Extension
 
   @doc """
@@ -76,25 +76,14 @@ defmodule AshAgent.Runtime do
          context = Hooks.with_prompt(context, prompt),
          {:ok, context} <- Hooks.execute(config.hooks, :after_render, context),
          {:ok, schema} <- build_schema(config),
-         {:ok, response} <-
-           Telemetry.span(
-             :call,
-             telemetry_metadata(config, module, :call),
-             fn ->
-               LLMClient.generate_object(
-                 module,
-                 config.client,
-                 context.rendered_prompt,
-                 schema,
-                 config.client_opts,
-                 context
-               )
-             end
-           ),
-         {:ok, result} <- LLMClient.parse_response(config.output_type, response),
-         context = Hooks.with_response(context, result),
-         {:ok, context} <- Hooks.execute(config.hooks, :after_call, context) do
-      {:ok, context.response}
+         {:ok, result} <-
+           execute_with_tools(config, module, context, prompt, schema) do
+      context = Hooks.with_response(context, result)
+
+      case Hooks.execute(config.hooks, :after_call, context) do
+        {:ok, context} -> {:ok, context.response}
+        {:error, transformed_error} -> {:error, transformed_error}
+      end
     else
       {:error, error} = result ->
         context = Hooks.with_error(context, error)
@@ -103,6 +92,192 @@ defmodule AshAgent.Runtime do
           {:ok, _context} -> result
           {:error, transformed_error} -> {:error, transformed_error}
         end
+    end
+  end
+
+  defp execute_with_tools(config, module, context, prompt, schema) do
+    if config.tools != [] do
+      execute_with_tool_calling(config, module, context, prompt, schema)
+    else
+      execute_single_turn(config, module, context, prompt, schema)
+    end
+  end
+
+  defp execute_single_turn(config, module, context, prompt, schema) do
+    Telemetry.span(
+      :call,
+      telemetry_metadata(config, module, :call),
+      fn ->
+        LLMClient.generate_object(
+          module,
+          config.client,
+          prompt,
+          schema,
+          config.client_opts,
+          context,
+          nil,
+          nil
+        )
+      end
+    )
+    |> then(fn
+      {:ok, response} ->
+        LLMClient.parse_response(config.output_type, response)
+
+      error ->
+        error
+    end)
+  end
+
+  defp execute_with_tool_calling(config, module, context, prompt, schema) do
+    tools = ToolConverter.to_json_schema(config.tools)
+    tool_config = config.tool_config
+    domain = get_domain(module)
+
+    conversation =
+      Conversation.new(module, context.input,
+        domain: domain,
+        actor: context.actor,
+        tenant: context.tenant,
+        max_iterations: tool_config.max_iterations
+      )
+
+    execute_tool_calling_loop(
+      config,
+      module,
+      context,
+      prompt,
+      schema,
+      tools,
+      conversation,
+      tool_config
+    )
+  end
+
+  defp execute_tool_calling_loop(config, module, context, prompt, schema, tools, conversation, tool_config) do
+    if Conversation.exceeded_max_iterations?(conversation) do
+      {:error, Error.llm_error("Max iterations (#{conversation.max_iterations}) exceeded")}
+    else
+      messages = if conversation.iteration == 0, do: nil, else: Conversation.to_messages(conversation)
+      current_prompt = if conversation.iteration == 0, do: prompt, else: nil
+
+      case Telemetry.span(
+             :call,
+             telemetry_metadata(config, module, :call),
+             fn ->
+               LLMClient.generate_object(
+                 module,
+                 config.client,
+                 current_prompt,
+                 schema,
+                 config.client_opts,
+                 context,
+                 tools,
+                 messages
+               )
+             end
+           ) do
+        {:ok, response} ->
+          handle_llm_response(
+            response,
+            config,
+            module,
+            context,
+            prompt,
+            schema,
+            tools,
+            conversation,
+            tool_config
+          )
+
+        {:error, reason} = error ->
+          if tool_config.on_error == :continue do
+            conversation = Conversation.add_assistant_message(conversation, "", [])
+            execute_tool_calling_loop(
+              config,
+              module,
+              context,
+              prompt,
+              schema,
+              tools,
+              conversation,
+              tool_config
+            )
+          else
+            error
+          end
+      end
+    end
+  end
+
+  defp handle_llm_response(response, config, module, context, prompt, schema, tools, conversation, tool_config) do
+    tool_calls = extract_tool_calls(response)
+    content = extract_content(response)
+
+    conversation = Conversation.add_assistant_message(conversation, content, tool_calls)
+
+    case tool_calls do
+      [] ->
+        case LLMClient.parse_response(config.output_type, response) do
+          {:ok, result} -> {:ok, result}
+          {:error, reason} -> {:error, reason}
+        end
+
+      tool_calls ->
+        results = ToolExecutor.execute_tools(tool_calls, config.tools, conversation)
+
+        if tool_config.on_error == :halt and Enum.any?(results, fn {_, {_, :error}} -> true; _ -> false end) do
+          {:error, Error.llm_error("Tool execution failed")}
+        else
+          conversation = Conversation.add_tool_results(conversation, results)
+          execute_tool_calling_loop(config, module, context, prompt, schema, tools, conversation, tool_config)
+        end
+    end
+  end
+
+  defp extract_content(%Response{} = response) do
+    case Response.content(response) do
+      nil -> ""
+      content -> content
+    end
+  end
+
+  defp extract_content(%{content: content}) when is_binary(content), do: content
+  defp extract_content(%{"content" => content}) when is_binary(content), do: content
+  defp extract_content(_response), do: ""
+
+  defp extract_tool_calls(%Response{} = response) do
+    case Response.tool_calls(response) do
+      nil -> []
+      tool_calls -> normalize_tool_calls(tool_calls)
+    end
+  end
+
+  defp extract_tool_calls(%{tool_calls: tool_calls}) when is_list(tool_calls) do
+    normalize_tool_calls(tool_calls)
+  end
+
+  defp extract_tool_calls(_response) do
+    []
+  end
+
+  defp normalize_tool_calls(tool_calls) do
+    Enum.map(tool_calls, fn
+      %{id: id, name: name, arguments: args} when is_binary(args) ->
+        %{id: id, name: name, arguments: Jason.decode!(args)}
+
+      %{"id" => id, "name" => name, "arguments" => args} when is_binary(args) ->
+        %{id: id, name: name, arguments: Jason.decode!(args)}
+
+      tool_call ->
+        tool_call
+    end)
+  end
+
+  defp get_domain(module) do
+    case Ash.Resource.Info.domain(module) do
+      nil -> nil
+      domain -> domain
     end
   end
 
@@ -213,6 +388,8 @@ defmodule AshAgent.Runtime do
 
   defp get_agent_config(module) do
     {client_string, client_opts} = Extension.get_opt(module, [:agent], :client, nil, true)
+    tool_config = Info.tool_config(module)
+    tools = Info.tools(module)
 
     config = %{
       client: client_string,
@@ -221,7 +398,9 @@ defmodule AshAgent.Runtime do
       prompt: Extension.get_opt(module, [:agent], :prompt, nil, true),
       output_type: get_output_type(module),
       input_args: get_input_args(module),
-      hooks: Extension.get_opt(module, [:agent], :hooks, nil, true)
+      hooks: Extension.get_opt(module, [:agent], :hooks, nil, true),
+      tools: tools,
+      tool_config: tool_config
     }
 
     {:ok, config}
