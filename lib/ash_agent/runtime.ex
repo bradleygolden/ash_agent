@@ -190,7 +190,7 @@ defmodule AshAgent.Runtime do
             tool_config
           )
 
-        {:error, reason} = error ->
+        {:error, _reason} = error ->
           if tool_config.on_error == :continue do
             conversation = Conversation.add_assistant_message(conversation, "", [])
             execute_tool_calling_loop(
@@ -236,15 +236,28 @@ defmodule AshAgent.Runtime do
   end
 
   defp extract_content(%Response{} = response) do
-    case Response.content(response) do
-      nil -> ""
-      content -> content
+    case ReqLLM.Response.unwrap_object(response) do
+      {:ok, object} when is_map(object) ->
+        case Map.get(object, "content") || Map.get(object, :content) do
+          nil -> ""
+          content when is_binary(content) -> content
+          content when is_list(content) -> extract_text_from_content(content)
+          _ -> ""
+        end
+
+      _ ->
+        ""
     end
   end
 
   defp extract_content(%{content: content}) when is_binary(content), do: content
   defp extract_content(%{"content" => content}) when is_binary(content), do: content
   defp extract_content(_response), do: ""
+
+  defp extract_text_from_content([%{"type" => "text", "text" => text} | _]) when is_binary(text), do: text
+  defp extract_text_from_content([%{type: "text", text: text} | _]) when is_binary(text), do: text
+  defp extract_text_from_content([_ | rest]), do: extract_text_from_content(rest)
+  defp extract_text_from_content([]), do: ""
 
   defp extract_tool_calls(%Response{} = response) do
     case Response.tool_calls(response) do

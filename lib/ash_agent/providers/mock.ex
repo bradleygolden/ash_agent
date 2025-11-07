@@ -51,7 +51,7 @@ defmodule AshAgent.Providers.Mock do
   def introspect do
     %{
       provider: :mock,
-      features: [:sync_call, :streaming, :configurable_responses],
+      features: [:sync_call, :streaming, :configurable_responses, :tool_calling],
       models: ["mock:test"],
       constraints: %{max_tokens: :unlimited}
     }

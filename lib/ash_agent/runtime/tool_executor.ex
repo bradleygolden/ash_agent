@@ -5,7 +5,7 @@ defmodule AshAgent.Runtime.ToolExecutor do
   Handles tool execution, validation, error handling, and result formatting.
   """
 
-  alias AshAgent.{Error, Tool, ToolRegistry, Tools.AshAction, Tools.Function}
+  alias AshAgent.{Tools.AshAction, Tools.Function}
   alias AshAgent.Conversation
 
   @doc """
@@ -33,7 +33,7 @@ defmodule AshAgent.Runtime.ToolExecutor do
           {:ok, result} ->
             {id, {:ok, result}}
 
-          {:error, reason} = error ->
+          {:error, _reason} = error ->
             {id, error}
         end
     end

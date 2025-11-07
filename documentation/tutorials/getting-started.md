@@ -93,6 +93,61 @@ end
 
 Since the BAML provider advertises `:prompt_optional`, you can omit the prompt entirely. Providers lacking that capability (e.g., `:req_llm`) will still enforce a prompt at compile time.
 
+## Tool Calling
+
+Agents can use tools to interact with external systems, call Ash actions, or execute Elixir functions during multi-turn conversations. When tools are defined, the agent automatically manages the conversation loop:
+
+```elixir
+defmodule MyApp.Agents.Assistant do
+  use Ash.Resource,
+    domain: MyApp.Agents,
+    extensions: [AshAgent.Resource]
+
+  agent do
+    client "anthropic:claude-3-5-sonnet"
+    output MyApp.Reply
+
+    prompt ~p"""
+    You are a helpful assistant with access to tools.
+    {{ output_format }}
+    """
+
+    tools do
+      max_iterations 5
+      timeout 60_000
+      on_error :continue
+
+      tool :get_customer do
+        description "Retrieve customer information by ID"
+        action {MyApp.Customers.Customer, :read}
+        parameters [
+          customer_id: [type: :uuid, required: true, description: "The customer's ID"]
+        ]
+      end
+
+      tool :send_email do
+        description "Send an email to a customer"
+        function {MyApp.Email, :send, []}
+        parameters [
+          to: [type: :string, required: true],
+          subject: [type: :string, required: true],
+          body: [type: :string, required: true]
+        ]
+      end
+    end
+  end
+end
+```
+
+**Tool Configuration Options:**
+- `max_iterations` - Maximum number of tool execution iterations (default: 10)
+- `timeout` - Timeout in milliseconds for individual tool execution (default: 30_000)
+- `on_error` - How to handle tool execution errors: `:continue` (inject error into conversation) or `:halt` (stop execution)
+
+**Tool Types:**
+- `action` - Execute an Ash action on a resource
+- `function` - Execute an Elixir function (MFA tuple or anonymous function)
+
 ## Next Steps
 
 - Read about [AshAgent concepts](../topics/overview.md)

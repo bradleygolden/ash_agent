@@ -40,8 +40,19 @@ The execution engine. Orchestrates the entire agent call lifecycle.
 2. `get_agent_config/1` - Read DSL configuration via Spark.Dsl.Extension
 3. `render_prompt/2` - Process Liquid templates with Solid
 4. `build_schema/1` - Convert TypedStruct to req_llm schema
-5. `generate_object/3` or `stream_object/3` - Call ReqLLM
+5. `generate_object/3` or `stream_object/3` - Call provider (ReqLLM, BAML, etc.)
 6. `build_result/2` - Parse JSON response into TypedStruct
+
+**Tool Calling Flow:**
+When tools are defined, the runtime manages multi-turn conversations:
+1. Create `Conversation` state with initial user message
+2. Convert tools to provider-specific format (JSON Schema for ReqLLM)
+3. Call provider with tools and conversation messages
+4. Extract tool calls from LLM response
+5. Execute tools via `ToolExecutor`
+6. Add tool results back to conversation
+7. Loop until no more tool calls or max iterations reached
+8. Parse and return final response
 
 **Key characteristics:**
 - Monolithic (all concerns in one module)
