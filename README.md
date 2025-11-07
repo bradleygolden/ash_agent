@@ -97,6 +97,12 @@ MyApp.Agents.Assistant.stream(message: "Hello!")
 - [Overview & Concepts](documentation/topics/overview.md)
 - API Reference: `mix docs && open doc/index.html`
 
+## Roadmap
+
+- [ ] Tool calling support
+- [ ] Agent memory
+- [ ] Multi-agent orchestration
+
 ## Provider Options
 
 AshAgent ships with a provider abstraction so the orchestration layer is decoupled
