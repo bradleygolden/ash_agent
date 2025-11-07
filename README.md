@@ -1,9 +1,9 @@
 # AshAgent
 
 ![Elixir CI](https://github.com/bradleygolden/ash_agent/workflows/Elixir%20CI/badge.svg)
-[![Hex version badge](https://img.shields.io/hexpm/v/ash_agent.svg)](https://hex.pm/packages/ash_agent)
-[![Hexdocs badge](https://img.shields.io/badge/docs-hexdocs-purple)](https://hexdocs.pm/ash_agent)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+> ⚠️ This project is experimental and not yet published to Hex; expect rapid changes and install directly from Git.
 
 An Ash Framework extension for building AI agent applications with LLM integration.
 
@@ -21,12 +21,12 @@ AshAgent provides a declarative DSL for defining AI agents as Ash resources, ena
 
 ## Installation
 
-Add `ash_agent` to your list of dependencies in `mix.exs`:
+Add `ash_agent` to your list of dependencies in `mix.exs` (Git dependency until the Hex release lands):
 
 ```elixir
 def deps do
   [
-    {:ash_agent, "~> 0.1.0"}
+    {:ash_agent, github: "bradleygolden/ash_agent", branch: "main"}
   ]
 end
 ```
@@ -91,7 +91,7 @@ end
 
 - [Getting Started Guide](documentation/tutorials/getting-started.md)
 - [Overview & Concepts](documentation/topics/overview.md)
-- [Full Documentation](https://hexdocs.pm/ash_agent)
+- API Reference: `mix docs && open doc/index.html`
 
 ## Provider Options
 
@@ -197,6 +197,5 @@ This project is licensed under the MIT License.
 ## Links
 
 - [Source Code](https://github.com/bradleygolden/ash_agent)
-- [Documentation](https://hexdocs.pm/ash_agent)
-- [Hex Package](https://hex.pm/packages/ash_agent)
+- [Guides](documentation/)
 - [Changelog](CHANGELOG.md)
