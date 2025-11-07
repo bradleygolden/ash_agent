@@ -101,6 +101,7 @@ MyApp.Agents.Assistant.stream(message: "Hello!")
 
 - [ ] Tool calling support
 - [ ] Agent memory
+- [ ] MCP server support
 - [ ] Multi-agent orchestration
 
 ## Provider Options
