@@ -31,6 +31,7 @@ defmodule MyApp.Agents.Assistant do
     extensions: [AshAgent.Resource]
 
   agent do
+    provider :req_llm
     client "anthropic:claude-3-5-sonnet"
 
     output MyApp.Reply
@@ -69,6 +70,35 @@ end
   |> Ash.Changeset.for_create(:create, %{name: "My Assistant"})
   |> Ash.create()
 ```
+
+## Choosing a Provider
+
+AshAgent separates orchestration from LLM execution. Set `provider` inside your `agent` block (defaults to `:req_llm`):
+
+- `:req_llm` – direct ReqLLM integration; prompt required.
+- `:baml` – delegates to ash_baml functions; prompt optional.
+- Custom modules – implement `AshAgent.Provider` and register via `config :ash_agent, providers: [...]`.
+
+```elixir
+agent do
+  provider :baml
+  client :support, function: :ChatAgent
+  output MyApp.BamlClients.Support.Types.ChatAgent
+end
+```
+
+For convenience, import `AshAgent.Baml` and use `baml_provider/3` to set provider, client, and function in one call:
+
+```elixir
+import AshAgent.Baml
+
+agent do
+  baml_provider :support, :ChatAgent, temperature: 0.2
+  output MyApp.BamlClients.Support.Types.ChatAgent
+end
+```
+
+Since the BAML provider advertises `:prompt_optional`, you can omit the prompt entirely. Providers lacking that capability (e.g., `:req_llm`) will still enforce a prompt at compile time.
 
 ## Next Steps
 

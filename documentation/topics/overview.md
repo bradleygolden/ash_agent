@@ -59,6 +59,30 @@ end
 
 AshAgent follows Ash's declarative philosophy. Instead of imperative code, you describe what your agents should do using a DSL.
 
+### Provider Abstraction
+
+Each agent chooses a provider via the `provider` option in the `agent` block. The default (`:req_llm`) requires a prompt and talks directly to ReqLLM. Providers declare their capabilities (e.g., `:tool_calling`, `:prompt_optional`) so the DSL can validate which features are available. For example:
+
+```elixir
+agent do
+  provider :req_llm
+  client "anthropic:claude-3-5-sonnet", temperature: 0.5
+  output MyApp.Reply
+  prompt ~p"..."
+end
+```
+
+ash_baml users can import `AshAgent.Baml` and leverage `baml_provider/3` to configure the provider, client, and BAML function in one shot—with no prompt required because the provider advertises `:prompt_optional`:
+
+```elixir
+import AshAgent.Baml
+
+agent do
+  baml_provider :support, :ChatAgent
+  output MyApp.BamlClients.Support.Types.ChatAgent
+end
+```
+
 ### Type Safety
 
 All configuration is validated at compile time using Spark's schema system, catching errors early.
@@ -66,6 +90,15 @@ All configuration is validated at compile time using Spark's schema system, catc
 ### Extensibility
 
 AshAgent is designed to be extended. You can add custom transformers, verifiers, and DSL sections to suit your needs.
+
+### Telemetry
+
+Every provider interaction emits telemetry spans:
+
+- `[:ash_agent, :call]` for synchronous requests
+- `[:ash_agent, :stream]` for streaming sessions
+
+Metadata includes the agent module, provider, client, success/error status, and token usage when reported by the provider. Attach handlers with `:telemetry.attach/4` to wire these events into logging or observability pipelines.
 
 ## Integration with Ash
 
