@@ -101,7 +101,6 @@ MyApp.Agents.Assistant.stream(message: "Hello!")
 
 - [ ] Tool calling support
 - [ ] Agent context persistence
-- [ ] MCP server support
 - [ ] Multi-agent orchestration
 
 ### Needs Research
@@ -110,6 +109,7 @@ MyApp.Agents.Assistant.stream(message: "Hello!")
 - [ ] Long-term memory architecture
 - [ ] Evaluation harness for agents
 - [ ] Observability dashboards
+- [ ] MCP server support
 
 ## Provider Options
 
