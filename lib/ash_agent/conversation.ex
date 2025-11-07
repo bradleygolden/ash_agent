@@ -57,13 +57,21 @@ defmodule AshAgent.Conversation do
   """
   @spec new(module(), map(), keyword()) :: t()
   def new(agent, input, opts \\ []) do
+    messages = []
+    messages = if system_prompt = Keyword.get(opts, :system_prompt) do
+      [%{role: :system, content: system_prompt} | messages]
+    else
+      messages
+    end
+    messages = messages ++ [user_message(input)]
+
     %__MODULE__{
       agent: agent,
       domain: Keyword.get(opts, :domain),
       actor: Keyword.get(opts, :actor),
       tenant: Keyword.get(opts, :tenant),
       max_iterations: Keyword.get(opts, :max_iterations, 10),
-      messages: [user_message(input)]
+      messages: messages
     }
   end
 
@@ -141,8 +149,12 @@ defmodule AshAgent.Conversation do
     end
   end
 
-  defp format_message(%{role: role, content: content, tool_calls: nil}) do
-    %{role: role, content: content}
+  defp format_message(%{role: :system, content: content}) do
+    %{role: "system", content: content}
+  end
+
+  defp format_message(%{role: role, content: content, tool_calls: nil}) when role in [:user, :assistant, :system] do
+    %{role: to_string(role), content: content}
   end
 
   defp format_message(%{role: :assistant, content: content, tool_calls: tool_calls}) do

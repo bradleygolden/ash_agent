@@ -169,8 +169,8 @@ defmodule AshAgent.ConversationTest do
       messages = Conversation.to_messages(conversation)
 
       assert length(messages) == 2
-      assert hd(messages).role == :user
-      assert List.last(messages).role == :assistant
+      assert hd(messages).role == "user"
+      assert List.last(messages).role == "assistant"
     end
 
     test "formats tool calls in messages" do

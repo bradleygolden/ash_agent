@@ -134,12 +134,23 @@ defmodule AshAgent.Runtime do
     tool_config = config.tool_config
     domain = get_domain(module)
 
+    rendered_prompt =
+      if prompt do
+        case PromptRenderer.render(prompt, context.input, config) do
+          {:ok, rendered} -> rendered
+          {:error, _} -> nil
+        end
+      else
+        nil
+      end
+
     conversation =
       Conversation.new(module, context.input,
         domain: domain,
-        actor: context.actor,
-        tenant: context.tenant,
-        max_iterations: tool_config.max_iterations
+        actor: Map.get(context, :actor),
+        tenant: Map.get(context, :tenant),
+        max_iterations: tool_config.max_iterations,
+        system_prompt: rendered_prompt
       )
 
     execute_tool_calling_loop(
@@ -158,8 +169,8 @@ defmodule AshAgent.Runtime do
     if Conversation.exceeded_max_iterations?(conversation) do
       {:error, Error.llm_error("Max iterations (#{conversation.max_iterations}) exceeded")}
     else
-      messages = if conversation.iteration == 0, do: nil, else: Conversation.to_messages(conversation)
-      current_prompt = if conversation.iteration == 0, do: prompt, else: nil
+      messages = Conversation.to_messages(conversation)
+      current_prompt = nil
 
       case Telemetry.span(
              :call,

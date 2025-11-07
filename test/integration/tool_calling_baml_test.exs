@@ -1,46 +1,32 @@
-defmodule AshAgent.Integration.ToolCallingReqLLMTest do
+defmodule AshAgent.Integration.ToolCallingBamlTest do
   use ExUnit.Case, async: false
 
   @moduletag :integration
 
   alias AshAgent.TestDomain
 
-  defmodule ReqLLMToolAgent do
+  defmodule BamlToolAgent do
     use Ash.Resource,
       domain: TestDomain,
       extensions: [AshAgent.Resource]
-
-    import AshAgent.Sigils
 
     defmodule Reply do
       use Ash.TypedStruct
 
       typed_struct do
         field :content, :string, allow_nil?: false
-        field :result, :integer
+        field :confidence, :float
       end
     end
 
     agent do
-      provider :req_llm
-      client("openai:qwen3:1.7b",
-        base_url: "http://localhost:11434/v1",
-        api_key: "ollama",
-        temperature: 0.0
-      )
-
+      provider :baml
+      client :ollama, function: :AgentEcho
       output Reply
 
       input do
         argument :message, :string, allow_nil?: false
       end
-
-      prompt ~p"""
-      You are a helpful assistant with access to tools.
-      When asked to perform calculations, use the add_numbers tool.
-      Reply with JSON matching ctx.output_format exactly.
-      {{ output_format }}
-      """
 
       tools do
         max_iterations 3
@@ -55,6 +41,12 @@ defmodule AshAgent.Integration.ToolCallingReqLLMTest do
             b: [type: :integer, required: true, description: "Second number"]
           ]
         end
+
+        tool :get_message do
+          description "Get the original message"
+          function {__MODULE__, :get_message, []}
+          parameters []
+        end
       end
     end
 
@@ -65,35 +57,22 @@ defmodule AshAgent.Integration.ToolCallingReqLLMTest do
     def add(%{a: a, b: b}, _context) do
       {:ok, %{result: a + b}}
     end
+
+    def get_message(_args, %{input: %{message: message}}) do
+      {:ok, %{message: message}}
+    end
   end
 
-  setup_all do
-    ReqLLM.put_key(:openai_api_key, "ollama")
-    :ok
-  end
-
-  setup do
-    original_opts = Application.get_env(:ash_agent, :req_llm_options, [])
-    Application.put_env(:ash_agent, :req_llm_options, [])
-
-    on_exit(fn ->
-      Application.put_env(:ash_agent, :req_llm_options, original_opts)
-    end)
-
-    :ok
-  end
-
-  describe "tool calling with req_llm provider" do
+  describe "tool calling with baml provider" do
     @tag :integration
     test "executes tools in multi-turn conversation" do
-      result = ReqLLMToolAgent.call("What is 10 + 5? Use the tool to calculate.")
+      result = BamlToolAgent.call("What is 5 + 3? Use the add_numbers tool to calculate.")
 
       case result do
-        {:ok, %ReqLLMToolAgent.Reply{} = reply} ->
+        {:ok, %BamlToolAgent.Reply{} = reply} ->
           assert is_binary(reply.content)
           assert String.length(reply.content) > 0
-          # Result might be nil if tool calling didn't complete, which is acceptable
-          # The test verifies the infrastructure works
+          assert is_float(reply.confidence)
 
         {:error, %Ash.Error.Unknown{errors: [%{error: error_msg}]}} ->
           if String.contains?(error_msg, "Max iterations") do
