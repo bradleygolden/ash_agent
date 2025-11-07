@@ -222,14 +222,14 @@ defmodule AshAgent.Runtime do
   end
 
   defp handle_llm_response(response, config, module, context, prompt, schema, tools, conversation, tool_config) do
-    tool_calls = extract_tool_calls(response)
-    content = extract_content(response)
+    tool_calls = extract_tool_calls(response, config.provider)
+    content = extract_content(response, config.provider)
 
     conversation = Conversation.add_assistant_message(conversation, content, tool_calls)
 
     case tool_calls do
       [] ->
-        case LLMClient.parse_response(config.output_type, response) do
+        case convert_baml_response_to_output(response, config.output_type, config.provider) do
           {:ok, result} -> {:ok, result}
           {:error, reason} -> {:error, reason}
         end
@@ -246,7 +246,59 @@ defmodule AshAgent.Runtime do
     end
   end
 
-  defp extract_content(%Response{} = response) do
+  defp convert_baml_response_to_output(response, output_type, provider) when provider in [:baml, AshAgent.Providers.Baml] do
+    convert_baml_union_to_output(response, output_type)
+  end
+
+  defp convert_baml_response_to_output(response, output_type, _provider) do
+    LLMClient.parse_response(output_type, response)
+  end
+
+  defp convert_baml_union_to_output(%_{} = response, output_type) do
+    struct_map = Map.from_struct(response)
+    struct_name = response.__struct__ |> Module.split() |> List.last()
+
+    cond do
+      String.contains?(struct_name, "ToolCallResponse") ->
+        case Map.take(struct_map, [:content, :confidence]) do
+          data when map_size(data) > 0 ->
+            {:ok, struct(output_type, data)}
+
+          _ ->
+            LLMClient.parse_response(output_type, response)
+        end
+
+      Map.has_key?(struct_map, :content) and not Map.has_key?(struct_map, :tool_name) ->
+        case Map.take(struct_map, [:content, :confidence]) do
+          data when map_size(data) > 0 ->
+            {:ok, struct(output_type, data)}
+
+          _ ->
+            LLMClient.parse_response(output_type, response)
+        end
+
+      true ->
+        LLMClient.parse_response(output_type, response)
+    end
+  rescue
+    e ->
+      {:error,
+       Error.parse_error("Failed to convert BAML response to output type", %{
+         output_type: output_type,
+         response: response,
+         exception: e
+       })}
+  end
+
+  defp convert_baml_union_to_output(response, output_type) do
+    LLMClient.parse_response(output_type, response)
+  end
+
+  defp extract_content(response, provider) when provider in [:baml, AshAgent.Providers.Baml] do
+    extract_baml_content(response)
+  end
+
+  defp extract_content(%Response{} = response, _provider) do
     case ReqLLM.Response.unwrap_object(response) do
       {:ok, object} when is_map(object) ->
         case Map.get(object, "content") || Map.get(object, :content) do
@@ -261,28 +313,131 @@ defmodule AshAgent.Runtime do
     end
   end
 
-  defp extract_content(%{content: content}) when is_binary(content), do: content
-  defp extract_content(%{"content" => content}) when is_binary(content), do: content
-  defp extract_content(_response), do: ""
+  defp extract_content(%{content: content}, _provider) when is_binary(content), do: content
+  defp extract_content(%{"content" => content}, _provider) when is_binary(content), do: content
+  defp extract_content(_response, _provider), do: ""
+
+  defp extract_baml_content(%_{} = response) do
+    struct_name = response.__struct__ |> Module.split() |> List.last()
+    struct_map = Map.from_struct(response)
+
+    cond do
+      String.contains?(struct_name, "ToolCall") and not String.contains?(struct_name, "Response") ->
+        ""
+
+      Map.has_key?(struct_map, :tool_name) or Map.has_key?(struct_map, :tool_arguments) ->
+        ""
+
+      Map.has_key?(struct_map, :__type__) and struct_map.__type__ in ["tool_call", "ToolCall"] ->
+        ""
+
+      Map.has_key?(struct_map, :content) ->
+        content = struct_map.content
+        if is_binary(content), do: content, else: ""
+
+      true ->
+        ""
+    end
+  end
+
+  defp extract_baml_content(_response) do
+    ""
+  end
 
   defp extract_text_from_content([%{"type" => "text", "text" => text} | _]) when is_binary(text), do: text
   defp extract_text_from_content([%{type: "text", text: text} | _]) when is_binary(text), do: text
   defp extract_text_from_content([_ | rest]), do: extract_text_from_content(rest)
   defp extract_text_from_content([]), do: ""
 
-  defp extract_tool_calls(%Response{} = response) do
+  defp extract_tool_calls(response, provider) when provider in [:baml, AshAgent.Providers.Baml] do
+    extract_baml_tool_calls(response)
+  end
+
+  defp extract_tool_calls(%Response{} = response, _provider) do
     case Response.tool_calls(response) do
       nil -> []
       tool_calls -> normalize_tool_calls(tool_calls)
     end
   end
 
-  defp extract_tool_calls(%{tool_calls: tool_calls}) when is_list(tool_calls) do
+  defp extract_tool_calls(%{tool_calls: tool_calls}, _provider) when is_list(tool_calls) do
     normalize_tool_calls(tool_calls)
   end
 
-  defp extract_tool_calls(_response) do
+  defp extract_tool_calls(_response, _provider) do
     []
+  end
+
+  defp extract_baml_tool_calls(%_{} = response) do
+    struct_map = Map.from_struct(response)
+    struct_name = response.__struct__ |> Module.split() |> List.last()
+    
+    cond do
+      String.contains?(struct_name, "ToolCall") and not String.contains?(struct_name, "Response") ->
+        cond do
+          Map.has_key?(struct_map, :tool_name) ->
+            tool_name = struct_map.tool_name
+            args = Map.get(struct_map, :tool_arguments) || Map.get(struct_map, :arguments) || %{}
+            [%{id: generate_tool_call_id(), name: normalize_tool_name(tool_name), arguments: normalize_baml_args(args)}]
+
+          Map.has_key?(struct_map, :name) ->
+            name = struct_map.name
+            args = Map.get(struct_map, :arguments) || %{}
+            [%{id: generate_tool_call_id(), name: normalize_tool_name(name), arguments: normalize_baml_args(args)}]
+
+          true ->
+            []
+        end
+
+      Map.has_key?(struct_map, :tool_name) ->
+        tool_name = struct_map.tool_name
+        args = Map.get(struct_map, :tool_arguments) || Map.get(struct_map, :arguments) || %{}
+        [%{id: generate_tool_call_id(), name: normalize_tool_name(tool_name), arguments: normalize_baml_args(args)}]
+
+      true ->
+        []
+    end
+  end
+
+  defp extract_baml_tool_calls(_response) do
+    []
+  end
+
+  defp normalize_tool_name(name) when is_atom(name), do: name
+  defp normalize_tool_name(name) when is_binary(name) do
+    try do
+      String.to_existing_atom(name)
+    rescue
+      ArgumentError -> name
+    end
+  end
+  defp normalize_tool_name(name), do: name
+
+  defp normalize_baml_args(args) when is_map(args) do
+    Enum.into(args, %{}, fn
+      {k, v} when is_binary(k) -> {String.to_existing_atom(k), v}
+      {k, v} -> {k, v}
+    end)
+  end
+
+  defp normalize_baml_args(args) when is_binary(args) do
+    case Jason.decode!(args) do
+      map when is_map(map) ->
+        Enum.into(map, %{}, fn
+          {k, v} when is_binary(k) -> {String.to_existing_atom(k), v}
+          {k, v} -> {k, v}
+        end)
+
+      other ->
+        other
+    end
+  end
+
+  defp normalize_baml_args(args) when is_struct(args), do: Map.from_struct(args)
+  defp normalize_baml_args(args), do: args
+
+  defp generate_tool_call_id do
+    "call_" <> Base.encode16(:crypto.strong_rand_bytes(8), case: :lower)
   end
 
   defp normalize_tool_calls(tool_calls) do

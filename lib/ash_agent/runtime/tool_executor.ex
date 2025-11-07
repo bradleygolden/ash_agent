@@ -28,8 +28,9 @@ defmodule AshAgent.Runtime.ToolExecutor do
 
       tool_def ->
         context = build_context(conversation, tool_def)
+        normalized_args = normalize_tool_args(args, tool_def)
 
-        case execute_tool_impl(tool_def, args, context) do
+        case execute_tool_impl(tool_def, normalized_args, context) do
           {:ok, result} ->
             {id, {:ok, result}}
 
@@ -37,6 +38,44 @@ defmodule AshAgent.Runtime.ToolExecutor do
             {id, error}
         end
     end
+  end
+
+  defp normalize_tool_args(args, tool_def) do
+    parameters = Map.get(tool_def, :parameters, [])
+    
+    Enum.into(args, %{}, fn {key, value} ->
+      key_atom = if is_binary(key), do: String.to_existing_atom(key), else: key
+      
+      param_spec = Enum.find(parameters, fn p -> p[:name] == key_atom end)
+      
+      normalized_value = case param_spec do
+        %{type: :integer} when is_binary(value) ->
+          case Integer.parse(value) do
+            {int, _} -> int
+            :error -> value
+          end
+        
+        %{type: :float} when is_binary(value) ->
+          case Float.parse(value) do
+            {float, _} -> float
+            :error -> value
+          end
+        
+        %{type: :boolean} when is_binary(value) ->
+          case String.downcase(value) do
+            "true" -> true
+            "false" -> false
+            _ -> value
+          end
+        
+        _ ->
+          value
+      end
+      
+      {key_atom, normalized_value}
+    end)
+  rescue
+    _ -> args
   end
 
   defp find_tool(name, tool_definitions) when is_atom(name) do

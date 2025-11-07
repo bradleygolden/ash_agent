@@ -99,7 +99,16 @@ defmodule AshAgent.Runtime.LLMClient do
         end
 
       true ->
-        build_typed_struct(output_module, Map.from_struct(response))
+        struct_map = Map.from_struct(response)
+        struct_name = response.__struct__ |> Module.split() |> List.last()
+        
+        cond do
+          String.contains?(struct_name, "ToolCallResponse") ->
+            build_typed_struct(output_module, struct_map)
+
+          true ->
+            build_typed_struct(output_module, struct_map)
+        end
     end
   rescue
     e ->
