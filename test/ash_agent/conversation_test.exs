@@ -182,7 +182,7 @@ defmodule AshAgent.ConversationTest do
       messages = Conversation.to_messages(conversation)
       assistant_message = List.last(messages)
 
-      assert assistant_message.role == :assistant
+      assert assistant_message.role == "assistant"
       assert is_list(assistant_message.tool_calls)
       assert length(assistant_message.tool_calls) == 1
 
@@ -204,7 +204,7 @@ defmodule AshAgent.ConversationTest do
       assert length(messages) == 3
 
       result_message = Enum.at(messages, 2)
-      assert result_message.role == :user
+      assert result_message.role == "user"
       assert is_list(result_message.content)
     end
   end

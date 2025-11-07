@@ -159,18 +159,18 @@ defmodule AshAgent.Conversation do
 
   defp format_message(%{role: :assistant, content: content, tool_calls: tool_calls}) do
     %{
-      role: :assistant,
+      role: "assistant",
       content: content,
       tool_calls: Enum.map(tool_calls, &format_tool_call/1)
     }
   end
 
   defp format_message(%{role: :user, content: [%{type: :tool_result} | _] = parts}) do
-    %{role: :user, content: parts}
+    %{role: "user", content: parts}
   end
 
-  defp format_message(%{role: role, content: content}) do
-    %{role: role, content: content}
+  defp format_message(%{role: role, content: content}) when role in [:user, :assistant, :system] do
+    %{role: to_string(role), content: content}
   end
 
   defp format_tool_call(%{id: id, name: name, arguments: args}) do

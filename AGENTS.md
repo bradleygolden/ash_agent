@@ -8,6 +8,7 @@
 
 ## Testing Practices
 
+- Tests MUST be deterministic. A test must either pass or fail consistently, not accept both outcomes. Avoid conditional assertions that accept multiple valid results.
 - Never call `Process.sleep/1` in tests; prefer synchronization helpers so suites stay deterministic.
 - Keep unit tests in `test/ash_agent`, mirroring `lib/` structure with `<filename>_test.exs`, and default to `async: true` when isolation is possible.
 - Place integration suites in `test/integration`, name them after the workflow being exercised (e.g., `user_workflow_test.exs`), and run them with `async: false`.
