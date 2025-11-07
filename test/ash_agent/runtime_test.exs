@@ -88,14 +88,29 @@ defmodule AshAgent.RuntimeTest do
     end
   end
 
+  defmodule NilOutputAgent do
+    @moduledoc false
+    use Ash.Resource,
+      domain: AshAgent.RuntimeTest.TestDomain,
+      extensions: [AshAgent.Resource]
+
+    agent do
+      client "anthropic:claude-3-5-sonnet"
+      output nil
+      prompt "Test"
+    end
+  end
+
   defmodule TestDomain do
     @moduledoc false
     use Ash.Domain, validate_config_inclusion?: false
 
     resources do
+      allow_unregistered? true
       resource MinimalAgent
       resource AgentWithArgs
       resource AgentWithHooks
+      resource NilOutputAgent
     end
   end
 
@@ -214,19 +229,6 @@ defmodule AshAgent.RuntimeTest do
 
   describe "error handling" do
     test "returns schema error when output type is nil" do
-      defmodule NilOutputAgent do
-        @moduledoc false
-        use Ash.Resource,
-          domain: AshAgent.RuntimeTest.TestDomain,
-          extensions: [AshAgent.Resource]
-
-        agent do
-          client "anthropic:claude-3-5-sonnet"
-          output nil
-          prompt "Test"
-        end
-      end
-
       result = Runtime.call(NilOutputAgent, %{})
 
       assert {:error, %Error{type: :schema_error, message: message}} = result
@@ -260,13 +262,14 @@ defmodule AshAgent.RuntimeTest do
 
   describe "telemetry" do
     test "emits call span with usage metadata" do
+      parent = self()
       handler_id = {:ash_agent_telemetry_call, make_ref()}
 
       :telemetry.attach(
         handler_id,
-        [:ash_agent, :call],
+        [:ash_agent, :call, :stop],
         fn event, measurements, metadata, _ ->
-          send(self(), {:telemetry_event, event, measurements, metadata})
+          send(parent, {:telemetry_event, event, measurements, metadata})
         end,
         nil
       )
@@ -279,22 +282,24 @@ defmodule AshAgent.RuntimeTest do
       try do
         assert {:ok, _} = Runtime.call(MinimalAgent, %{})
 
-        assert_receive {:telemetry_event, [:ash_agent, :call], _measurements, metadata}
+        assert_receive {:telemetry_event, [:ash_agent, :call, :stop], _measurements, metadata}
         assert metadata.status == :ok
-        assert metadata.usage["input_tokens"] == 10
+        input_tokens = metadata.usage[:input_tokens] || metadata.usage["input_tokens"]
+        assert input_tokens == 10
       after
         :telemetry.detach(handler_id)
       end
     end
 
     test "emits stream span metadata" do
+      parent = self()
       handler_id = {:ash_agent_telemetry_stream, make_ref()}
 
       :telemetry.attach(
         handler_id,
-        [:ash_agent, :stream],
+        [:ash_agent, :stream, :stop],
         fn event, measurements, metadata, _ ->
-          send(self(), {:telemetry_event, event, measurements, metadata})
+          send(parent, {:telemetry_event, event, measurements, metadata})
         end,
         nil
       )
@@ -308,7 +313,7 @@ defmodule AshAgent.RuntimeTest do
         assert {:ok, stream} = Runtime.stream(MinimalAgent, %{})
         Enum.to_list(stream)
 
-        assert_receive {:telemetry_event, [:ash_agent, :stream], _measurements, metadata}
+        assert_receive {:telemetry_event, [:ash_agent, :stream, :stop], _measurements, metadata}
         assert metadata.status == :ok
       after
         :telemetry.detach(handler_id)

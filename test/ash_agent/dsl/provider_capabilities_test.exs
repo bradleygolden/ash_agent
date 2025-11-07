@@ -2,8 +2,6 @@ defmodule AshAgent.DSL.ProviderCapabilitiesTest do
   @moduledoc false
   use ExUnit.Case, async: false
 
-  import ExUnit.CaptureIO
-
   defmodule Output do
     @moduledoc false
     use Ash.TypedStruct
@@ -26,38 +24,38 @@ defmodule AshAgent.DSL.ProviderCapabilitiesTest do
   end
 
   test "raises when provider lacks tool_calling feature" do
-    message =
-      capture_io(:stderr, fn ->
-        assert_raise Spark.Error.DslError, fn ->
-          defmodule NoToolProviderAgent do
-            use Ash.Resource,
-              extensions: [AshAgent.Resource]
+    error =
+      assert_raise Spark.Error.DslError, fn ->
+        defmodule NoToolProviderAgent do
+          use Ash.Resource,
+            domain: AshAgent.TestDomain,
+            extensions: [AshAgent.Resource]
 
-            agent do
-              provider(:mock)
-              client "anthropic:claude-3-5-sonnet"
-              output Output
-              prompt "Testing"
-            end
+          agent do
+            provider(:mock)
+            client "anthropic:claude-3-5-sonnet"
+            output Output
+            prompt "Testing"
+          end
 
-            tools do
-              tool :foo do
-                description "foo"
-                function({Kernel, :self, []})
-                parameters([])
-              end
+          tools do
+            tool :foo do
+              description "foo"
+              function({Kernel, :self, []})
+              parameters([])
             end
           end
         end
-      end)
+      end
 
-    assert message =~ "does not support tool calling"
+    assert Exception.message(error) =~ "does not support tool calling"
   end
 
   test "allows promptless providers while enforcing prompts elsewhere" do
     assert_raise Spark.Error.DslError, fn ->
       defmodule MissingPromptAgent do
         use Ash.Resource,
+          domain: AshAgent.TestDomain,
           extensions: [AshAgent.Resource]
 
         agent do
@@ -70,6 +68,7 @@ defmodule AshAgent.DSL.ProviderCapabilitiesTest do
 
     defmodule PromptlessBamlAgent do
       use Ash.Resource,
+        domain: AshAgent.TestDomain,
         extensions: [AshAgent.Resource]
 
       agent do

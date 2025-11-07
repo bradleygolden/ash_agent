@@ -202,6 +202,9 @@ defmodule AshAgent.Runtime.LLMClient do
     StreamResponse.usage(response)
   end
 
+  def response_usage(%{usage: usage}) when is_map(usage), do: usage
+  def response_usage(%{"usage" => usage}) when is_map(usage), do: usage
+
   def response_usage(%module{} = response) do
     cond do
       function_exported?(module, :usage, 1) ->
