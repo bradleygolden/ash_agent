@@ -27,12 +27,13 @@ defmodule AshAgent.Providers.Baml do
   @default_stream_timeout 30_000
 
   @impl true
-  def call(client, _prompt, _schema, opts, context) do
+  def call(client, _prompt, _schema, opts, context, tools, messages) do
     with {:ok, function_name} <- fetch_function(opts),
-         {:ok, args} <- fetch_arguments(context),
+         {:ok, args} <- fetch_arguments(context, messages),
          {:ok, client_module} <- resolve_client_module(client, opts),
          {:ok, function_module} <- resolve_function_module(client_module, function_name),
-         {:ok, result} <- invoke_function(function_module, args, opts) do
+         {:ok, baml_opts} <- build_baml_opts(opts, tools, messages),
+         {:ok, result} <- invoke_function(function_module, args, baml_opts) do
       {:ok, result}
     else
       {:error, %Error{} = error} ->
@@ -55,9 +56,9 @@ defmodule AshAgent.Providers.Baml do
   end
 
   @impl true
-  def stream(client, _prompt, _schema, opts, context) do
+  def stream(client, _prompt, _schema, opts, context, tools, messages) do
     with {:ok, function_name} <- fetch_function(opts),
-         {:ok, args} <- fetch_arguments(context),
+         {:ok, args} <- fetch_arguments(context, messages),
          {:ok, client_module} <- resolve_client_module(client, opts),
          {:ok, function_module} <- resolve_function_module(client_module, function_name),
          true <-
@@ -65,8 +66,9 @@ defmodule AshAgent.Providers.Baml do
              {:error,
               Error.llm_error(
                 "BAML function #{inspect(function_module)} does not support streaming"
-              )} do
-      {:ok, create_stream(function_module, args)}
+              )},
+         {:ok, baml_opts} <- build_baml_opts(opts, tools, messages) do
+      {:ok, create_stream(function_module, args, baml_opts)}
     else
       {:error, %Error{} = error} ->
         {:error, error}
@@ -97,10 +99,21 @@ defmodule AshAgent.Providers.Baml do
     end
   end
 
-  defp fetch_arguments(%{input: input}) when is_map(input), do: {:ok, input}
-  defp fetch_arguments(%{input: input}) when is_list(input), do: {:ok, Map.new(input)}
+  defp fetch_arguments(%{input: input}, _messages) when is_map(input), do: {:ok, input}
+  defp fetch_arguments(%{input: input}, _messages) when is_list(input), do: {:ok, Map.new(input)}
+  defp fetch_arguments(_context, messages) when is_list(messages) and length(messages) > 0 do
+    last_message = List.last(messages)
+    case last_message do
+      %{role: :user, content: content} when is_binary(content) ->
+        {:ok, %{message: content}}
+      %{role: :user, content: [%{type: :tool_result, content: content}]} ->
+        {:ok, %{message: content}}
+      _ ->
+        {:ok, %{}}
+    end
+  end
 
-  defp fetch_arguments(_context) do
+  defp fetch_arguments(_context, _messages) do
     {:error, Error.llm_error("BAML provider requires input arguments but none were provided")}
   end
 
@@ -166,15 +179,33 @@ defmodule AshAgent.Providers.Baml do
     end
   end
 
-  defp invoke_function(function_module, args, opts) do
-    call_opts =
+  defp build_baml_opts(opts, tools, messages) do
+    baml_opts =
       opts
       |> Keyword.get(:baml_opts, %{})
       |> to_map_opts()
+      |> maybe_add_tools(tools)
+      |> maybe_add_messages(messages)
 
+    {:ok, baml_opts}
+  end
+
+  defp maybe_add_tools(opts, nil), do: opts
+  defp maybe_add_tools(opts, []), do: opts
+  defp maybe_add_tools(opts, tools) when is_list(tools) do
+    Map.put(opts, :tools, tools)
+  end
+
+  defp maybe_add_messages(opts, nil), do: opts
+  defp maybe_add_messages(opts, messages) when is_list(messages) do
+    Map.put(opts, :messages, messages)
+  end
+  defp maybe_add_messages(opts, _messages), do: opts
+
+  defp invoke_function(function_module, args, opts) do
     cond do
       function_exported?(function_module, :call, 2) ->
-        function_module.call(args, call_opts)
+        function_module.call(args, opts)
 
       function_exported?(function_module, :call, 1) ->
         function_module.call(args)
@@ -187,36 +218,49 @@ defmodule AshAgent.Providers.Baml do
     end
   end
 
-  defp create_stream(function_module, arguments) do
+  defp create_stream(function_module, arguments, opts) do
     Stream.resource(
-      fn -> start_streaming(function_module, arguments) end,
+      fn -> start_streaming(function_module, arguments, opts) end,
       &stream_next/1,
       &cleanup_stream/1
     )
   end
 
-  defp start_streaming(function_module, arguments) do
+  defp start_streaming(function_module, arguments, opts) do
     parent = self()
     ref = make_ref()
 
-    case function_module.stream(arguments, fn
-           {:partial, partial_result} ->
-             send(parent, {ref, :chunk, partial_result})
+    stream_fn = fn
+      {:partial, partial_result} ->
+        send(parent, {ref, :chunk, partial_result})
 
-           {:done, final_result} ->
-             send(parent, {ref, :done, {:ok, final_result}})
+      {:done, final_result} ->
+        send(parent, {ref, :done, {:ok, final_result}})
 
-           {:error, error} ->
-             send(parent, {ref, :done, {:error, error}})
-         end) do
-      {:ok, stream_pid} ->
-        {ref, stream_pid, :streaming}
+      {:error, error} ->
+        send(parent, {ref, :done, {:error, error}})
+    end
 
-      pid when is_pid(pid) ->
-        {ref, pid, :streaming}
+    case function_exported?(function_module, :stream, 3) do
+      true ->
+        result = function_module.stream(arguments, opts, stream_fn)
+        case result do
+          {:ok, stream_pid} when is_pid(stream_pid) -> {ref, stream_pid, :streaming}
+          pid when is_pid(pid) -> {ref, pid, :streaming}
+          {:error, reason} -> {ref, nil, {:error, reason}}
+          other when is_function(other) -> {ref, nil, {:error, "BAML stream function returned a function instead of a stream"}}
+          other -> {ref, nil, {:error, "Unexpected stream result: #{inspect(other)}"}}
+        end
 
-      {:error, reason} ->
-        {ref, nil, {:error, reason}}
+      false ->
+        result = function_module.stream(arguments, stream_fn)
+        case result do
+          {:ok, stream_pid} when is_pid(stream_pid) -> {ref, stream_pid, :streaming}
+          pid when is_pid(pid) -> {ref, pid, :streaming}
+          {:error, reason} -> {ref, nil, {:error, reason}}
+          other when is_function(other) -> {ref, nil, {:error, "BAML stream function returned a function instead of a stream"}}
+          other -> {ref, nil, {:error, "Unexpected stream result: #{inspect(other)}"}}
+        end
     end
   end
 

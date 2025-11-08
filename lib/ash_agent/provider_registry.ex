@@ -39,7 +39,8 @@ defmodule AshAgent.ProviderRegistry do
       :sync_call,
       :streaming,
       :structured_output,
-      :configurable_responses
+      :configurable_responses,
+      :tool_calling
     ],
     baml: [
       :sync_call,

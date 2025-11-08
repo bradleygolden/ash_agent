@@ -31,7 +31,7 @@ defmodule AshAgent.MixProject do
   defp elixirc_paths(_), do: ["lib"]
 
   defp deps do
-    [
+    base_deps = [
       # Core dependencies
       {:ash, "~> 3.0"},
       {:spark, "~> 2.2"},
@@ -42,12 +42,20 @@ defmodule AshAgent.MixProject do
       {:igniter, "~> 0.3", optional: true},
 
       # Dev and test dependencies
-      {:ash_baml, path: "../ash_baml", only: :test},
       {:ex_doc, "~> 0.34", only: [:dev, :test], runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:plug, "~> 1.16", only: :test}
     ]
+
+    ash_baml_dep =
+      if File.exists?("../ash_baml/mix.exs") do
+        [{:ash_baml, path: "../ash_baml", only: :test}]
+      else
+        []
+      end
+
+    base_deps ++ ash_baml_dep
   end
 
   defp description do

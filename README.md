@@ -116,10 +116,6 @@ MyApp.Agents.Assistant.stream(message: "Hello!")
 AshAgent ships with a provider abstraction so the orchestration layer is decoupled
 from any specific LLM stack.
 
-> **Note:** Defining `tools` in your agent requires a provider that advertises the
-> `:tool_calling` capability (e.g., `:req_llm`, `:baml`). Choosing a provider without
-> that feature will raise a compile-time error to keep behavior predictable.
-
 ### ReqLLM (default)
 
 The default `:req_llm` provider requires only a `provider:model` string:

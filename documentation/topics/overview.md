@@ -63,6 +63,17 @@ AshAgent follows Ash's declarative philosophy. Instead of imperative code, you d
 
 Each agent chooses a provider via the `provider` option in the `agent` block. The default (`:req_llm`) requires a prompt and talks directly to ReqLLM. Providers declare their capabilities (e.g., `:tool_calling`, `:prompt_optional`) so the DSL can validate which features are available. For example:
 
+### Tool Calling
+
+Agents can use tools to interact with external systems, call Ash actions, or execute Elixir functions during multi-turn conversations. When tools are defined, the runtime automatically manages the conversation loop:
+
+1. LLM receives the user message and available tools
+2. LLM may request tool execution
+3. Tools are executed and results are fed back to the LLM
+4. Process repeats until the LLM provides a final response or max iterations is reached
+
+Tools can be defined using either Ash actions or Elixir functions, with full parameter validation and error handling. The runtime handles conversation state management, tool execution, and error recovery automatically.
+
 ```elixir
 agent do
   provider :req_llm

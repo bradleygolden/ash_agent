@@ -28,21 +28,45 @@ defmodule AshAgent.Providers.ReqLLM do
   require Logger
 
   @impl true
-  def call(client, prompt, schema, opts, _context) do
+  def call(client, prompt, schema, opts, _context, tools, messages) do
     max_attempts = Keyword.get(opts, :max_retries, 3)
     base_delay_ms = Keyword.get(opts, :retry_base_delay_ms, 100)
 
+    req_opts = build_req_opts(opts, tools, messages, prompt)
+
     with_retry(
-      fn -> ReqLLM.generate_object(client, prompt, schema, opts) end,
+      fn -> ReqLLM.generate_object(client, prompt, schema, req_opts) end,
       max_attempts,
       base_delay_ms
     )
   end
 
   @impl true
-  def stream(client, prompt, schema, opts, _context) do
-    ReqLLM.stream_object(client, prompt, schema, opts)
+  def stream(client, prompt, schema, opts, _context, tools, messages) do
+    req_opts = build_req_opts(opts, tools, messages, prompt)
+    ReqLLM.stream_object(client, prompt, schema, req_opts)
   end
+
+  defp build_req_opts(opts, tools, messages, prompt) do
+    opts
+    |> maybe_add_tools(tools)
+    |> maybe_add_messages(messages, prompt)
+  end
+
+  defp maybe_add_tools(opts, nil), do: opts
+  defp maybe_add_tools(opts, []), do: opts
+  defp maybe_add_tools(opts, tools) when is_list(tools) do
+    Keyword.put(opts, :tools, tools)
+  end
+
+  defp maybe_add_messages(opts, nil, prompt) when is_binary(prompt), do: opts
+  defp maybe_add_messages(opts, nil, _prompt), do: opts
+  defp maybe_add_messages(opts, messages, _prompt) when is_list(messages) do
+    opts
+    |> Keyword.put(:messages, messages)
+    |> Keyword.delete(:prompt)
+  end
+  defp maybe_add_messages(opts, _messages, _prompt), do: opts
 
   @impl true
   def introspect do
