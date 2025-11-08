@@ -17,57 +17,57 @@ defmodule AshAgent.Integration.AgentActionsTest do
         client :ollama, function: :AgentEcho
         output AgentReply
 
-      input do
-        argument :message, :string, allow_nil?: false
+        input do
+          argument :message, :string, allow_nil?: false
+        end
+      end
+
+      code_interface do
+        define :call, args: [:message]
+        define :stream, args: [:message]
       end
     end
 
-    code_interface do
-      define :call, args: [:message]
-      define :stream, args: [:message]
-    end
-  end
+    describe "generated actions" do
+      test "mirror agent configuration" do
+        call_action = Info.action(OllamaAgent, :call)
+        stream_action = Info.action(OllamaAgent, :stream)
 
-  describe "generated actions" do
-    test "mirror agent configuration" do
-      call_action = Info.action(OllamaAgent, :call)
-      stream_action = Info.action(OllamaAgent, :stream)
+        assert AgentReply == call_action.returns
+        assert {:array, AgentReply} == stream_action.returns
 
-      assert AgentReply == call_action.returns
-      assert {:array, AgentReply} == stream_action.returns
+        assert [%{name: :message, type: :string}] ==
+                 Enum.map(call_action.arguments, &%{name: &1.name, type: &1.type})
 
-      assert [%{name: :message, type: :string}] ==
-               Enum.map(call_action.arguments, &%{name: &1.name, type: &1.type})
-
-      assert [%{name: :message, type: :string}] ==
-               Enum.map(stream_action.arguments, &%{name: &1.name, type: &1.type})
-    end
-  end
-
-  describe "agent execution" do
-    test "code interface call reaches ollama" do
-      assert {:ok, %AgentReply{} = reply} = OllamaAgent.call("integration ping")
-      assert String.starts_with?(reply.content, "integration")
-      assert is_float(reply.confidence)
+        assert [%{name: :message, type: :string}] ==
+                 Enum.map(stream_action.arguments, &%{name: &1.name, type: &1.type})
+      end
     end
 
-    test "stream action emits structured payload" do
-      input =
-        OllamaAgent
-        |> Ash.ActionInput.for_action(:stream, %{message: "stream integration"})
+    describe "agent execution" do
+      test "code interface call reaches ollama" do
+        assert {:ok, %AgentReply{} = reply} = OllamaAgent.call("integration ping")
+        assert String.starts_with?(reply.content, "integration")
+        assert is_float(reply.confidence)
+      end
 
-      assert {:ok, stream} = Ash.run_action(input)
+      test "stream action emits structured payload" do
+        input =
+          OllamaAgent
+          |> Ash.ActionInput.for_action(:stream, %{message: "stream integration"})
 
-      results =
-        stream
-        |> Enum.to_list()
-        |> Enum.filter(&match?(%AgentReply{}, &1))
+        assert {:ok, stream} = Ash.run_action(input)
 
-      assert [_ | _] = results
-      reply = List.last(results)
-      assert String.starts_with?(reply.content, "integration")
+        results =
+          stream
+          |> Enum.to_list()
+          |> Enum.filter(&match?(%AgentReply{}, &1))
+
+        assert [_ | _] = results
+        reply = List.last(results)
+        assert String.starts_with?(reply.content, "integration")
+      end
     end
-  end
   else
     @tag :skip
     test "BAML client not available - skipping tests" do

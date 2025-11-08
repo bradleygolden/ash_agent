@@ -99,22 +99,61 @@ defmodule AshAgent.Providers.Baml do
     end
   end
 
-  defp fetch_arguments(%{input: input}, _messages) when is_map(input), do: {:ok, input}
-  defp fetch_arguments(%{input: input}, _messages) when is_list(input), do: {:ok, Map.new(input)}
-  defp fetch_arguments(_context, messages) when is_list(messages) and length(messages) > 0 do
+  defp fetch_arguments(context, messages) do
+    case fetch_arguments_from_messages(messages) do
+      {:ok, args} ->
+        {:ok, args}
+
+      :error ->
+        fetch_arguments_from_context(context)
+    end
+  end
+
+  defp fetch_arguments_from_context(%{input: input}) when is_map(input), do: {:ok, input}
+
+  defp fetch_arguments_from_context(%{input: input}) when is_list(input),
+    do: {:ok, Map.new(input)}
+
+  defp fetch_arguments_from_context(_context) do
+    {:error, Error.llm_error("BAML provider requires input arguments but none were provided")}
+  end
+
+  defp fetch_arguments_from_messages(messages) when is_list(messages) and length(messages) > 0 do
     last_message = List.last(messages)
-    case last_message do
-      %{role: :user, content: content} when is_binary(content) ->
+    role = normalize_role(Map.get(last_message, :role) || Map.get(last_message, "role"))
+    content = Map.get(last_message, :content) || Map.get(last_message, "content")
+
+    cond do
+      role == "user" and is_binary(content) ->
         {:ok, %{message: content}}
-      %{role: :user, content: [%{type: :tool_result, content: content}]} ->
-        {:ok, %{message: content}}
-      _ ->
+
+      role == "user" and is_list(content) ->
+        case extract_tool_result_content(content) do
+          {:ok, result_content} -> {:ok, %{message: result_content}}
+          :error -> {:ok, %{}}
+        end
+
+      true ->
         {:ok, %{}}
     end
   end
 
-  defp fetch_arguments(_context, _messages) do
-    {:error, Error.llm_error("BAML provider requires input arguments but none were provided")}
+  defp fetch_arguments_from_messages(_), do: :error
+
+  defp normalize_role(role) when is_atom(role), do: Atom.to_string(role)
+  defp normalize_role(role) when is_binary(role), do: String.downcase(role)
+  defp normalize_role(_), do: nil
+
+  defp extract_tool_result_content(content_list) do
+    Enum.reduce_while(content_list, :error, fn item, acc ->
+      type = Map.get(item, :type) || Map.get(item, "type")
+
+      if type in [:tool_result, "tool_result"] do
+        {:halt, {:ok, Map.get(item, :content) || Map.get(item, "content")}}
+      else
+        {:cont, acc}
+      end
+    end)
   end
 
   defp resolve_client_module(client, opts) do
@@ -192,14 +231,17 @@ defmodule AshAgent.Providers.Baml do
 
   defp maybe_add_tools(opts, nil), do: opts
   defp maybe_add_tools(opts, []), do: opts
+
   defp maybe_add_tools(opts, tools) when is_list(tools) do
     Map.put(opts, :tools, tools)
   end
 
   defp maybe_add_messages(opts, nil), do: opts
+
   defp maybe_add_messages(opts, messages) when is_list(messages) do
     Map.put(opts, :messages, messages)
   end
+
   defp maybe_add_messages(opts, _messages), do: opts
 
   defp invoke_function(function_module, args, opts) do
@@ -244,22 +286,42 @@ defmodule AshAgent.Providers.Baml do
     case function_exported?(function_module, :stream, 3) do
       true ->
         result = function_module.stream(arguments, opts, stream_fn)
+
         case result do
-          {:ok, stream_pid} when is_pid(stream_pid) -> {ref, stream_pid, :streaming}
-          pid when is_pid(pid) -> {ref, pid, :streaming}
-          {:error, reason} -> {ref, nil, {:error, reason}}
-          other when is_function(other) -> {ref, nil, {:error, "BAML stream function returned a function instead of a stream"}}
-          other -> {ref, nil, {:error, "Unexpected stream result: #{inspect(other)}"}}
+          {:ok, stream_pid} when is_pid(stream_pid) ->
+            {ref, stream_pid, :streaming}
+
+          pid when is_pid(pid) ->
+            {ref, pid, :streaming}
+
+          {:error, reason} ->
+            {ref, nil, {:error, reason}}
+
+          other when is_function(other) ->
+            {ref, nil, {:error, "BAML stream function returned a function instead of a stream"}}
+
+          other ->
+            {ref, nil, {:error, "Unexpected stream result: #{inspect(other)}"}}
         end
 
       false ->
         result = function_module.stream(arguments, stream_fn)
+
         case result do
-          {:ok, stream_pid} when is_pid(stream_pid) -> {ref, stream_pid, :streaming}
-          pid when is_pid(pid) -> {ref, pid, :streaming}
-          {:error, reason} -> {ref, nil, {:error, reason}}
-          other when is_function(other) -> {ref, nil, {:error, "BAML stream function returned a function instead of a stream"}}
-          other -> {ref, nil, {:error, "Unexpected stream result: #{inspect(other)}"}}
+          {:ok, stream_pid} when is_pid(stream_pid) ->
+            {ref, stream_pid, :streaming}
+
+          pid when is_pid(pid) ->
+            {ref, pid, :streaming}
+
+          {:error, reason} ->
+            {ref, nil, {:error, reason}}
+
+          other when is_function(other) ->
+            {ref, nil, {:error, "BAML stream function returned a function instead of a stream"}}
+
+          other ->
+            {ref, nil, {:error, "Unexpected stream result: #{inspect(other)}"}}
         end
     end
   end

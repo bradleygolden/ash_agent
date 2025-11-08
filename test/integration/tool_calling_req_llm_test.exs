@@ -23,6 +23,7 @@ defmodule AshAgent.Integration.ToolCallingReqLLMTest do
 
     agent do
       provider :req_llm
+
       client("openai:qwen3:1.7b",
         base_url: "http://localhost:11434/v1",
         api_key: "ollama",
@@ -43,17 +44,18 @@ defmodule AshAgent.Integration.ToolCallingReqLLMTest do
       """
 
       tools do
-        max_iterations 3
+        max_iterations(3)
         timeout 30_000
-        on_error :continue
+        on_error(:continue)
 
         tool :add_numbers do
           description "Add two numbers together"
-          function {__MODULE__, :add, []}
-          parameters [
+          function({__MODULE__, :add, []})
+
+          parameters(
             a: [type: :integer, required: true, description: "First number"],
             b: [type: :integer, required: true, description: "Second number"]
-          ]
+          )
         end
       end
     end
@@ -83,15 +85,4 @@ defmodule AshAgent.Integration.ToolCallingReqLLMTest do
     :ok
   end
 
-  describe "tool calling with req_llm provider" do
-    @tag :integration
-    # test "executes tools in multi-turn conversation" do
-    #   assert {:ok, %ReqLLMToolAgent.Reply{} = reply} =
-    #            ReqLLMToolAgent.call("What is 10 + 5? Use the tool to calculate.")
-    #
-    #   assert is_binary(reply.content)
-    #   assert String.length(reply.content) > 0
-    # end
-  end
 end
-

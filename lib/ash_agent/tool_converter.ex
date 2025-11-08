@@ -21,6 +21,7 @@ defmodule AshAgent.ToolConverter do
 
   defp normalize_parameters(nil), do: []
   defp normalize_parameters([]), do: []
+
   defp normalize_parameters(params) when is_list(params) do
     Enum.map(params, fn
       {name, spec} when is_list(spec) ->
@@ -31,4 +32,3 @@ defmodule AshAgent.ToolConverter do
     end)
   end
 end
-

@@ -16,6 +16,8 @@
 - Never call `Process.sleep/1` in tests; prefer synchronization helpers so suites stay deterministic.
 - Keep unit tests in `test/ash_agent`, mirroring `lib/` structure with `<filename>_test.exs`, and default to `async: true` when isolation is possible.
 - Place integration suites in `test/integration`, name them after the workflow being exercised (e.g., `user_workflow_test.exs`), and run them with `async: false`.
+- Run integration test with mix test --only integration
+- All integration tests should use ex_unit's `@moduletag :integration` syntax. Individual tests should not be tagged.
 - Scope each test to a single behavior; lean on pattern-matching assertions (`assert %Type{} = ...`) instead of equality checks.
 - Group related variations with `for` comprehensions and shared setup blocks rather than duplicating test bodies or inlining helper modules.
 - Skip redundant assertions such as precondition checks that the code would crash on anyway, and assert on concrete values instead of only verifying types.

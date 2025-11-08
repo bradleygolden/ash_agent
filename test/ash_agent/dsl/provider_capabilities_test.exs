@@ -11,13 +11,35 @@ defmodule AshAgent.DSL.ProviderCapabilitiesTest do
     end
   end
 
+  defmodule NoToolProvider do
+    @behaviour AshAgent.Provider
+
+    @impl true
+    def call(_, _, _, _, _, _, _), do: {:ok, %{}}
+
+    @impl true
+    def stream(_, _, _, _, _, _, _), do: {:ok, []}
+
+    @impl true
+    def introspect do
+      %{
+        provider: :no_tools,
+        features: [:sync_call]
+      }
+    end
+  end
+
   setup do
     original_clients = Application.get_env(:ash_baml, :clients)
+    original_providers = Application.get_env(:ash_agent, :providers)
 
     Application.put_env(:ash_baml, :clients, support: {AshAgent.Test.BamlClient, []})
+    updated_providers = Keyword.put(original_providers || [], :no_tools, NoToolProvider)
+    Application.put_env(:ash_agent, :providers, updated_providers)
 
     on_exit(fn ->
       Application.put_env(:ash_baml, :clients, original_clients)
+      Application.put_env(:ash_agent, :providers, original_providers)
     end)
 
     :ok
@@ -32,7 +54,7 @@ defmodule AshAgent.DSL.ProviderCapabilitiesTest do
             extensions: [AshAgent.Resource]
 
           agent do
-            provider(:mock)
+            provider(:no_tools)
             client "anthropic:claude-3-5-sonnet"
             output Output
             prompt "Testing"

@@ -29,23 +29,24 @@ defmodule AshAgent.Integration.ToolCallingBamlTest do
       end
 
       tools do
-        max_iterations 3
+        max_iterations(3)
         timeout 30_000
-        on_error :continue
+        on_error(:continue)
 
         tool :add_numbers do
           description "Add two numbers together"
-          function {__MODULE__, :add, []}
-          parameters [
+          function({__MODULE__, :add, []})
+
+          parameters(
             a: [type: :integer, required: true, description: "First number"],
             b: [type: :integer, required: true, description: "Second number"]
-          ]
+          )
         end
 
         tool :get_message do
           description "Get the original message"
-          function {__MODULE__, :get_message, []}
-          parameters []
+          function({__MODULE__, :get_message, []})
+          parameters([])
         end
       end
     end
@@ -64,15 +65,12 @@ defmodule AshAgent.Integration.ToolCallingBamlTest do
   end
 
   describe "tool calling with baml provider" do
-    @tag :integration
-    # test "executes tools in multi-turn conversation" do
-    #   assert {:ok, %BamlToolAgent.Reply{} = reply} =
-    #            BamlToolAgent.call("What is 5 + 3? Use the add_numbers tool to calculate.")
-    #
-    #   assert is_binary(reply.content)
-    #   assert String.length(reply.content) > 0
-    #   assert is_float(reply.confidence)
-    # end
+    test "executes tools in multi-turn conversation" do
+      assert {:ok, %BamlToolAgent.Reply{} = reply} =
+               BamlToolAgent.call("What is 5 + 3? Use the add_numbers tool to calculate.")
+
+      assert String.starts_with?(reply.content, "integration: 8")
+      assert is_float(reply.confidence)
+    end
   end
 end
-

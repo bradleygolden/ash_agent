@@ -108,4 +108,3 @@ defmodule AshAgent.ToolConverterTest do
     end
   end
 end
-

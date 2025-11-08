@@ -165,7 +165,16 @@ defmodule AshAgent.Runtime do
     )
   end
 
-  defp execute_tool_calling_loop(config, module, context, prompt, schema, tools, conversation, tool_config) do
+  defp execute_tool_calling_loop(
+         config,
+         module,
+         context,
+         prompt,
+         schema,
+         tools,
+         conversation,
+         tool_config
+       ) do
     if Conversation.exceeded_max_iterations?(conversation) do
       {:error, Error.llm_error("Max iterations (#{conversation.max_iterations}) exceeded")}
     else
@@ -204,6 +213,7 @@ defmodule AshAgent.Runtime do
         {:error, _reason} = error ->
           if tool_config.on_error == :continue do
             conversation = Conversation.add_assistant_message(conversation, "", [])
+
             execute_tool_calling_loop(
               config,
               module,
@@ -221,7 +231,17 @@ defmodule AshAgent.Runtime do
     end
   end
 
-  defp handle_llm_response(response, config, module, context, prompt, schema, tools, conversation, tool_config) do
+  defp handle_llm_response(
+         response,
+         config,
+         module,
+         context,
+         prompt,
+         schema,
+         tools,
+         conversation,
+         tool_config
+       ) do
     tool_calls = extract_tool_calls(response, config.provider)
     content = extract_content(response, config.provider)
 
@@ -237,16 +257,31 @@ defmodule AshAgent.Runtime do
       tool_calls ->
         results = ToolExecutor.execute_tools(tool_calls, config.tools, conversation)
 
-        if tool_config.on_error == :halt and Enum.any?(results, fn {_, {_, :error}} -> true; _ -> false end) do
+        if tool_config.on_error == :halt and
+             Enum.any?(results, fn
+               {_, {_, :error}} -> true
+               _ -> false
+             end) do
           {:error, Error.llm_error("Tool execution failed")}
         else
           conversation = Conversation.add_tool_results(conversation, results)
-          execute_tool_calling_loop(config, module, context, prompt, schema, tools, conversation, tool_config)
+
+          execute_tool_calling_loop(
+            config,
+            module,
+            context,
+            prompt,
+            schema,
+            tools,
+            conversation,
+            tool_config
+          )
         end
     end
   end
 
-  defp convert_baml_response_to_output(response, output_type, provider) when provider in [:baml, AshAgent.Providers.Baml] do
+  defp convert_baml_response_to_output(response, output_type, provider)
+       when provider in [:baml, AshAgent.Providers.Baml] do
     convert_baml_union_to_output(response, output_type)
   end
 
@@ -344,7 +379,9 @@ defmodule AshAgent.Runtime do
     ""
   end
 
-  defp extract_text_from_content([%{"type" => "text", "text" => text} | _]) when is_binary(text), do: text
+  defp extract_text_from_content([%{"type" => "text", "text" => text} | _]) when is_binary(text),
+    do: text
+
   defp extract_text_from_content([%{type: "text", text: text} | _]) when is_binary(text), do: text
   defp extract_text_from_content([_ | rest]), do: extract_text_from_content(rest)
   defp extract_text_from_content([]), do: ""
@@ -371,19 +408,33 @@ defmodule AshAgent.Runtime do
   defp extract_baml_tool_calls(%_{} = response) do
     struct_map = Map.from_struct(response)
     struct_name = response.__struct__ |> Module.split() |> List.last()
-    
+
     cond do
       String.contains?(struct_name, "ToolCall") and not String.contains?(struct_name, "Response") ->
         cond do
           Map.has_key?(struct_map, :tool_name) ->
             tool_name = struct_map.tool_name
             args = Map.get(struct_map, :tool_arguments) || Map.get(struct_map, :arguments) || %{}
-            [%{id: generate_tool_call_id(), name: normalize_tool_name(tool_name), arguments: normalize_baml_args(args)}]
+
+            [
+              %{
+                id: generate_tool_call_id(),
+                name: normalize_tool_name(tool_name),
+                arguments: normalize_baml_args(args)
+              }
+            ]
 
           Map.has_key?(struct_map, :name) ->
             name = struct_map.name
             args = Map.get(struct_map, :arguments) || %{}
-            [%{id: generate_tool_call_id(), name: normalize_tool_name(name), arguments: normalize_baml_args(args)}]
+
+            [
+              %{
+                id: generate_tool_call_id(),
+                name: normalize_tool_name(name),
+                arguments: normalize_baml_args(args)
+              }
+            ]
 
           true ->
             []
@@ -392,7 +443,14 @@ defmodule AshAgent.Runtime do
       Map.has_key?(struct_map, :tool_name) ->
         tool_name = struct_map.tool_name
         args = Map.get(struct_map, :tool_arguments) || Map.get(struct_map, :arguments) || %{}
-        [%{id: generate_tool_call_id(), name: normalize_tool_name(tool_name), arguments: normalize_baml_args(args)}]
+
+        [
+          %{
+            id: generate_tool_call_id(),
+            name: normalize_tool_name(tool_name),
+            arguments: normalize_baml_args(args)
+          }
+        ]
 
       true ->
         []
@@ -404,6 +462,7 @@ defmodule AshAgent.Runtime do
   end
 
   defp normalize_tool_name(name) when is_atom(name), do: name
+
   defp normalize_tool_name(name) when is_binary(name) do
     try do
       String.to_existing_atom(name)
@@ -411,6 +470,7 @@ defmodule AshAgent.Runtime do
       ArgumentError -> name
     end
   end
+
   defp normalize_tool_name(name), do: name
 
   defp normalize_baml_args(args) when is_map(args) do
