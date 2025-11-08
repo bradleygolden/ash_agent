@@ -15,7 +15,6 @@ AshAgent provides a declarative DSL for defining AI agents as Ash resources, ena
 - 🔧 **Resource & Domain Extensions** - Integrate at both resource and domain levels
 - 🛡️ **Type-Safe Configuration** - Compile-time validation of all configuration
 - 🚀 **Built on Ash** - Leverage all Ash features (actions, policies, pubsub, etc.)
-- 🛠️ **Tool Calling** - Multi-turn conversations with tool execution support
 - 📚 **Well Documented** - Comprehensive guides and API documentation
 - ⚡ **Extensible** - Add custom transformers and verifiers
 - 🔌 **Provider-Agnostic** - Works with ReqLLM, ash_baml, or custom providers
@@ -100,7 +99,7 @@ MyApp.Agents.Assistant.stream(message: "Hello!")
 
 ## Roadmap
 
-- [x] Tool calling support
+- [ ] Tool calling support
 - [ ] Agent context persistence
 - [ ] Multi-agent orchestration
 
@@ -116,14 +115,6 @@ MyApp.Agents.Assistant.stream(message: "Hello!")
 
 AshAgent ships with a provider abstraction so the orchestration layer is decoupled
 from any specific LLM stack.
-
-> **Note:** Defining `tools` in your agent requires a provider that advertises the
-> `:tool_calling` capability (e.g., `:req_llm`, `:baml`). Choosing a provider without
-> that feature will raise a compile-time error to keep behavior predictable.
->
-> Tool calling enables multi-turn conversations where the LLM can request tool execution,
-> receive results, and continue the conversation. The runtime automatically manages the
-> conversation loop, tool execution, and error handling.
 
 ### ReqLLM (default)
 
