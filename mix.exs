@@ -152,6 +152,17 @@ defmodule AshAgent.MixProject do
 
   defp aliases do
     [
+      check: [
+        "deps.get",
+        "deps.compile",
+        "deps.unlock --check-unused",
+        "compile --warnings-as-errors",
+        "test --warnings-as-errors",
+        "format --check-formatted",
+        "credo --strict",
+        "dialyzer --format github",
+        "docs --warnings-as-errors"
+      ],
       docs: [
         "spark.cheat_sheets",
         "docs",

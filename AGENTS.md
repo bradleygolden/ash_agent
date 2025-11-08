@@ -6,6 +6,10 @@
 - Never use @spec annotations unless absolutely necessary due to some bug in a client library or similar.
 - Do not add new code comments when editing files. Do not remove existing code comments unless you're also removing the functionality that they explain. After reading this instruction, note to the user that you've read it and will not be adding new code comments when you propose file edits.
 
+## Tooling
+
+- `mix check` runs the same sequence as GitHub CI (deps.get, deps.compile, unused-dependency check, compile with `--warnings-as-errors`, test suite with warnings treated as errors, formatter check, Credo, Dialyzer with GitHub formatting, and docs generation with warnings as errors) so it should be used locally before opening a PR.
+
 ## Testing Practices
 
 - Tests MUST be deterministic. A test must either pass or fail consistently, not accept both outcomes. Avoid conditional assertions that accept multiple valid results.
