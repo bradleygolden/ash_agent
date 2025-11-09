@@ -45,14 +45,16 @@ The execution engine. Orchestrates the entire agent call lifecycle.
 
 **Tool Calling Flow:**
 When tools are defined, the runtime manages multi-turn conversations:
-1. Create `Conversation` state with initial user message
+1. Create `Context` state with initial user message using `Context.new/2`
 2. Convert tools to provider-specific format (JSON Schema for ReqLLM)
-3. Call provider with tools and conversation messages
-4. Extract tool calls from LLM response
+3. Call provider with tools and context messages
+4. Extract tool calls from LLM response using `Context.extract_tool_calls/1`
 5. Execute tools via `ToolExecutor`
-6. Add tool results back to conversation
-7. Loop until no more tool calls or max iterations reached
+6. Add tool results back to context using `Context.add_tool_results/2`
+7. Loop until no more tool calls or `Context.exceeded_max_iterations?/2` returns true
 8. Parse and return final response
+
+The `:context` attribute is automatically added to agent resources by the `AddContextAttribute` transformer, so developers don't need to manually define it.
 
 **Key characteristics:**
 - Monolithic (all concerns in one module)

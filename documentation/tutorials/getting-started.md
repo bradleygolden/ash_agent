@@ -95,7 +95,9 @@ Since the BAML provider advertises `:prompt_optional`, you can omit the prompt e
 
 ## Tool Calling
 
-Agents can use tools to interact with external systems, call Ash actions, or execute Elixir functions during multi-turn conversations. When tools are defined, the agent automatically manages the conversation loop:
+Agents can use tools to interact with external systems, call Ash actions, or execute Elixir functions during multi-turn conversations. When tools are defined, the agent automatically manages the conversation loop.
+
+The `:context` attribute is automatically added to agent resources by the `AddContextAttribute` transformer, so you don't need to manually define it. This attribute stores the conversation state across tool execution iterations.
 
 ```elixir
 defmodule MyApp.Agents.Assistant do

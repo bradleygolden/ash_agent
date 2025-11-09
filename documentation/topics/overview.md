@@ -72,7 +72,7 @@ Agents can use tools to interact with external systems, call Ash actions, or exe
 3. Tools are executed and results are fed back to the LLM
 4. Process repeats until the LLM provides a final response or max iterations is reached
 
-Tools can be defined using either Ash actions or Elixir functions, with full parameter validation and error handling. The runtime handles conversation state management, tool execution, and error recovery automatically.
+Tools can be defined using either Ash actions or Elixir functions, with full parameter validation and error handling. The runtime handles conversation state management via the `Context` module, tool execution, and error recovery automatically.
 
 ```elixir
 agent do

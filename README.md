@@ -97,8 +97,8 @@ MyApp.Agents.Assistant.stream(message: "Hello!")
 
 ## Roadmap
 
-- [ ] Tool calling support
-- [ ] Agent context persistence
+- [x] Tool calling support
+- [x] Agent context persistence
 - [ ] Multi-agent orchestration
 
 ### Needs Research
