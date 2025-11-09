@@ -25,6 +25,10 @@ defmodule AshAgent.RuntimeTest do
       domain: AshAgent.RuntimeTest.TestDomain,
       extensions: [AshAgent.Resource]
 
+    resource do
+      require_primary_key? false
+    end
+
     agent do
       client "anthropic:claude-3-5-sonnet"
       output TestOutput
@@ -37,6 +41,10 @@ defmodule AshAgent.RuntimeTest do
     use Ash.Resource,
       domain: AshAgent.RuntimeTest.TestDomain,
       extensions: [AshAgent.Resource]
+
+    resource do
+      require_primary_key? false
+    end
 
     agent do
       client "anthropic:claude-3-5-sonnet"
@@ -54,6 +62,10 @@ defmodule AshAgent.RuntimeTest do
     use Ash.Resource,
       domain: AshAgent.RuntimeTest.TestDomain,
       extensions: [AshAgent.Resource]
+
+    resource do
+      require_primary_key? false
+    end
 
     defmodule TestHooks do
       @moduledoc false
@@ -93,6 +105,10 @@ defmodule AshAgent.RuntimeTest do
     use Ash.Resource,
       domain: AshAgent.RuntimeTest.TestDomain,
       extensions: [AshAgent.Resource]
+
+    resource do
+      require_primary_key? false
+    end
 
     agent do
       client "anthropic:claude-3-5-sonnet"
