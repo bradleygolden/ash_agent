@@ -101,3 +101,40 @@ All tests verify:
 - Phase 2, Task 4: Implement token limit configuration
 - Default limits per provider/model
 - Support application config override
+
+---
+
+## Iteration #4 - COMPLETE ✓
+
+### What Me Did:
+Implemented token limit configuration in `lib/ash_agent/token_limits.ex`:
+- `get_limit/1` - Returns configured or default limit for provider/model
+- `get_warning_threshold/0` - Returns configured or default threshold (0.8)
+- `check_limit/2` - Checks if cumulative tokens exceed warning threshold
+
+### Implementation Details:
+Default limits:
+- Claude models: 200,000 tokens
+- GPT-4 models: 128,000 tokens
+- GPT-3.5-turbo: 16,385 tokens
+
+Configuration via application config:
+```elixir
+config :ash_agent,
+  token_limits: %{"custom:model" => 50_000},
+  token_warning_threshold: 0.9
+```
+
+### Test Results:
+✓ All 11 tests passing in token_limits_test.exs
+✓ Tests cover default limits, custom config, threshold checks
+✓ No Credo issues
+
+### Files Created:
+- `lib/ash_agent/token_limits.ex` (3 public functions)
+- `test/ash_agent/token_limits_test.exs` (11 tests)
+
+### Next Steps:
+- Phase 2, Task 5: Add limit checking and warning emission
+- Emit telemetry event when threshold exceeded
+- Include metadata: agent, cumulative_tokens, limit, threshold_percent
