@@ -99,6 +99,7 @@ defmodule AshAgent.Resource do
     sections: [DSL.agent(), DSL.Tools.tools()],
     transformers: [
       AshAgent.Transformers.ValidateAgent,
+      AshAgent.Transformers.AddContextAttribute,
       AshAgent.Transformers.AddAgentActions
     ],
     imports: [DSL]

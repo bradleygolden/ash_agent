@@ -42,6 +42,16 @@ defmodule AshAgent.Integration.AgentActionsTest do
         assert [%{name: :message, type: :string}] ==
                  Enum.map(stream_action.arguments, &%{name: &1.name, type: &1.type})
       end
+
+      test "context attribute is automatically added" do
+        context_attr = Info.attribute(OllamaAgent, :context)
+
+        assert %Ash.Resource.Attribute{} = context_attr
+        assert context_attr.name == :context
+        assert context_attr.type == AshAgent.Context
+        assert context_attr.allow_nil? == true
+        assert context_attr.public? == true
+      end
     end
 
     describe "agent execution" do
