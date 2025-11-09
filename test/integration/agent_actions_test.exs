@@ -12,6 +12,10 @@ defmodule AshAgent.Integration.AgentActionsTest do
         domain: AshAgent.TestDomain,
         extensions: [AshAgent.Resource]
 
+      resource do
+        require_primary_key? false
+      end
+
       agent do
         provider :baml
         client :ollama, function: :AgentEcho

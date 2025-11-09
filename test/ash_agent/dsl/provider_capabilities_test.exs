@@ -93,6 +93,10 @@ defmodule AshAgent.DSL.ProviderCapabilitiesTest do
         domain: AshAgent.TestDomain,
         extensions: [AshAgent.Resource]
 
+      resource do
+        require_primary_key? false
+      end
+
       agent do
         provider :baml
         client :support, function: :ChatAgent
