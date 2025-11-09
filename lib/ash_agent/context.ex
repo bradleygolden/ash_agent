@@ -156,6 +156,46 @@ defmodule AshAgent.Context do
     Enum.find(context.iterations, fn iter -> iter.number == number end)
   end
 
+  @doc """
+  Adds token usage to the current iteration's metadata.
+  """
+  def add_token_usage(context, usage) when is_map(usage) do
+    current_iter = get_current_iteration(context)
+    current_metadata = current_iter.metadata || %{}
+
+    cumulative = get_cumulative_tokens(context)
+
+    new_cumulative = %{
+      input_tokens: Map.get(cumulative, :input_tokens, 0) + Map.get(usage, :input_tokens, 0),
+      output_tokens: Map.get(cumulative, :output_tokens, 0) + Map.get(usage, :output_tokens, 0),
+      total_tokens: Map.get(cumulative, :total_tokens, 0) + Map.get(usage, :total_tokens, 0)
+    }
+
+    updated_metadata =
+      current_metadata
+      |> Map.put(:current_usage, usage)
+      |> Map.put(:cumulative_tokens, new_cumulative)
+
+    updated_iter = %{current_iter | metadata: updated_metadata}
+    iterations = List.replace_at(context.iterations, context.current_iteration - 1, updated_iter)
+
+    update!(context, %{iterations: iterations})
+  end
+
+  @doc """
+  Gets cumulative token usage across all iterations.
+  """
+  def get_cumulative_tokens(context) do
+    current_iter = get_current_iteration(context)
+    current_metadata = current_iter.metadata || %{}
+
+    Map.get(current_metadata, :cumulative_tokens, %{
+      input_tokens: 0,
+      output_tokens: 0,
+      total_tokens: 0
+    })
+  end
+
   defp get_current_iteration(context) do
     Enum.at(context.iterations, context.current_iteration - 1)
   end

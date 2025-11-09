@@ -260,4 +260,68 @@ defmodule AshAgent.ContextTest do
       assert Context.get_iteration(context, -1) == nil
     end
   end
+
+  describe "add_token_usage/2" do
+    test "adds token usage to current iteration metadata" do
+      context = Context.new("Hello", [])
+      usage = %{input_tokens: 100, output_tokens: 50, total_tokens: 150}
+
+      context = Context.add_token_usage(context, usage)
+
+      iteration = Context.get_iteration(context, 1)
+      assert iteration.metadata.current_usage == usage
+      assert iteration.metadata.cumulative_tokens.input_tokens == 100
+      assert iteration.metadata.cumulative_tokens.output_tokens == 50
+      assert iteration.metadata.cumulative_tokens.total_tokens == 150
+    end
+
+    test "accumulates token usage across multiple calls" do
+      context = Context.new("Hello", [])
+      usage1 = %{input_tokens: 100, output_tokens: 50, total_tokens: 150}
+      usage2 = %{input_tokens: 75, output_tokens: 25, total_tokens: 100}
+
+      context = Context.add_token_usage(context, usage1)
+      context = Context.add_token_usage(context, usage2)
+
+      cumulative = Context.get_cumulative_tokens(context)
+      assert cumulative.input_tokens == 175
+      assert cumulative.output_tokens == 75
+      assert cumulative.total_tokens == 250
+    end
+
+    test "handles partial usage maps" do
+      context = Context.new("Hello", [])
+      usage = %{input_tokens: 100}
+
+      context = Context.add_token_usage(context, usage)
+
+      cumulative = Context.get_cumulative_tokens(context)
+      assert cumulative.input_tokens == 100
+      assert cumulative.output_tokens == 0
+      assert cumulative.total_tokens == 0
+    end
+  end
+
+  describe "get_cumulative_tokens/1" do
+    test "returns zero tokens for new context" do
+      context = Context.new("Hello", [])
+
+      cumulative = Context.get_cumulative_tokens(context)
+      assert cumulative.input_tokens == 0
+      assert cumulative.output_tokens == 0
+      assert cumulative.total_tokens == 0
+    end
+
+    test "returns cumulative tokens after usage added" do
+      context = Context.new("Hello", [])
+      usage = %{input_tokens: 200, output_tokens: 100, total_tokens: 300}
+
+      context = Context.add_token_usage(context, usage)
+
+      cumulative = Context.get_cumulative_tokens(context)
+      assert cumulative.input_tokens == 200
+      assert cumulative.output_tokens == 100
+      assert cumulative.total_tokens == 300
+    end
+  end
 end
