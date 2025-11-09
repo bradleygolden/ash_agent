@@ -80,7 +80,7 @@ defmodule AshAgent.Context do
     message = %{
       role: :assistant,
       content: content,
-      tool_calls: if(tool_calls == [], do: nil, else: tool_calls)
+      tool_calls: if(tool_calls == [] or is_nil(tool_calls), do: nil, else: tool_calls)
     }
 
     current_iter = get_current_iteration(context)
@@ -165,10 +165,17 @@ defmodule AshAgent.Context do
 
     cumulative = get_cumulative_tokens(context)
 
+    input_tokens = Map.get(usage, :input_tokens, 0) + Map.get(usage, "input_tokens", 0)
+    output_tokens = Map.get(usage, :output_tokens, 0) + Map.get(usage, "output_tokens", 0)
+
+    total_tokens =
+      Map.get(usage, :total_tokens) || Map.get(usage, "total_tokens") ||
+        input_tokens + output_tokens
+
     new_cumulative = %{
-      input_tokens: Map.get(cumulative, :input_tokens, 0) + Map.get(usage, :input_tokens, 0),
-      output_tokens: Map.get(cumulative, :output_tokens, 0) + Map.get(usage, :output_tokens, 0),
-      total_tokens: Map.get(cumulative, :total_tokens, 0) + Map.get(usage, :total_tokens, 0)
+      input_tokens: Map.get(cumulative, :input_tokens, 0) + input_tokens,
+      output_tokens: Map.get(cumulative, :output_tokens, 0) + output_tokens,
+      total_tokens: Map.get(cumulative, :total_tokens, 0) + total_tokens
     }
 
     updated_metadata =

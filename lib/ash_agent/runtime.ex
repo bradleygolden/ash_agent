@@ -224,16 +224,42 @@ defmodule AshAgent.Runtime do
 
     ctx =
       case LLMClient.response_usage(response) do
-        nil -> ctx
-        usage -> Context.add_token_usage(ctx, usage)
+        nil ->
+          ctx
+
+        usage ->
+          ctx = Context.add_token_usage(ctx, usage)
+          check_token_limit(ctx, state)
+          ctx
       end
 
     case tool_calls do
       [] ->
         convert_baml_response_to_output(response, state.config.output_type, state.config.provider)
 
-      tool_calls ->
-        execute_tool_calls(tool_calls, state, ctx)
+      calls when is_list(calls) ->
+        execute_tool_calls(calls, state, ctx)
+    end
+  end
+
+  defp check_token_limit(ctx, %LoopState{} = state) do
+    cumulative = Context.get_cumulative_tokens(ctx)
+
+    case AshAgent.TokenLimits.check_limit(cumulative.total_tokens, state.config.client) do
+      :ok ->
+        :ok
+
+      {:warn, limit, threshold} ->
+        :telemetry.execute(
+          [:ash_agent, :token_limit_warning],
+          %{cumulative_tokens: cumulative.total_tokens},
+          %{
+            agent: state.module,
+            limit: limit,
+            threshold_percent: trunc(threshold * 100),
+            cumulative_tokens: cumulative.total_tokens
+          }
+        )
     end
   end
 

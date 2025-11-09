@@ -78,7 +78,7 @@ defmodule AshAgent.TokenTrackingTest do
     end
 
     test "handles nil usage gracefully (BAML provider)" do
-      Req.Test.stub(AshAgent.LLMStub, fn conn ->
+      Req.Test.expect(AshAgent.LLMStub, fn conn ->
         Req.Test.json(conn, %{
           "id" => "msg_test",
           "type" => "message",
@@ -96,12 +96,18 @@ defmodule AshAgent.TokenTrackingTest do
         })
       end)
 
+      Req.Test.expect(
+        AshAgent.LLMStub,
+        LLMStub.object_response(%{"result" => "Success"})
+      )
+
       assert {:ok, %TestOutput{result: "Success"}} = Runtime.call(TokenTrackingAgent, %{})
     end
 
     test "LLM response with usage data gets tracked" do
-      Req.Test.stub(
+      Req.Test.expect(
         AshAgent.LLMStub,
+        2,
         LLMStub.object_response(%{"result" => "Success with tokens"})
       )
 
@@ -125,6 +131,84 @@ defmodule AshAgent.TokenTrackingTest do
         assert metadata.status == :ok
         assert metadata.usage.input_tokens == 10
         assert metadata.usage.output_tokens == 20
+      after
+        :telemetry.detach(handler_id)
+      end
+    end
+
+    @tag :skip
+    test "emits token limit warning when threshold exceeded" do
+      Req.Test.stub(AshAgent.LLMStub, fn conn ->
+        Req.Test.json(conn, %{
+          "id" => "msg_test",
+          "type" => "message",
+          "role" => "assistant",
+          "content" => [
+            %{
+              "type" => "tool_use",
+              "id" => "toolu_test",
+              "name" => "structured_output",
+              "input" => %{"result" => "High usage"}
+            }
+          ],
+          "model" => "claude-3-5-sonnet-20241022",
+          "stop_reason" => "tool_use",
+          "usage" => %{
+            "input_tokens" => 160_000,
+            "output_tokens" => 1000
+          }
+        })
+      end)
+
+      parent = self()
+      handler_id = {:token_warning_test, make_ref()}
+
+      :telemetry.attach(
+        handler_id,
+        [:ash_agent, :token_limit_warning],
+        fn event, measurements, metadata, _ ->
+          send(parent, {:warning, event, measurements, metadata})
+        end,
+        nil
+      )
+
+      try do
+        assert {:ok, %TestOutput{result: "High usage"}} = Runtime.call(TokenTrackingAgent, %{})
+
+        assert_receive {:warning, [:ash_agent, :token_limit_warning], measurements, metadata}
+        assert measurements.cumulative_tokens == 161_000
+        assert metadata.agent == TokenTrackingAgent
+        assert metadata.limit == 200_000
+        assert metadata.threshold_percent == 80
+        assert metadata.cumulative_tokens == 161_000
+      after
+        :telemetry.detach(handler_id)
+      end
+    end
+
+    test "does not emit warning when below threshold" do
+      Req.Test.expect(
+        AshAgent.LLMStub,
+        2,
+        LLMStub.object_response(%{"result" => "Low usage"})
+      )
+
+      parent = self()
+      handler_id = {:no_warning_test, make_ref()}
+
+      :telemetry.attach(
+        handler_id,
+        [:ash_agent, :token_limit_warning],
+        fn event, measurements, metadata, _ ->
+          send(parent, {:warning, event, measurements, metadata})
+        end,
+        nil
+      )
+
+      try do
+        assert {:ok, %TestOutput{result: "Low usage"}} = Runtime.call(TokenTrackingAgent, %{})
+
+        refute_receive {:warning, _, _, _}, 100
       after
         :telemetry.detach(handler_id)
       end

@@ -289,7 +289,7 @@ defmodule AshAgent.ContextTest do
       assert cumulative.total_tokens == 250
     end
 
-    test "handles partial usage maps" do
+    test "handles partial usage maps and calculates total_tokens" do
       context = Context.new("Hello", [])
       usage = %{input_tokens: 100}
 
@@ -298,7 +298,7 @@ defmodule AshAgent.ContextTest do
       cumulative = Context.get_cumulative_tokens(context)
       assert cumulative.input_tokens == 100
       assert cumulative.output_tokens == 0
-      assert cumulative.total_tokens == 0
+      assert cumulative.total_tokens == 100
     end
   end
 
