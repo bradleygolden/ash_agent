@@ -50,6 +50,10 @@ defmodule AshAgent.ResourceTest do
     use Ash.Resource, domain: __MODULE__.TestDomain, extensions: [AshAgent.Resource]
     import AshAgent.Sigils
 
+    resource do
+      require_primary_key? false
+    end
+
     defmodule Reply do
       use Ash.TypedStruct
 
