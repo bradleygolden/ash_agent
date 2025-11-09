@@ -139,6 +139,25 @@ Provides `~p` sigil for compile-time Liquid template parsing.
 
 **Purpose:** Catch template syntax errors at compile time rather than runtime.
 
+#### `AshAgent.Transformers.AddContextAttribute`
+Spark transformer that automatically adds a `:context` attribute to agent resources.
+
+**Purpose:** Eliminates manual attribute definition for context state management.
+
+**Behavior:**
+- Runs during DSL compilation
+- Checks if resource has `agent do` block (via `:client` option)
+- If found and no existing `:context` attribute, adds one with type `AshAgent.Context`
+- Skips if attribute already defined (prevents duplication)
+- Skips if no agent configuration present
+
+**Generated attribute:**
+- Name: `:context`
+- Type: `AshAgent.Context`
+- Allow nil: `true`
+- Default: `nil`
+- Public: `true`
+
 #### `AshAgent.Transformers.ValidateAgent`
 Spark transformer that validates agent configuration completeness.
 
