@@ -138,27 +138,31 @@ defmodule AshAgent.TokenTrackingTest do
 
     @tag :skip
     test "emits token limit warning when threshold exceeded" do
-      Req.Test.stub(AshAgent.LLMStub, fn conn ->
-        Req.Test.json(conn, %{
-          "id" => "msg_test",
-          "type" => "message",
-          "role" => "assistant",
-          "content" => [
-            %{
-              "type" => "tool_use",
-              "id" => "toolu_test",
-              "name" => "structured_output",
-              "input" => %{"result" => "High usage"}
+      Req.Test.expect(
+        AshAgent.LLMStub,
+        2,
+        fn conn ->
+          Req.Test.json(conn, %{
+            "id" => "msg_test",
+            "type" => "message",
+            "role" => "assistant",
+            "content" => [
+              %{
+                "type" => "tool_use",
+                "id" => "toolu_test",
+                "name" => "structured_output",
+                "input" => %{"result" => "High usage"}
+              }
+            ],
+            "model" => "claude-3-5-sonnet-20241022",
+            "stop_reason" => "end_turn",
+            "usage" => %{
+              "input_tokens" => 85_000,
+              "output_tokens" => 1000
             }
-          ],
-          "model" => "claude-3-5-sonnet-20241022",
-          "stop_reason" => "tool_use",
-          "usage" => %{
-            "input_tokens" => 160_000,
-            "output_tokens" => 1000
-          }
-        })
-      end)
+          })
+        end
+      )
 
       parent = self()
       handler_id = {:token_warning_test, make_ref()}
@@ -176,11 +180,11 @@ defmodule AshAgent.TokenTrackingTest do
         assert {:ok, %TestOutput{result: "High usage"}} = Runtime.call(TokenTrackingAgent, %{})
 
         assert_receive {:warning, [:ash_agent, :token_limit_warning], measurements, metadata}
-        assert measurements.cumulative_tokens == 161_000
+        assert measurements.cumulative_tokens == 172_000
         assert metadata.agent == TokenTrackingAgent
         assert metadata.limit == 200_000
         assert metadata.threshold_percent == 80
-        assert metadata.cumulative_tokens == 161_000
+        assert metadata.cumulative_tokens == 172_000
       after
         :telemetry.detach(handler_id)
       end
