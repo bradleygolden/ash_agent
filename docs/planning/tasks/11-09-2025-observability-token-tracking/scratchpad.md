@@ -38,3 +38,35 @@ Added comprehensive test coverage in `test/ash_agent/context_test.exs`:
 - Phase 1, Task 2: Integrate tracking into Runtime.handle_llm_response/3
 - Extract usage from LLM responses
 - Call Context.add_token_usage/2 after each LLM call
+
+---
+
+## Iteration #2 - COMPLETE ✓
+
+### What Me Did:
+Integrated token tracking into `lib/ash_agent/runtime.ex`:
+- Modified `handle_llm_response/3` to extract usage via `LLMClient.response_usage/1`
+- Added context update to call `Context.add_token_usage/2` when usage is available
+- Gracefully handles nil usage (for BAML provider compatibility)
+
+### Implementation Details:
+```elixir
+ctx =
+  case LLMClient.response_usage(response) do
+    nil -> ctx
+    usage -> Context.add_token_usage(ctx, usage)
+  end
+```
+
+### Test Results:
+✓ All 17 tests passing in runtime_test.exs
+✓ No Credo issues
+✓ Existing tests verify the integration doesn't break functionality
+
+### Files Modified:
+- `lib/ash_agent/runtime.ex` (modified handle_llm_response/3)
+
+### Next Steps:
+- Phase 1, Task 3: Create comprehensive telemetry tests
+- Verify token usage is tracked in Context metadata
+- Test with both usage and nil usage scenarios

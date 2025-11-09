@@ -222,6 +222,12 @@ defmodule AshAgent.Runtime do
 
     ctx = Context.add_assistant_message(ctx, content, tool_calls)
 
+    ctx =
+      case LLMClient.response_usage(response) do
+        nil -> ctx
+        usage -> Context.add_token_usage(ctx, usage)
+      end
+
     case tool_calls do
       [] ->
         convert_baml_response_to_output(response, state.config.output_type, state.config.provider)
