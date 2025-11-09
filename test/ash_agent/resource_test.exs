@@ -9,6 +9,10 @@ defmodule AshAgent.ResourceTest do
   defmodule TestChatAgent do
     use Ash.Resource, domain: __MODULE__.TestDomain, extensions: [AshAgent.Resource]
 
+    resource do
+      require_primary_key? false
+    end
+
     defmodule Reply do
       use Ash.TypedStruct
 
@@ -26,6 +30,10 @@ defmodule AshAgent.ResourceTest do
 
   defmodule AgentWithActions do
     use Ash.Resource, domain: __MODULE__.TestDomain, extensions: [AshAgent.Resource]
+
+    resource do
+      require_primary_key? false
+    end
 
     defmodule Reply do
       use Ash.TypedStruct
@@ -45,6 +53,10 @@ defmodule AshAgent.ResourceTest do
   defmodule AgentWithSigil do
     use Ash.Resource, domain: __MODULE__.TestDomain, extensions: [AshAgent.Resource]
     import AshAgent.Sigils
+
+    resource do
+      require_primary_key? false
+    end
 
     defmodule Reply do
       use Ash.TypedStruct

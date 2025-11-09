@@ -10,13 +10,26 @@ defmodule AshAgent.Runtime do
   5. Parsing and returning structured results
   """
 
-  alias AshAgent.{Conversation, Error, Info, ToolConverter}
+  alias AshAgent.{Context, Error, Info, ToolConverter}
   alias AshAgent.Runtime.{Hooks, LLMClient, ToolExecutor}
   alias AshAgent.Runtime.PromptRenderer
   alias AshAgent.SchemaConverter
   alias AshAgent.Telemetry
   alias ReqLLM.Response
   alias Spark.Dsl.Extension
+
+  defmodule LoopState do
+    @moduledoc false
+    defstruct [
+      :config,
+      :module,
+      :context,
+      :prompt,
+      :schema,
+      :tools,
+      :tool_config
+    ]
+  end
 
   @doc """
   Calls an agent with the given arguments.
@@ -132,7 +145,6 @@ defmodule AshAgent.Runtime do
   defp execute_with_tool_calling(config, module, context, prompt, schema) do
     tools = ToolConverter.to_json_schema(config.tools)
     tool_config = config.tool_config
-    domain = get_domain(module)
 
     rendered_prompt =
       if prompt do
@@ -144,140 +156,105 @@ defmodule AshAgent.Runtime do
         nil
       end
 
-    conversation =
-      Conversation.new(module, context.input,
-        domain: domain,
-        actor: Map.get(context, :actor),
-        tenant: Map.get(context, :tenant),
-        max_iterations: tool_config.max_iterations,
-        system_prompt: rendered_prompt
-      )
+    ctx = Context.new(context.input, system_prompt: rendered_prompt)
 
-    execute_tool_calling_loop(
-      config,
-      module,
-      context,
-      prompt,
-      schema,
-      tools,
-      conversation,
-      tool_config
-    )
+    loop_state = %LoopState{
+      config: config,
+      module: module,
+      context: context,
+      prompt: prompt,
+      schema: schema,
+      tools: tools,
+      tool_config: tool_config
+    }
+
+    execute_tool_calling_loop(loop_state, ctx)
   end
 
-  defp execute_tool_calling_loop(
-         config,
-         module,
-         context,
-         prompt,
-         schema,
-         tools,
-         conversation,
-         tool_config
-       ) do
-    if Conversation.exceeded_max_iterations?(conversation) do
-      {:error, Error.llm_error("Max iterations (#{conversation.max_iterations}) exceeded")}
+  defp execute_tool_calling_loop(%LoopState{} = state, ctx) do
+    if Context.exceeded_max_iterations?(ctx, state.tool_config.max_iterations) do
+      {:error, Error.llm_error("Max iterations (#{state.tool_config.max_iterations}) exceeded")}
     else
-      messages = Conversation.to_messages(conversation)
-      current_prompt = nil
-
-      case Telemetry.span(
-             :call,
-             telemetry_metadata(config, module, :call),
-             fn ->
-               LLMClient.generate_object(
-                 module,
-                 config.client,
-                 current_prompt,
-                 schema,
-                 config.client_opts,
-                 context,
-                 tools,
-                 messages
-               )
-             end
-           ) do
-        {:ok, response} ->
-          handle_llm_response(
-            response,
-            config,
-            module,
-            context,
-            prompt,
-            schema,
-            tools,
-            conversation,
-            tool_config
-          )
-
-        {:error, _reason} = error ->
-          if tool_config.on_error == :continue do
-            conversation = Conversation.add_assistant_message(conversation, "", [])
-
-            execute_tool_calling_loop(
-              config,
-              module,
-              context,
-              prompt,
-              schema,
-              tools,
-              conversation,
-              tool_config
-            )
-          else
-            error
-          end
-      end
+      execute_tool_calling_iteration(state, ctx)
     end
   end
 
-  defp handle_llm_response(
-         response,
-         config,
-         module,
-         context,
-         prompt,
-         schema,
-         tools,
-         conversation,
-         tool_config
-       ) do
-    tool_calls = extract_tool_calls(response, config.provider)
-    content = extract_content(response, config.provider)
+  defp execute_tool_calling_iteration(%LoopState{} = state, ctx) do
+    messages = Context.to_messages(ctx)
+    current_prompt = nil
 
-    conversation = Conversation.add_assistant_message(conversation, content, tool_calls)
+    case Telemetry.span(
+           :call,
+           telemetry_metadata(state.config, state.module, :call),
+           fn ->
+             LLMClient.generate_object(
+               state.module,
+               state.config.client,
+               current_prompt,
+               state.schema,
+               state.config.client_opts,
+               state.context,
+               state.tools,
+               messages
+             )
+           end
+         ) do
+      {:ok, response} ->
+        handle_llm_response(response, state, ctx)
+
+      {:error, _reason} = error ->
+        handle_tool_calling_error(error, state, ctx)
+    end
+  end
+
+  defp handle_tool_calling_error(error, %LoopState{} = state, ctx) do
+    if state.tool_config.on_error == :continue do
+      ctx = Context.add_assistant_message(ctx, "", [])
+      execute_tool_calling_loop(state, ctx)
+    else
+      error
+    end
+  end
+
+  defp handle_llm_response(response, %LoopState{} = state, ctx) do
+    tool_calls = extract_tool_calls(response, state.config.provider)
+    content = extract_content(response, state.config.provider)
+
+    ctx = Context.add_assistant_message(ctx, content, tool_calls)
 
     case tool_calls do
       [] ->
-        case convert_baml_response_to_output(response, config.output_type, config.provider) do
-          {:ok, result} -> {:ok, result}
-          {:error, reason} -> {:error, reason}
-        end
+        convert_baml_response_to_output(response, state.config.output_type, state.config.provider)
 
       tool_calls ->
-        results = ToolExecutor.execute_tools(tool_calls, config.tools, conversation)
-
-        if tool_config.on_error == :halt and
-             Enum.any?(results, fn
-               {_, {_, :error}} -> true
-               _ -> false
-             end) do
-          {:error, Error.llm_error("Tool execution failed")}
-        else
-          conversation = Conversation.add_tool_results(conversation, results)
-
-          execute_tool_calling_loop(
-            config,
-            module,
-            context,
-            prompt,
-            schema,
-            tools,
-            conversation,
-            tool_config
-          )
-        end
+        execute_tool_calls(tool_calls, state, ctx)
     end
+  end
+
+  defp execute_tool_calls(tool_calls, %LoopState{} = state, ctx) do
+    runtime_context = %{
+      agent: state.module,
+      domain: get_domain(state.module),
+      actor: Map.get(state.context, :actor),
+      tenant: Map.get(state.context, :tenant)
+    }
+
+    results = ToolExecutor.execute_tools(tool_calls, state.config.tools, runtime_context)
+
+    if has_tool_errors?(results, state.tool_config) do
+      {:error, Error.llm_error("Tool execution failed")}
+    else
+      ctx = Context.add_tool_results(ctx, results)
+      execute_tool_calling_loop(state, ctx)
+    end
+  end
+
+  defp has_tool_errors?(results, tool_config) do
+    tool_config.on_error == :halt and
+      Enum.any?(results, fn
+        {_, {_, :error}} -> true
+        _ -> false
+      end)
   end
 
   defp convert_baml_response_to_output(response, output_type, provider)
@@ -356,27 +333,38 @@ defmodule AshAgent.Runtime do
     struct_name = response.__struct__ |> Module.split() |> List.last()
     struct_map = Map.from_struct(response)
 
-    cond do
-      String.contains?(struct_name, "ToolCall") and not String.contains?(struct_name, "Response") ->
-        ""
-
-      Map.has_key?(struct_map, :tool_name) or Map.has_key?(struct_map, :tool_arguments) ->
-        ""
-
-      Map.has_key?(struct_map, :__type__) and struct_map.__type__ in ["tool_call", "ToolCall"] ->
-        ""
-
-      Map.has_key?(struct_map, :content) ->
-        content = struct_map.content
-        if is_binary(content), do: content, else: ""
-
-      true ->
-        ""
+    if baml_is_tool_call?(struct_name, struct_map) do
+      ""
+    else
+      extract_content_field(struct_map)
     end
   end
 
-  defp extract_baml_content(_response) do
-    ""
+  defp extract_baml_content(_response), do: ""
+
+  defp baml_is_tool_call?(struct_name, struct_map) do
+    tool_call_struct?(struct_name) or
+      has_tool_fields?(struct_map) or
+      has_tool_call_type?(struct_map)
+  end
+
+  defp tool_call_struct?(struct_name) do
+    String.contains?(struct_name, "ToolCall") and not String.contains?(struct_name, "Response")
+  end
+
+  defp has_tool_fields?(struct_map) do
+    Map.has_key?(struct_map, :tool_name) or Map.has_key?(struct_map, :tool_arguments)
+  end
+
+  defp has_tool_call_type?(struct_map) do
+    Map.has_key?(struct_map, :__type__) and struct_map.__type__ in ["tool_call", "ToolCall"]
+  end
+
+  defp extract_content_field(struct_map) do
+    case Map.get(struct_map, :content) do
+      content when is_binary(content) -> content
+      _ -> ""
+    end
   end
 
   defp extract_text_from_content([%{"type" => "text", "text" => text} | _]) when is_binary(text),
@@ -409,66 +397,56 @@ defmodule AshAgent.Runtime do
     struct_map = Map.from_struct(response)
     struct_name = response.__struct__ |> Module.split() |> List.last()
 
+    if tool_call_struct?(struct_name) do
+      extract_tool_call_from_struct(struct_map)
+    else
+      extract_tool_call_from_map(struct_map)
+    end
+  end
+
+  defp extract_baml_tool_calls(_response), do: []
+
+  defp extract_tool_call_from_struct(struct_map) do
     cond do
-      String.contains?(struct_name, "ToolCall") and not String.contains?(struct_name, "Response") ->
-        cond do
-          Map.has_key?(struct_map, :tool_name) ->
-            tool_name = struct_map.tool_name
-            args = Map.get(struct_map, :tool_arguments) || Map.get(struct_map, :arguments) || %{}
-
-            [
-              %{
-                id: generate_tool_call_id(),
-                name: normalize_tool_name(tool_name),
-                arguments: normalize_baml_args(args)
-              }
-            ]
-
-          Map.has_key?(struct_map, :name) ->
-            name = struct_map.name
-            args = Map.get(struct_map, :arguments) || %{}
-
-            [
-              %{
-                id: generate_tool_call_id(),
-                name: normalize_tool_name(name),
-                arguments: normalize_baml_args(args)
-              }
-            ]
-
-          true ->
-            []
-        end
-
       Map.has_key?(struct_map, :tool_name) ->
-        tool_name = struct_map.tool_name
-        args = Map.get(struct_map, :tool_arguments) || Map.get(struct_map, :arguments) || %{}
+        build_tool_call(struct_map.tool_name, get_tool_arguments(struct_map))
 
-        [
-          %{
-            id: generate_tool_call_id(),
-            name: normalize_tool_name(tool_name),
-            arguments: normalize_baml_args(args)
-          }
-        ]
+      Map.has_key?(struct_map, :name) ->
+        build_tool_call(struct_map.name, Map.get(struct_map, :arguments, %{}))
 
       true ->
         []
     end
   end
 
-  defp extract_baml_tool_calls(_response) do
-    []
+  defp extract_tool_call_from_map(struct_map) do
+    if Map.has_key?(struct_map, :tool_name) do
+      build_tool_call(struct_map.tool_name, get_tool_arguments(struct_map))
+    else
+      []
+    end
+  end
+
+  defp get_tool_arguments(struct_map) do
+    Map.get(struct_map, :tool_arguments) || Map.get(struct_map, :arguments) || %{}
+  end
+
+  defp build_tool_call(name, args) do
+    [
+      %{
+        id: generate_tool_call_id(),
+        name: normalize_tool_name(name),
+        arguments: normalize_baml_args(args)
+      }
+    ]
   end
 
   defp normalize_tool_name(name) when is_atom(name), do: name
 
   defp normalize_tool_name(name) when is_binary(name) do
-    try do
-      String.to_existing_atom(name)
-    rescue
-      ArgumentError -> name
-    end
+    String.to_existing_atom(name)
+  rescue
+    ArgumentError -> name
   end
 
   defp normalize_tool_name(name), do: name

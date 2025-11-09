@@ -23,7 +23,16 @@ defmodule AshAgent.Runtime.LLMClient do
 
   Returns `{:ok, response}` with the provider response, or `{:error, reason}`.
   """
-  def generate_object(resource, client, prompt, schema, opts \\ [], context, tools \\ nil, messages \\ nil) do
+  def generate_object(
+        resource,
+        client,
+        prompt,
+        schema,
+        opts \\ [],
+        context,
+        tools \\ nil,
+        messages \\ nil
+      ) do
     with {:ok, provider} <- resolve_provider(resource) do
       opts = merge_client_opts(opts)
 
@@ -52,7 +61,16 @@ defmodule AshAgent.Runtime.LLMClient do
 
   Returns `{:ok, stream}` with the provider stream response, or `{:error, reason}`.
   """
-  def stream_object(resource, client, prompt, schema, opts \\ [], context, tools \\ nil, messages \\ nil) do
+  def stream_object(
+        resource,
+        client,
+        prompt,
+        schema,
+        opts \\ [],
+        context,
+        tools \\ nil,
+        messages \\ nil
+      ) do
     with {:ok, provider} <- resolve_provider(resource) do
       opts = merge_client_opts(opts)
 
@@ -100,15 +118,7 @@ defmodule AshAgent.Runtime.LLMClient do
 
       true ->
         struct_map = Map.from_struct(response)
-        struct_name = response.__struct__ |> Module.split() |> List.last()
-        
-        cond do
-          String.contains?(struct_name, "ToolCallResponse") ->
-            build_typed_struct(output_module, struct_map)
-
-          true ->
-            build_typed_struct(output_module, struct_map)
-        end
+        build_typed_struct(output_module, struct_map)
     end
   rescue
     e ->
@@ -135,21 +145,21 @@ defmodule AshAgent.Runtime.LLMClient do
   Returns an Enumerable that yields parsed TypedStruct instances.
   """
   def stream_to_structs(stream_response, output_module) do
-    cond do
-      enumerable_stream?(stream_response) ->
-        Stream.map(stream_response, fn chunk ->
-          case parse_response(output_module, chunk) do
-            {:ok, struct} -> struct
-            {:error, _} -> chunk
-          end
-        end)
+    if enumerable_stream?(stream_response) do
+      Stream.map(stream_response, &parse_stream_chunk(&1, output_module))
+    else
+      Stream.resource(
+        fn -> stream_response end,
+        &stream_next(&1, output_module),
+        &stream_cleanup/1
+      )
+    end
+  end
 
-      true ->
-        Stream.resource(
-          fn -> stream_response end,
-          &stream_next(&1, output_module),
-          &stream_cleanup/1
-        )
+  defp parse_stream_chunk(chunk, output_module) do
+    case parse_response(output_module, chunk) do
+      {:ok, struct} -> struct
+      {:error, _} -> chunk
     end
   end
 
@@ -215,12 +225,10 @@ defmodule AshAgent.Runtime.LLMClient do
   def response_usage(%{"usage" => usage}) when is_map(usage), do: usage
 
   def response_usage(%module{} = response) do
-    cond do
-      function_exported?(module, :usage, 1) ->
-        module.usage(response)
-
-      true ->
-        nil
+    if function_exported?(module, :usage, 1) do
+      module.usage(response)
+    else
+      nil
     end
   end
 

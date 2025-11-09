@@ -45,14 +45,16 @@ The execution engine. Orchestrates the entire agent call lifecycle.
 
 **Tool Calling Flow:**
 When tools are defined, the runtime manages multi-turn conversations:
-1. Create `Conversation` state with initial user message
+1. Create `Context` state with initial user message using `Context.new/2`
 2. Convert tools to provider-specific format (JSON Schema for ReqLLM)
-3. Call provider with tools and conversation messages
-4. Extract tool calls from LLM response
+3. Call provider with tools and context messages
+4. Extract tool calls from LLM response using `Context.extract_tool_calls/1`
 5. Execute tools via `ToolExecutor`
-6. Add tool results back to conversation
-7. Loop until no more tool calls or max iterations reached
+6. Add tool results back to context using `Context.add_tool_results/2`
+7. Loop until no more tool calls or `Context.exceeded_max_iterations?/2` returns true
 8. Parse and return final response
+
+The `:context` attribute is automatically added to agent resources by the `AddContextAttribute` transformer, so developers don't need to manually define it.
 
 **Key characteristics:**
 - Monolithic (all concerns in one module)
@@ -105,10 +107,58 @@ Transforms TypedStruct field definitions into req_llm schema format.
 
 ### Supporting Modules
 
+#### `AshAgent.Context`
+Embedded Ash resource that stores conversation history using nested iterations.
+
+**Structure:**
+- `:iterations` - Array of iteration maps, each containing:
+  - `:number` - Iteration number (1-indexed)
+  - `:messages` - List of messages in this iteration (role, content, optional tool_calls)
+  - `:tool_calls` - Tool calls made during this iteration
+  - `:started_at` - Timestamp when iteration began
+  - `:completed_at` - Timestamp when iteration completed (nil if in progress)
+  - `:metadata` - Extensible map for custom data
+- `:current_iteration` - Integer tracking which iteration is active
+
+**Key API functions:**
+- `new/2` - Creates new context with initial user message, optional system prompt
+- `add_assistant_message/3` - Appends assistant response to current iteration
+- `add_tool_results/2` - Adds tool execution results as messages
+- `extract_tool_calls/1` - Extracts tool calls from last assistant message
+- `to_messages/1` - Flattens all iterations into provider message format
+- `exceeded_max_iterations?/2` - Checks if iteration limit reached
+- `get_iteration/2` - Retrieves specific iteration by number
+
+**Benefits over previous Conversation struct:**
+- No pass-through fields required (e.g., system_prompt)
+- Queryable iteration history as structured data
+- Timestamps for debugging and analysis
+- Full Ash resource capabilities (actions, validations, policies if needed)
+- Nested structure keeps tool calls and messages grouped by iteration
+
 #### `AshAgent.Sigils`
 Provides `~p` sigil for compile-time Liquid template parsing.
 
 **Purpose:** Catch template syntax errors at compile time rather than runtime.
+
+#### `AshAgent.Transformers.AddContextAttribute`
+Spark transformer that automatically adds a `:context` attribute to agent resources.
+
+**Purpose:** Eliminates manual attribute definition for context state management.
+
+**Behavior:**
+- Runs during DSL compilation
+- Checks if resource has `agent do` block (via `:client` option)
+- If found and no existing `:context` attribute, adds one with type `AshAgent.Context`
+- Skips if attribute already defined (prevents duplication)
+- Skips if no agent configuration present
+
+**Generated attribute:**
+- Name: `:context`
+- Type: `AshAgent.Context`
+- Allow nil: `true`
+- Default: `nil`
+- Public: `true`
 
 #### `AshAgent.Transformers.ValidateAgent`
 Spark transformer that validates agent configuration completeness.

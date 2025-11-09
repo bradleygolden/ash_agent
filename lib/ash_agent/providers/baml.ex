@@ -123,22 +123,23 @@ defmodule AshAgent.Providers.Baml do
     role = normalize_role(Map.get(last_message, :role) || Map.get(last_message, "role"))
     content = Map.get(last_message, :content) || Map.get(last_message, "content")
 
-    cond do
-      role == "user" and is_binary(content) ->
-        {:ok, %{message: content}}
-
-      role == "user" and is_list(content) ->
-        case extract_tool_result_content(content) do
-          {:ok, result_content} -> {:ok, %{message: result_content}}
-          :error -> {:ok, %{}}
-        end
-
-      true ->
-        {:ok, %{}}
-    end
+    extract_message_content(role, content)
   end
 
   defp fetch_arguments_from_messages(_), do: :error
+
+  defp extract_message_content("user", content) when is_binary(content) do
+    {:ok, %{message: content}}
+  end
+
+  defp extract_message_content("user", content) when is_list(content) do
+    case extract_tool_result_content(content) do
+      {:ok, result_content} -> {:ok, %{message: result_content}}
+      :error -> {:ok, %{}}
+    end
+  end
+
+  defp extract_message_content(_role, _content), do: {:ok, %{}}
 
   defp normalize_role(role) when is_atom(role), do: Atom.to_string(role)
   defp normalize_role(role) when is_binary(role), do: String.downcase(role)
@@ -170,12 +171,10 @@ defmodule AshAgent.Providers.Baml do
   end
 
   defp resolve_client_from_value(client) when is_atom(client) do
-    cond do
-      Code.ensure_loaded?(client) ->
-        {:ok, client}
-
-      true ->
-        lookup_configured_client(client)
+    if Code.ensure_loaded?(client) do
+      {:ok, client}
+    else
+      lookup_configured_client(client)
     end
   end
 
@@ -271,8 +270,20 @@ defmodule AshAgent.Providers.Baml do
   defp start_streaming(function_module, arguments, opts) do
     parent = self()
     ref = make_ref()
+    stream_fn = build_stream_callback(parent, ref)
 
-    stream_fn = fn
+    result =
+      if function_exported?(function_module, :stream, 3) do
+        function_module.stream(arguments, opts, stream_fn)
+      else
+        function_module.stream(arguments, stream_fn)
+      end
+
+    handle_stream_result(result, ref)
+  end
+
+  defp build_stream_callback(parent, ref) do
+    fn
       {:partial, partial_result} ->
         send(parent, {ref, :chunk, partial_result})
 
@@ -282,47 +293,24 @@ defmodule AshAgent.Providers.Baml do
       {:error, error} ->
         send(parent, {ref, :done, {:error, error}})
     end
+  end
 
-    case function_exported?(function_module, :stream, 3) do
-      true ->
-        result = function_module.stream(arguments, opts, stream_fn)
+  defp handle_stream_result(result, ref) do
+    case result do
+      {:ok, stream_pid} when is_pid(stream_pid) ->
+        {ref, stream_pid, :streaming}
 
-        case result do
-          {:ok, stream_pid} when is_pid(stream_pid) ->
-            {ref, stream_pid, :streaming}
+      pid when is_pid(pid) ->
+        {ref, pid, :streaming}
 
-          pid when is_pid(pid) ->
-            {ref, pid, :streaming}
+      {:error, reason} ->
+        {ref, nil, {:error, reason}}
 
-          {:error, reason} ->
-            {ref, nil, {:error, reason}}
+      other when is_function(other) ->
+        {ref, nil, {:error, "BAML stream function returned a function instead of a stream"}}
 
-          other when is_function(other) ->
-            {ref, nil, {:error, "BAML stream function returned a function instead of a stream"}}
-
-          other ->
-            {ref, nil, {:error, "Unexpected stream result: #{inspect(other)}"}}
-        end
-
-      false ->
-        result = function_module.stream(arguments, stream_fn)
-
-        case result do
-          {:ok, stream_pid} when is_pid(stream_pid) ->
-            {ref, stream_pid, :streaming}
-
-          pid when is_pid(pid) ->
-            {ref, pid, :streaming}
-
-          {:error, reason} ->
-            {ref, nil, {:error, reason}}
-
-          other when is_function(other) ->
-            {ref, nil, {:error, "BAML stream function returned a function instead of a stream"}}
-
-          other ->
-            {ref, nil, {:error, "Unexpected stream result: #{inspect(other)}"}}
-        end
+      other ->
+        {ref, nil, {:error, "Unexpected stream result: #{inspect(other)}"}}
     end
   end
 

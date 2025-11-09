@@ -10,6 +10,10 @@ defmodule AshAgent.DSL.ToolsTest do
 
     import AshAgent.Sigils, only: [sigil_p: 2]
 
+    resource do
+      require_primary_key? false
+    end
+
     defmodule Reply do
       use Ash.TypedStruct
 

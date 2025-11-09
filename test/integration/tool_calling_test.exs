@@ -12,6 +12,10 @@ defmodule AshAgent.Integration.ToolCallingTest do
 
     import AshAgent.Sigils
 
+    resource do
+      require_primary_key? false
+    end
+
     defmodule Reply do
       use Ash.TypedStruct
 
@@ -93,5 +97,4 @@ defmodule AshAgent.Integration.ToolCallingTest do
 
     :ok
   end
-
 end

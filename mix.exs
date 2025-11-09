@@ -164,7 +164,8 @@ defmodule AshAgent.MixProject do
         "format --check-formatted",
         "credo --strict",
         "dialyzer --format github",
-        "docs --warnings-as-errors"
+        "docs --warnings-as-errors",
+        "test --only integration --warnings-as-errors"
       ],
       docs: [
         "spark.cheat_sheets",

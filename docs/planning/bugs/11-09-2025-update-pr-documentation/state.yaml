@@ -1,0 +1,20 @@
+type: bug
+id: 11-09-2025-update-pr-documentation
+status: planning
+phase: design
+complexity: SIMPLE
+created: 2025-11-09
+updated: 2025-11-09
+session:
+  id: 11-09-2025-update-pr-documentation
+  path: /Users/bradleygolden/Development/bradleygolden/ash_agent/.springfield/11-09-2025-update-pr-documentation/
+documentation:
+  primary: doc.md
+  session_research: /Users/bradleygolden/Development/bradleygolden/ash_agent/.springfield/11-09-2025-update-pr-documentation/research.md
+  session_plan: /Users/bradleygolden/Development/bradleygolden/ash_agent/.springfield/11-09-2025-update-pr-documentation/prompt.md
+workflow:
+  created_by: martin
+  implements_by: ralph
+  validated_by: comic-book-guy
+ready_for_implementation: true
+blocking_issues: []

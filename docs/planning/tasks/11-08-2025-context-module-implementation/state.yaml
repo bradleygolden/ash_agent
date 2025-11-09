@@ -1,0 +1,20 @@
+type: task
+id: 11-08-2025-context-module-implementation
+status: planning
+phase: design
+complexity: SIMPLE
+created: 2025-11-08
+updated: 2025-11-08
+session:
+  id: 11-08-2025-context-module-implementation
+  path: /Users/bradleygolden/Development/bradleygolden/ash_agent/.springfield/11-08-2025-context-module-implementation/
+documentation:
+  primary: doc.md
+  session_research: /Users/bradleygolden/Development/bradleygolden/ash_agent/.springfield/11-08-2025-context-module-implementation/research.md
+  session_plan: /Users/bradleygolden/Development/bradleygolden/ash_agent/.springfield/11-08-2025-context-module-implementation/prompt.md
+workflow:
+  created_by: martin
+  implements_by: ralph
+  validated_by: comic-book-guy
+ready_for_implementation: true
+blocking_issues: []

@@ -42,3 +42,4 @@ ash_agent-*.tar
 .DS_Store
 
 .springfield
+.hex-docs

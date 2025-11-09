@@ -87,18 +87,16 @@ defmodule AshAgent.Transformers.ValidateAgent do
 
     tools = Transformer.get_entities(dsl_state, [:tools]) || []
 
-    cond do
-      tools != [] and :tool_calling not in features ->
-        {:error,
-         DslError.exception(
-           module: Transformer.get_persisted(dsl_state, :module),
-           message:
-             "Provider #{inspect(provider)} does not support tool calling. Remove the `tools` section or choose a provider that declares :tool_calling.",
-           path: [:tools]
-         )}
-
-      true ->
-        :ok
+    if tools != [] and :tool_calling not in features do
+      {:error,
+       DslError.exception(
+         module: Transformer.get_persisted(dsl_state, :module),
+         message:
+           "Provider #{inspect(provider)} does not support tool calling. Remove the `tools` section or choose a provider that declares :tool_calling.",
+         path: [:tools]
+       )}
+    else
+      :ok
     end
   end
 

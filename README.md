@@ -93,20 +93,24 @@ MyApp.Agents.Assistant.stream(message: "Hello!")
 
 ## Documentation
 
-- [Getting Started Guide](documentation/tutorials/getting-started.md)
-- [Overview & Concepts](documentation/topics/overview.md)
 - API Reference: `mix docs && open doc/index.html`
 
 ## Roadmap
 
-- [ ] Tool calling support
-- [ ] Agent context persistence
+- [x] Tool calling support
+- [~] Agent context persistence (partial)
+  - [x] Iteration-based context tracking
+  - [x] Structured message history
+  - [ ] Context compaction/summarization
+  - [ ] Token budget management
+  - [ ] Progressive disclosure for large tool results
+  - [ ] External memory persistence
 - [ ] Multi-agent orchestration
 
 ### Needs Research
 
 - [ ] Guardrails & safety hooks
-- [ ] Long-term memory architecture
+- [ ] Structured prompt segmentation (XML/Markdown sections)
 - [ ] Evaluation harness for agents
 - [ ] Observability dashboards
 - [ ] MCP server support
@@ -211,5 +215,4 @@ This project is licensed under the MIT License.
 ## Links
 
 - [Source Code](https://github.com/bradleygolden/ash_agent)
-- [Guides](documentation/)
 - [Changelog](CHANGELOG.md)
