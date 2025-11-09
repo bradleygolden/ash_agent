@@ -19,5 +19,10 @@
 
   # BAML provider false positives from incomplete type specs
   ~r/lib\/ash_agent\/providers\/baml\.ex.* The guard clause can never succeed/,
-  ~r/lib\/ash_agent\/providers\/baml\.ex.* The pattern .* can never match/
+  ~r/lib\/ash_agent\/providers\/baml\.ex.* The pattern .* can never match/,
+
+  # Test support false positives from Ollama client stub
+  # Client.message_from always returns binary, making some defensive clauses unreachable
+  ~r/test\/support\/ollama_client_stub\.ex.* The pattern variable .* can never match/,
+  ~r/test\/support\/ollama_client_stub\.ex.* The guard clause can never succeed/
 ]
