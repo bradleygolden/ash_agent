@@ -98,13 +98,19 @@ MyApp.Agents.Assistant.stream(message: "Hello!")
 ## Roadmap
 
 - [x] Tool calling support
-- [x] Agent context persistence
+- [~] Agent context persistence (partial)
+  - [x] Iteration-based context tracking
+  - [x] Structured message history
+  - [ ] Context compaction/summarization
+  - [ ] Token budget management
+  - [ ] Progressive disclosure for large tool results
+  - [ ] External memory persistence
 - [ ] Multi-agent orchestration
 
 ### Needs Research
 
 - [ ] Guardrails & safety hooks
-- [ ] Long-term memory architecture
+- [ ] Structured prompt segmentation (XML/Markdown sections)
 - [ ] Evaluation harness for agents
 - [ ] Observability dashboards
 - [ ] MCP server support
