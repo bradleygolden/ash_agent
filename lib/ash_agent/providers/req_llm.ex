@@ -55,17 +55,20 @@ defmodule AshAgent.Providers.ReqLLM do
 
   defp maybe_add_tools(opts, nil), do: opts
   defp maybe_add_tools(opts, []), do: opts
+
   defp maybe_add_tools(opts, tools) when is_list(tools) do
     Keyword.put(opts, :tools, tools)
   end
 
   defp maybe_add_messages(opts, nil, prompt) when is_binary(prompt), do: opts
   defp maybe_add_messages(opts, nil, _prompt), do: opts
+
   defp maybe_add_messages(opts, messages, _prompt) when is_list(messages) do
     opts
     |> Keyword.put(:messages, messages)
     |> Keyword.delete(:prompt)
   end
+
   defp maybe_add_messages(opts, _messages, _prompt), do: opts
 
   @impl true

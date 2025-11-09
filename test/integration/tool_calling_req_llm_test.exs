@@ -84,5 +84,4 @@ defmodule AshAgent.Integration.ToolCallingReqLLMTest do
 
     :ok
   end
-
 end

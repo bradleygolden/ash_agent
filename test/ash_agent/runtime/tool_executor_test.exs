@@ -1,12 +1,11 @@
 defmodule AshAgent.Runtime.ToolExecutorTest do
   use ExUnit.Case, async: true
 
-  alias AshAgent.{Conversation, Runtime.ToolExecutor, TestDomain}
+  alias AshAgent.{Runtime.ToolExecutor, TestDomain}
 
   defmodule TestAgent do
     use Ash.Resource, domain: TestDomain, extensions: [AshAgent.Resource]
   end
-
 
   defmodule TestResource do
     use Ash.Resource,
@@ -30,7 +29,12 @@ defmodule AshAgent.Runtime.ToolExecutorTest do
 
   describe "execute_tools/3" do
     test "executes function tools" do
-      conversation = Conversation.new(TestAgent, %{message: "Hello"}, [domain: TestDomain])
+      runtime_context = %{
+        agent: TestAgent,
+        domain: TestDomain,
+        actor: nil,
+        tenant: nil
+      }
 
       tool_definitions = [
         %{
@@ -45,7 +49,7 @@ defmodule AshAgent.Runtime.ToolExecutorTest do
         %{id: "call_1", name: :greet, arguments: %{name: "Alice"}}
       ]
 
-      results = ToolExecutor.execute_tools(tool_calls, tool_definitions, conversation)
+      results = ToolExecutor.execute_tools(tool_calls, tool_definitions, runtime_context)
 
       assert length(results) == 1
       {id, {status, result}} = hd(results)
@@ -60,7 +64,12 @@ defmodule AshAgent.Runtime.ToolExecutorTest do
         |> Ash.Changeset.for_create(:create, %{name: "TestUser"})
         |> Ash.create()
 
-      conversation = Conversation.new(TestAgent, %{message: "Hello"}, [domain: TestDomain])
+      runtime_context = %{
+        agent: TestAgent,
+        domain: TestDomain,
+        actor: nil,
+        tenant: nil
+      }
 
       tool_definitions = [
         %{
@@ -75,7 +84,7 @@ defmodule AshAgent.Runtime.ToolExecutorTest do
         %{id: "call_1", name: :get_user, arguments: %{}}
       ]
 
-      results = ToolExecutor.execute_tools(tool_calls, tool_definitions, conversation)
+      results = ToolExecutor.execute_tools(tool_calls, tool_definitions, runtime_context)
 
       assert length(results) == 1
       {id, {status, result}} = hd(results)
@@ -87,7 +96,12 @@ defmodule AshAgent.Runtime.ToolExecutorTest do
     end
 
     test "handles missing tools" do
-      conversation = Conversation.new(TestAgent, %{message: "Hello"}, [domain: TestDomain])
+      runtime_context = %{
+        agent: TestAgent,
+        domain: TestDomain,
+        actor: nil,
+        tenant: nil
+      }
 
       tool_definitions = []
 
@@ -95,7 +109,7 @@ defmodule AshAgent.Runtime.ToolExecutorTest do
         %{id: "call_1", name: :nonexistent, arguments: %{}}
       ]
 
-      results = ToolExecutor.execute_tools(tool_calls, tool_definitions, conversation)
+      results = ToolExecutor.execute_tools(tool_calls, tool_definitions, runtime_context)
 
       assert length(results) == 1
       {id, {status, reason}} = hd(results)
@@ -105,7 +119,12 @@ defmodule AshAgent.Runtime.ToolExecutorTest do
     end
 
     test "handles tool execution errors" do
-      conversation = Conversation.new(TestAgent, %{message: "Hello"}, [domain: TestDomain])
+      runtime_context = %{
+        agent: TestAgent,
+        domain: TestDomain,
+        actor: nil,
+        tenant: nil
+      }
 
       tool_definitions = [
         %{
@@ -120,7 +139,7 @@ defmodule AshAgent.Runtime.ToolExecutorTest do
         %{id: "call_1", name: :error_tool, arguments: %{}}
       ]
 
-      results = ToolExecutor.execute_tools(tool_calls, tool_definitions, conversation)
+      results = ToolExecutor.execute_tools(tool_calls, tool_definitions, runtime_context)
 
       assert length(results) == 1
       {id, {status, reason}} = hd(results)
@@ -130,7 +149,12 @@ defmodule AshAgent.Runtime.ToolExecutorTest do
     end
 
     test "validates required parameters" do
-      conversation = Conversation.new(TestAgent, %{message: "Hello"}, [domain: TestDomain])
+      runtime_context = %{
+        agent: TestAgent,
+        domain: TestDomain,
+        actor: nil,
+        tenant: nil
+      }
 
       tool_definitions = [
         %{
@@ -145,7 +169,7 @@ defmodule AshAgent.Runtime.ToolExecutorTest do
         %{id: "call_1", name: :needs_param, arguments: %{}}
       ]
 
-      results = ToolExecutor.execute_tools(tool_calls, tool_definitions, conversation)
+      results = ToolExecutor.execute_tools(tool_calls, tool_definitions, runtime_context)
 
       assert length(results) == 1
       {id, {status, reason}} = hd(results)
@@ -155,7 +179,12 @@ defmodule AshAgent.Runtime.ToolExecutorTest do
     end
 
     test "handles multiple tool calls" do
-      conversation = Conversation.new(TestAgent, %{message: "Hello"}, [domain: TestDomain])
+      runtime_context = %{
+        agent: TestAgent,
+        domain: TestDomain,
+        actor: nil,
+        tenant: nil
+      }
 
       tool_definitions = [
         %{
@@ -177,7 +206,7 @@ defmodule AshAgent.Runtime.ToolExecutorTest do
         %{id: "call_2", name: :tool2, arguments: %{}}
       ]
 
-      results = ToolExecutor.execute_tools(tool_calls, tool_definitions, conversation)
+      results = ToolExecutor.execute_tools(tool_calls, tool_definitions, runtime_context)
 
       assert length(results) == 2
       assert {"call_1", {:ok, %{result: 1}}} in results
@@ -185,4 +214,3 @@ defmodule AshAgent.Runtime.ToolExecutorTest do
     end
   end
 end
-

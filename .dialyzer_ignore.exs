@@ -12,5 +12,12 @@
   ~r/lib\/ash_agent\/runtime\.ex.* Function .* has no local return/,
 
   # Unused function warnings for MVP - these will be used in future iterations
-  ~r/lib\/ash_agent\/runtime\.ex.* Function .* will never be called/
+  ~r/lib\/ash_agent\/runtime\.ex.* Function .* will never be called/,
+
+  # Guard clause false positives from Solid library type inference
+  ~r/lib\/ash_agent\/runtime\.ex.* The guard clause.*can never succeed/,
+
+  # BAML provider false positives from incomplete type specs
+  ~r/lib\/ash_agent\/providers\/baml\.ex.* The guard clause can never succeed/,
+  ~r/lib\/ash_agent\/providers\/baml\.ex.* The pattern .* can never match/
 ]

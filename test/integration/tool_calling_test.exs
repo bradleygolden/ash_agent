@@ -93,5 +93,4 @@ defmodule AshAgent.Integration.ToolCallingTest do
 
     :ok
   end
-
 end

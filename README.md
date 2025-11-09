@@ -93,8 +93,6 @@ MyApp.Agents.Assistant.stream(message: "Hello!")
 
 ## Documentation
 
-- [Getting Started Guide](documentation/tutorials/getting-started.md)
-- [Overview & Concepts](documentation/topics/overview.md)
 - API Reference: `mix docs && open doc/index.html`
 
 ## Roadmap
@@ -211,5 +209,4 @@ This project is licensed under the MIT License.
 ## Links
 
 - [Source Code](https://github.com/bradleygolden/ash_agent)
-- [Guides](documentation/)
 - [Changelog](CHANGELOG.md)
