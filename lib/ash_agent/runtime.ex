@@ -299,9 +299,23 @@ defmodule AshAgent.Runtime do
   end
 
   defp convert_baml_union_to_output(%_{} = response, output_type) do
-    struct_map = Map.from_struct(response)
-    struct_name = response.__struct__ |> Module.split() |> List.last()
+    struct_module = response.__struct__
 
+    if Map.has_key?(response, :data) and function_exported?(struct_module, :usage, 1) do
+      convert_baml_union_to_output(response.data, output_type)
+    else
+      struct_map = Map.from_struct(response)
+      struct_name = struct_module |> Module.split() |> List.last()
+
+      handle_baml_struct(response, struct_map, struct_name, output_type)
+    end
+  end
+
+  defp convert_baml_union_to_output(response, output_type) do
+    LLMClient.parse_response(output_type, response)
+  end
+
+  defp handle_baml_struct(response, struct_map, struct_name, output_type) do
     cond do
       String.contains?(struct_name, "ToolCallResponse") ->
         case Map.take(struct_map, [:content, :confidence]) do
@@ -332,10 +346,6 @@ defmodule AshAgent.Runtime do
          response: response,
          exception: e
        })}
-  end
-
-  defp convert_baml_union_to_output(response, output_type) do
-    LLMClient.parse_response(output_type, response)
   end
 
   defp extract_content(response, provider) when provider in [:baml, AshAgent.Providers.Baml] do
