@@ -105,6 +105,35 @@ Transforms TypedStruct field definitions into req_llm schema format.
 
 ### Supporting Modules
 
+#### `AshAgent.Context`
+Embedded Ash resource that stores conversation history using nested iterations.
+
+**Structure:**
+- `:iterations` - Array of iteration maps, each containing:
+  - `:number` - Iteration number (1-indexed)
+  - `:messages` - List of messages in this iteration (role, content, optional tool_calls)
+  - `:tool_calls` - Tool calls made during this iteration
+  - `:started_at` - Timestamp when iteration began
+  - `:completed_at` - Timestamp when iteration completed (nil if in progress)
+  - `:metadata` - Extensible map for custom data
+- `:current_iteration` - Integer tracking which iteration is active
+
+**Key API functions:**
+- `new/2` - Creates new context with initial user message, optional system prompt
+- `add_assistant_message/3` - Appends assistant response to current iteration
+- `add_tool_results/2` - Adds tool execution results as messages
+- `extract_tool_calls/1` - Extracts tool calls from last assistant message
+- `to_messages/1` - Flattens all iterations into provider message format
+- `exceeded_max_iterations?/2` - Checks if iteration limit reached
+- `get_iteration/2` - Retrieves specific iteration by number
+
+**Benefits over previous Conversation struct:**
+- No pass-through fields required (e.g., system_prompt)
+- Queryable iteration history as structured data
+- Timestamps for debugging and analysis
+- Full Ash resource capabilities (actions, validations, policies if needed)
+- Nested structure keeps tool calls and messages grouped by iteration
+
 #### `AshAgent.Sigils`
 Provides `~p` sigil for compile-time Liquid template parsing.
 
