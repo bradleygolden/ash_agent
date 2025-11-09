@@ -1,31 +1,26 @@
 defmodule AshAgent.TokenLimits do
   @moduledoc """
   Manages token limits and warnings for AshAgent providers.
-  """
 
-  @default_limits %{
-    "anthropic:claude-3-5-sonnet" => 200_000,
-    "anthropic:claude-3-opus" => 200_000,
-    "anthropic:claude-3-sonnet" => 200_000,
-    "anthropic:claude-3-haiku" => 200_000,
-    "openai:gpt-4" => 128_000,
-    "openai:gpt-4-turbo" => 128_000,
-    "openai:gpt-3.5-turbo" => 16_385
-  }
+  Token limits must be configured via application config:
+
+      config :ash_agent, :token_limits, %{
+        "anthropic:claude-3-5-sonnet" => 200_000,
+        "openai:gpt-4" => 128_000
+      }
+  """
 
   @default_warning_threshold 0.8
 
   @doc """
   Gets the token limit for a given provider/model combination.
 
-  Returns the configured limit from application config if available,
-  otherwise falls back to default limits.
+  Returns the configured limit from application config, or nil if not configured.
   """
   @spec get_limit(String.t()) :: non_neg_integer() | nil
   def get_limit(client) when is_binary(client) do
-    custom_limits = Application.get_env(:ash_agent, :token_limits, %{})
-
-    Map.get(custom_limits, client) || Map.get(@default_limits, client)
+    limits = Application.get_env(:ash_agent, :token_limits, %{})
+    Map.get(limits, client)
   end
 
   @doc """
