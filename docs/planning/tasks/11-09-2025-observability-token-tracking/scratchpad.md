@@ -70,3 +70,34 @@ ctx =
 - Phase 1, Task 3: Create comprehensive telemetry tests
 - Verify token usage is tracked in Context metadata
 - Test with both usage and nil usage scenarios
+
+---
+
+## Iteration #3 - COMPLETE ✓
+
+### What Me Did:
+Created comprehensive token tracking tests in `test/ash_agent/token_tracking_test.exs`:
+- Test Context stores token usage from LLM response
+- Test cumulative tokens accumulate across multiple calls
+- Test graceful handling of nil usage (BAML provider)
+- Test LLM response with usage data gets tracked via telemetry
+
+### Implementation Details:
+All tests verify:
+- Token usage storage in iteration metadata
+- Cumulative token accumulation
+- Nil usage handling (no errors)
+- Telemetry events include usage data
+
+### Test Results:
+✓ All 4 new tests passing
+✓ All 163 existing tests still passing
+✓ No Credo issues
+
+### Files Created:
+- `test/ash_agent/token_tracking_test.exs` (4 tests)
+
+### Next Steps:
+- Phase 2, Task 4: Implement token limit configuration
+- Default limits per provider/model
+- Support application config override
