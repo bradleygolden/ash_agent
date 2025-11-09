@@ -10,6 +10,10 @@ defmodule AshAgent.Integration.ToolCallingBamlTest do
       domain: TestDomain,
       extensions: [AshAgent.Resource]
 
+    resource do
+      require_primary_key? false
+    end
+
     defmodule Reply do
       use Ash.TypedStruct
 

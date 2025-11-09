@@ -9,6 +9,10 @@ defmodule AshAgent.ResourceTest do
   defmodule TestChatAgent do
     use Ash.Resource, domain: __MODULE__.TestDomain, extensions: [AshAgent.Resource]
 
+    resource do
+      require_primary_key? false
+    end
+
     defmodule Reply do
       use Ash.TypedStruct
 
