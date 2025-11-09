@@ -12,6 +12,10 @@ defmodule AshAgent.Integration.ToolCallingReqLLMTest do
 
     import AshAgent.Sigils
 
+    resource do
+      require_primary_key? false
+    end
+
     defmodule Reply do
       use Ash.TypedStruct
 
