@@ -19,6 +19,10 @@ defmodule AshAgent.Transformers.AddContextAttributeTest do
       domain: AshAgent.TestDomain,
       extensions: [AshAgent.Resource]
 
+    resource do
+      require_primary_key? false
+    end
+
     agent do
       client "anthropic:claude-3-5-sonnet"
       output TestOutput
@@ -48,6 +52,10 @@ defmodule AshAgent.Transformers.AddContextAttributeTest do
       extensions: [AshAgent.Resource]
 
     import AshAgent.Sigils
+
+    resource do
+      require_primary_key? false
+    end
 
     attributes do
       attribute :context, :string, allow_nil?: true, public?: true
