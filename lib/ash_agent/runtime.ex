@@ -11,7 +11,7 @@ defmodule AshAgent.Runtime do
   """
 
   alias AshAgent.{Context, Error, Info, ToolConverter}
-  alias AshAgent.Runtime.{Hooks, LLMClient, ToolExecutor}
+  alias AshAgent.Runtime.{DefaultHooks, Hooks, LLMClient, ToolExecutor}
   alias AshAgent.Runtime.PromptRenderer
   alias AshAgent.SchemaConverter
   alias AshAgent.Telemetry
@@ -172,15 +172,21 @@ defmodule AshAgent.Runtime do
   end
 
   defp execute_tool_calling_loop(%LoopState{} = state, ctx) do
-    if Context.exceeded_max_iterations?(ctx, state.tool_config.max_iterations) do
-      {:error, Error.llm_error("Max iterations (#{state.tool_config.max_iterations}) exceeded")}
-    else
-      execute_tool_calling_iteration(state, ctx)
+    case execute_on_iteration_start_hook(ctx, state) do
+      {:ok, _ctx} ->
+        result = execute_tool_calling_iteration(state, ctx)
+        execute_on_iteration_complete_hook(ctx, result, state)
+        result
+
+      {:error, _reason} = error ->
+        error
     end
   end
 
   defp execute_tool_calling_iteration(%LoopState{} = state, ctx) do
+    ctx = execute_prepare_context_hook(ctx, state)
     messages = Context.to_messages(ctx)
+    messages = execute_prepare_messages_hook(messages, ctx, state)
     current_prompt = nil
 
     case Telemetry.span(
@@ -228,9 +234,7 @@ defmodule AshAgent.Runtime do
           ctx
 
         usage ->
-          ctx = Context.add_token_usage(ctx, usage)
-          check_token_limit(ctx, state)
-          ctx
+          Context.add_token_usage(ctx, usage)
       end
 
     case tool_calls do
@@ -239,27 +243,6 @@ defmodule AshAgent.Runtime do
 
       calls when is_list(calls) ->
         execute_tool_calls(calls, state, ctx)
-    end
-  end
-
-  defp check_token_limit(ctx, %LoopState{} = state) do
-    cumulative = Context.get_cumulative_tokens(ctx)
-
-    case AshAgent.TokenLimits.check_limit(cumulative.total_tokens, state.config.client) do
-      :ok ->
-        :ok
-
-      {:warn, limit, threshold} ->
-        :telemetry.execute(
-          [:ash_agent, :token_limit_warning],
-          %{cumulative_tokens: cumulative.total_tokens},
-          %{
-            agent: state.module,
-            limit: limit,
-            threshold_percent: trunc(threshold * 100),
-            cumulative_tokens: cumulative.total_tokens
-          }
-        )
     end
   end
 
@@ -756,5 +739,164 @@ defmodule AshAgent.Runtime do
     else
       results
     end
+  end
+
+  defp execute_prepare_context_hook(ctx, %LoopState{} = state) do
+    if state.config.hooks do
+      hook_context = %{
+        agent: state.module,
+        context: ctx,
+        token_usage: ctx.token_usage,
+        iteration: ctx.current_iteration
+      }
+
+      case Hooks.execute(state.config.hooks, :prepare_context, hook_context) do
+        {:ok, updated_ctx} ->
+          updated_ctx
+
+        {:error, reason} ->
+          require Logger
+
+          Logger.warning(
+            "prepare_context hook failed: #{inspect(reason)}, using original context"
+          )
+
+          :telemetry.execute(
+            [:ash_agent, :hook, :error],
+            %{},
+            %{hook_name: :prepare_context, error: reason}
+          )
+
+          ctx
+      end
+    else
+      ctx
+    end
+  end
+
+  defp execute_prepare_messages_hook(messages, ctx, %LoopState{} = state) do
+    if state.config.hooks do
+      hook_context = %{
+        agent: state.module,
+        context: ctx,
+        messages: messages,
+        tools: state.tools,
+        iteration: ctx.current_iteration
+      }
+
+      case Hooks.execute(state.config.hooks, :prepare_messages, hook_context) do
+        {:ok, updated_messages} ->
+          updated_messages
+
+        {:error, reason} ->
+          require Logger
+
+          Logger.warning(
+            "prepare_messages hook failed: #{inspect(reason)}, using original messages"
+          )
+
+          :telemetry.execute(
+            [:ash_agent, :hook, :error],
+            %{},
+            %{hook_name: :prepare_messages, error: reason}
+          )
+
+          messages
+      end
+    else
+      messages
+    end
+  end
+
+  defp execute_on_iteration_start_hook(ctx, %LoopState{} = state) do
+    hook_context = %{
+      agent: state.module,
+      iteration_number: ctx.current_iteration,
+      context: ctx,
+      result: nil,
+      token_usage: ctx.token_usage,
+      max_iterations: state.tool_config.max_iterations,
+      client: state.config.client
+    }
+
+    :telemetry.execute(
+      [:ash_agent, :hook, :start],
+      %{},
+      %{hook_name: :on_iteration_start}
+    )
+
+    start_time = System.monotonic_time()
+
+    result =
+      if state.config.hooks do
+        Hooks.execute(state.config.hooks, :on_iteration_start, hook_context)
+      else
+        DefaultHooks.on_iteration_start(hook_context)
+      end
+
+    duration = System.monotonic_time() - start_time
+
+    :telemetry.execute(
+      [:ash_agent, :hook, :stop],
+      %{duration: duration},
+      %{hook_name: :on_iteration_start}
+    )
+
+    result
+  end
+
+  defp execute_on_iteration_complete_hook(ctx, iteration_result, %LoopState{} = state) do
+    hook_context = %{
+      agent: state.module,
+      iteration_number: ctx.current_iteration,
+      context: ctx,
+      result: iteration_result,
+      token_usage: ctx.token_usage,
+      max_iterations: state.tool_config.max_iterations,
+      client: state.config.client
+    }
+
+    :telemetry.execute(
+      [:ash_agent, :hook, :start],
+      %{},
+      %{hook_name: :on_iteration_complete}
+    )
+
+    start_time = System.monotonic_time()
+
+    result =
+      if state.config.hooks do
+        Hooks.execute(state.config.hooks, :on_iteration_complete, hook_context)
+      else
+        DefaultHooks.on_iteration_complete(hook_context)
+      end
+
+    duration = System.monotonic_time() - start_time
+
+    :telemetry.execute(
+      [:ash_agent, :hook, :stop],
+      %{duration: duration},
+      %{hook_name: :on_iteration_complete}
+    )
+
+    case result do
+      {:error, reason} ->
+        require Logger
+
+        Logger.warning(
+          "on_iteration_complete hook failed: #{inspect(reason)}, continuing iteration"
+        )
+
+        :telemetry.execute(
+          [:ash_agent, :hook, :error],
+          %{},
+          %{hook_name: :on_iteration_complete, error: reason}
+        )
+
+      _ ->
+        :ok
+    end
+
+    :ok
   end
 end
