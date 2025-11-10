@@ -31,6 +31,10 @@ defmodule AshAgent.BudgetEnforcementTest do
 
       prompt "Test: {{ message }}"
     end
+
+    attributes do
+      uuid_primary_key :id
+    end
   end
 
   defmodule AgentWithBudgetWarn do
@@ -52,6 +56,10 @@ defmodule AshAgent.BudgetEnforcementTest do
 
       prompt "Test: {{ message }}"
     end
+
+    attributes do
+      uuid_primary_key :id
+    end
   end
 
   defmodule AgentWithoutBudget do
@@ -70,6 +78,10 @@ defmodule AshAgent.BudgetEnforcementTest do
       output SimpleReply
 
       prompt "Test: {{ message }}"
+    end
+
+    attributes do
+      uuid_primary_key :id
     end
   end
 
