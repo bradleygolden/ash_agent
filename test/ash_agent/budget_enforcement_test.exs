@@ -126,7 +126,22 @@ defmodule AshAgent.BudgetEnforcementTest do
     end
   end
 
-  describe "budget enforcement in runtime" do
+  describe "runtime execution with budgets" do
+    test "agent with halt strategy executes successfully when under budget" do
+      {:ok, result} = AshAgent.Runtime.call(AgentWithBudgetHalt, %{message: "test"})
+      assert %SimpleReply{} = result
+    end
+
+    test "agent with warn strategy executes successfully when under budget" do
+      {:ok, result} = AshAgent.Runtime.call(AgentWithBudgetWarn, %{message: "test"})
+      assert %SimpleReply{} = result
+    end
+
+    test "agent without budget executes successfully" do
+      {:ok, result} = AshAgent.Runtime.call(AgentWithoutBudget, %{message: "test"})
+      assert %SimpleReply{} = result
+    end
+
     test "agent with halt strategy has correct configuration" do
       assert Info.token_budget(AgentWithBudgetHalt) == 1000
       assert Info.budget_strategy(AgentWithBudgetHalt) == :halt
