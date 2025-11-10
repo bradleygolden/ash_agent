@@ -21,6 +21,7 @@
 - Scope each test to a single behavior; lean on pattern-matching assertions (`assert %Type{} = ...`) instead of equality checks.
 - Group related variations with `for` comprehensions and shared setup blocks rather than duplicating test bodies or inlining helper modules.
 - Skip redundant assertions such as precondition checks that the code would crash on anyway, and assert on concrete values instead of only verifying types.
+- NEVER use Application.get_env/put_env in tests if you can help it. Those mutate global state and can lead to unexpected behavior.
 
 ## Reference Reading
 
