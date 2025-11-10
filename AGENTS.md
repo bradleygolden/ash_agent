@@ -12,7 +12,8 @@
 
 ## Testing Practices
 
-- Tests MUST be deterministic. A test must either pass or fail consistently, not accept both outcomes. Avoid conditional assertions that accept multiple valid results.
+- Unit tests MUST be deterministic. A test must either pass or fail consistently, not accept both outcomes. Avoid conditional assertions that accept multiple valid results.
+- Integration tests should use real models (BAML with local Ollama, live API calls) to test behavior in production-like conditions. Integration tests should be designed with non-determinism in mind, ensuring that they can handle variations in behavior.
 - Never call `Process.sleep/1` in tests; prefer synchronization helpers so suites stay deterministic.
 - Keep unit tests in `test/ash_agent`, mirroring `lib/` structure with `<filename>_test.exs`, and default to `async: true` when isolation is possible.
 - Place integration suites in `test/integration`, name them after the workflow being exercised (e.g., `user_workflow_test.exs`), and run them with `async: false`.
