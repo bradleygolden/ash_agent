@@ -1,0 +1,20 @@
+type: feature
+id: 11-10-2025-research-multi-agent-orchestration
+status: planning
+phase: design
+complexity: COMPLEX
+created: 2025-11-10
+updated: 2025-11-10
+session:
+  id: 11-10-2025-research-multi-agent-orchestration
+  path: /Users/bradleygolden/Development/bradleygolden/ash_agent/.springfield/11-10-2025-research-multi-agent-orchestration/
+documentation:
+  primary: prd.md
+  session_research: /Users/bradleygolden/Development/bradleygolden/ash_agent/.springfield/11-10-2025-research-multi-agent-orchestration/research.md
+  session_plan: /Users/bradleygolden/Development/bradleygolden/ash_agent/.springfield/11-10-2025-research-multi-agent-orchestration/prompt.md
+workflow:
+  created_by: martin
+  implements_by: ralph
+  validated_by: comic-book-guy
+ready_for_implementation: true
+blocking_issues: []

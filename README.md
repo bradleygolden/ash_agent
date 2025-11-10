@@ -106,6 +106,31 @@ MyApp.Agents.Assistant.stream(message: "Hello!")
   - [ ] Progressive disclosure for large tool results
   - [ ] External memory persistence
 - [ ] Multi-agent orchestration
+  - [ ] **Foundation**
+    - [ ] Agent DSL (`agents do ... end`)
+    - [ ] Agent execution infrastructure
+    - [ ] Agent result formatting
+    - [ ] Agent metadata and discovery
+  - [ ] **Runtime Infrastructure**
+    - [ ] Parallel agent execution support
+    - [ ] Context filtering and handoffs
+    - [ ] Result aggregation and synthesis
+    - [ ] Agent call tracking and telemetry
+  - [ ] **State Management**
+    - [ ] Orchestration session context
+    - [ ] Agent isolation boundaries
+    - [ ] Shared state coordination
+    - [ ] Checkpointing and recovery
+  - [ ] **Observability & Control**
+    - [ ] Agent execution visualization
+    - [ ] Token usage across agent calls
+    - [ ] Cost attribution per agent
+    - [ ] Timeout and budget controls
+  - [ ] **Advanced Features**
+    - [ ] Streaming agent results
+    - [ ] Agent result caching
+    - [ ] Error cascade prevention
+    - [ ] Context summarization
 
 ### Needs Research
 
