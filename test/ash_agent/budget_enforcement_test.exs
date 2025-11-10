@@ -1,0 +1,133 @@
+defmodule AshAgent.BudgetEnforcementTest do
+  use ExUnit.Case, async: true
+
+  alias AshAgent.{Error, Info}
+  alias AshAgent.Test.TestDomain
+
+  defmodule SimpleReply do
+    use Ash.TypedStruct
+
+    typed_struct do
+      field :message, :string, allow_nil?: false
+    end
+  end
+
+  defmodule AgentWithBudgetHalt do
+    use Ash.Resource,
+      domain: TestDomain,
+      extensions: [AshAgent.Resource]
+
+    agent do
+      provider :mock
+      client "mock:test"
+      token_budget(1000)
+      budget_strategy(:halt)
+
+      input do
+        argument :message, :string
+      end
+
+      output SimpleReply
+
+      prompt "Test: {{ message }}"
+    end
+  end
+
+  defmodule AgentWithBudgetWarn do
+    use Ash.Resource,
+      domain: TestDomain,
+      extensions: [AshAgent.Resource]
+
+    agent do
+      provider :mock
+      client "mock:test"
+      token_budget(1000)
+      budget_strategy(:warn)
+
+      input do
+        argument :message, :string
+      end
+
+      output SimpleReply
+
+      prompt "Test: {{ message }}"
+    end
+  end
+
+  defmodule AgentWithoutBudget do
+    use Ash.Resource,
+      domain: TestDomain,
+      extensions: [AshAgent.Resource]
+
+    agent do
+      provider :mock
+      client "mock:test"
+
+      input do
+        argument :message, :string
+      end
+
+      output SimpleReply
+
+      prompt "Test: {{ message }}"
+    end
+  end
+
+  describe "Info.token_budget/1" do
+    test "returns configured budget" do
+      assert Info.token_budget(AgentWithBudgetHalt) == 1000
+    end
+
+    test "returns nil when no budget configured" do
+      assert Info.token_budget(AgentWithoutBudget) == nil
+    end
+  end
+
+  describe "Info.budget_strategy/1" do
+    test "returns configured halt strategy" do
+      assert Info.budget_strategy(AgentWithBudgetHalt) == :halt
+    end
+
+    test "returns configured warn strategy" do
+      assert Info.budget_strategy(AgentWithBudgetWarn) == :warn
+    end
+
+    test "returns default warn strategy when not configured" do
+      assert Info.budget_strategy(AgentWithoutBudget) == :warn
+    end
+  end
+
+  describe "Error.budget_error/2" do
+    test "creates budget error with details" do
+      error =
+        Error.budget_error("Token budget (1000) exceeded", %{
+          token_budget: 1000,
+          cumulative_tokens: 1500,
+          exceeded_by: 500
+        })
+
+      assert error.type == :budget_error
+      assert error.message == "Token budget (1000) exceeded"
+      assert error.details.token_budget == 1000
+      assert error.details.cumulative_tokens == 1500
+      assert error.details.exceeded_by == 500
+    end
+  end
+
+  describe "budget enforcement in runtime" do
+    test "agent with halt strategy has correct configuration" do
+      assert Info.token_budget(AgentWithBudgetHalt) == 1000
+      assert Info.budget_strategy(AgentWithBudgetHalt) == :halt
+    end
+
+    test "agent with warn strategy has correct configuration" do
+      assert Info.token_budget(AgentWithBudgetWarn) == 1000
+      assert Info.budget_strategy(AgentWithBudgetWarn) == :warn
+    end
+
+    test "agent without budget has nil configuration" do
+      assert Info.token_budget(AgentWithoutBudget) == nil
+      assert Info.budget_strategy(AgentWithoutBudget) == :warn
+    end
+  end
+end
