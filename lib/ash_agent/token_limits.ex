@@ -32,10 +32,11 @@ defmodule AshAgent.TokenLimits do
       iex> TokenLimits.get_limit("anthropic:claude-3-5-sonnet", %{"anthropic:claude-3-5-sonnet" => 100_000})
       100_000
   """
-  @spec get_limit(String.t(), map() | nil) :: non_neg_integer() | nil
-  def get_limit(client, limits \\ nil) when is_binary(client) do
+  @spec get_limit(String.t() | atom(), map() | nil) :: non_neg_integer() | nil
+  def get_limit(client, limits \\ nil) when is_binary(client) or is_atom(client) do
     limits = limits || Application.get_env(:ash_agent, :token_limits, %{})
-    Map.get(limits, client)
+    client_key = if is_atom(client), do: Atom.to_string(client), else: client
+    Map.get(limits, client_key)
   end
 
   @doc """
@@ -81,7 +82,7 @@ defmodule AshAgent.TokenLimits do
       iex> TokenLimits.check_limit(180_000, "anthropic:claude-3-5-sonnet")
       {:warn, 200_000, 0.8}
   """
-  @spec check_limit(non_neg_integer(), String.t(), map() | nil, float() | nil) ::
+  @spec check_limit(non_neg_integer(), String.t() | atom(), map() | nil, float() | nil) ::
           :ok | {:warn, non_neg_integer(), float()}
   def check_limit(cumulative_tokens, client, limits \\ nil, threshold \\ nil)
       when is_integer(cumulative_tokens) do

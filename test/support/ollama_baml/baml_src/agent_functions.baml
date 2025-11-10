@@ -34,14 +34,14 @@ function AgentToolEcho(message: string) -> AgentToolResponse {
     You are a helpful assistant with access to tools.
     When asked to perform calculations, use the add_numbers tool.
     When asked about the original message, use the get_message tool.
-    
+
     Available tools:
     - add_numbers: Add two numbers together. Takes parameters: a (integer), b (integer)
     - get_message: Get the original message. Takes no parameters.
-    
+
     If you need to call a tool, return a ToolCall with tool_name and tool_arguments.
     Otherwise, return a ToolCallResponse with content and confidence set to 0.99.
-    
+
     Message: {{ message }}
     {{ ctx.output_format }}
   "#
