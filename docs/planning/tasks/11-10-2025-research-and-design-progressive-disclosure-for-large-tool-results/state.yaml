@@ -1,0 +1,20 @@
+type: task
+id: 11-10-2025-research-and-design-progressive-disclosure-for-large-tool-results
+status: planning
+phase: design
+complexity: COMPLEX
+created: 2025-11-10
+updated: 2025-11-10
+session:
+  id: 11-10-2025-research-and-design-progressive-disclosure-for-large-tool-results
+  path: .springfield/11-10-2025-research-and-design-progressive-disclosure-for-large-tool-results/
+documentation:
+  primary: prd.md
+  session_research: .springfield/11-10-2025-research-and-design-progressive-disclosure-for-large-tool-results/research.md
+  session_plan: .springfield/11-10-2025-research-and-design-progressive-disclosure-for-large-tool-results/prompt.md
+workflow:
+  created_by: martin
+  implements_by: ralph
+  validated_by: comic-book-guy
+ready_for_implementation: true
+blocking_issues: []
