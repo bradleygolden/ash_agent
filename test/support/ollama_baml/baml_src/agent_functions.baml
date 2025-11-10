@@ -46,29 +46,3 @@ function AgentToolEcho(message: string) -> AgentToolResponse {
     {{ ctx.output_format }}
   "#
 }
-
-class ProgressiveDisclosureOutput {
-  result string
-}
-
-union ProgressiveDisclosureResponse {
-  ToolCall
-  ProgressiveDisclosureOutput
-}
-
-function ProgressiveDisclosureAgent(prompt: string) -> ProgressiveDisclosureResponse {
-  client OllamaClient
-  prompt #"
-    You are a helpful assistant with access to tools.
-    When asked to get large data, use the get_large_data tool.
-
-    Available tools:
-    - get_large_data: Returns a large string for testing. Takes no parameters.
-
-    If you need to call a tool, return a ToolCall with tool_name and tool_arguments.
-    Otherwise, return a ProgressiveDisclosureOutput with result set to "Done!".
-
-    Task: {{ prompt }}
-    {{ ctx.output_format }}
-  "#
-}
