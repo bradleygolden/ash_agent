@@ -714,7 +714,7 @@ defmodule AshAgent.Runtime do
         tool_calls: tool_calls,
         results: results,
         context: ctx,
-        token_usage: ctx.token_usage
+        token_usage: Context.get_cumulative_tokens(ctx)
       }
 
       case Hooks.execute(state.config.hooks, :prepare_tool_results, hook_context) do
@@ -746,7 +746,7 @@ defmodule AshAgent.Runtime do
       hook_context = %{
         agent: state.module,
         context: ctx,
-        token_usage: ctx.token_usage,
+        token_usage: Context.get_cumulative_tokens(ctx),
         iteration: ctx.current_iteration
       }
 
@@ -814,7 +814,7 @@ defmodule AshAgent.Runtime do
       iteration_number: ctx.current_iteration,
       context: ctx,
       result: nil,
-      token_usage: ctx.token_usage,
+      token_usage: Context.get_cumulative_tokens(ctx),
       max_iterations: state.tool_config.max_iterations,
       client: state.config.client
     }
@@ -851,7 +851,7 @@ defmodule AshAgent.Runtime do
       iteration_number: ctx.current_iteration,
       context: ctx,
       result: iteration_result,
-      token_usage: ctx.token_usage,
+      token_usage: Context.get_cumulative_tokens(ctx),
       max_iterations: state.tool_config.max_iterations,
       client: state.config.client
     }
