@@ -82,10 +82,5 @@ defmodule AshAgent.Integration.AgentActionsTest do
         assert String.starts_with?(reply.content, "integration")
       end
     end
-  else
-    @tag :skip
-    test "BAML client not available - skipping tests" do
-      :skip
-    end
   end
 end

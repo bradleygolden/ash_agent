@@ -222,12 +222,44 @@ defmodule AshAgent.Runtime do
 
     ctx = Context.add_assistant_message(ctx, content, tool_calls)
 
+    ctx =
+      case LLMClient.response_usage(response) do
+        nil ->
+          ctx
+
+        usage ->
+          ctx = Context.add_token_usage(ctx, usage)
+          check_token_limit(ctx, state)
+          ctx
+      end
+
     case tool_calls do
       [] ->
         convert_baml_response_to_output(response, state.config.output_type, state.config.provider)
 
-      tool_calls ->
-        execute_tool_calls(tool_calls, state, ctx)
+      calls when is_list(calls) ->
+        execute_tool_calls(calls, state, ctx)
+    end
+  end
+
+  defp check_token_limit(ctx, %LoopState{} = state) do
+    cumulative = Context.get_cumulative_tokens(ctx)
+
+    case AshAgent.TokenLimits.check_limit(cumulative.total_tokens, state.config.client) do
+      :ok ->
+        :ok
+
+      {:warn, limit, threshold} ->
+        :telemetry.execute(
+          [:ash_agent, :token_limit_warning],
+          %{cumulative_tokens: cumulative.total_tokens},
+          %{
+            agent: state.module,
+            limit: limit,
+            threshold_percent: trunc(threshold * 100),
+            cumulative_tokens: cumulative.total_tokens
+          }
+        )
     end
   end
 
@@ -267,9 +299,23 @@ defmodule AshAgent.Runtime do
   end
 
   defp convert_baml_union_to_output(%_{} = response, output_type) do
-    struct_map = Map.from_struct(response)
-    struct_name = response.__struct__ |> Module.split() |> List.last()
+    struct_module = response.__struct__
 
+    if Map.has_key?(response, :data) and function_exported?(struct_module, :usage, 1) do
+      convert_baml_union_to_output(response.data, output_type)
+    else
+      struct_map = Map.from_struct(response)
+      struct_name = struct_module |> Module.split() |> List.last()
+
+      handle_baml_struct(response, struct_map, struct_name, output_type)
+    end
+  end
+
+  defp convert_baml_union_to_output(response, output_type) do
+    LLMClient.parse_response(output_type, response)
+  end
+
+  defp handle_baml_struct(response, struct_map, struct_name, output_type) do
     cond do
       String.contains?(struct_name, "ToolCallResponse") ->
         case Map.take(struct_map, [:content, :confidence]) do
@@ -300,10 +346,6 @@ defmodule AshAgent.Runtime do
          response: response,
          exception: e
        })}
-  end
-
-  defp convert_baml_union_to_output(response, output_type) do
-    LLMClient.parse_response(output_type, response)
   end
 
   defp extract_content(response, provider) when provider in [:baml, AshAgent.Providers.Baml] do
