@@ -150,7 +150,6 @@ defmodule AshAgent.Integration.ProgressiveDisclosureTest do
       end
 
       # Stub LLM with sequence: first call tool, then return structured output
-      alias AshAgent.Test.LLMStub
       call_count = :counters.new(1, [])
 
       Req.Test.stub(AshAgent.LLMStub, fn conn ->

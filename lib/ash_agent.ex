@@ -34,6 +34,22 @@ defmodule AshAgent do
   - Integration with Ash resources and domains
   - Type-safe configuration
   - Extensible architecture
+  - Hook system for customizing agent behavior
+  - Progressive Disclosure patterns for managing context and token usage
+
+  ## Customizing Agent Behavior
+
+  AshAgent provides a comprehensive hook system for extending and customizing
+  agent behavior at runtime. Hooks allow you to:
+
+  - Transform tool results before adding to context
+  - Compact or summarize context to manage token usage
+  - Filter or augment messages sent to the LLM
+  - Implement custom stopping conditions
+  - Track iterations and emit custom telemetry
+
+  See `AshAgent.Runtime.Hooks` for complete documentation and examples of
+  implementing Progressive Disclosure patterns.
 
   ## Links
 
