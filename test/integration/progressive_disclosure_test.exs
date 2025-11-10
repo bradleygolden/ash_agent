@@ -30,10 +30,8 @@ defmodule AshAgent.Integration.ProgressiveDisclosureTest do
 
     @impl true
     def prepare_context(ctx) do
-      # Compact context - keep only last 3 iterations
       compacted_context =
         if length(ctx.context.iterations) > 3 do
-          # Keep only last 3 iterations
           iterations_to_keep = Enum.take(ctx.context.iterations, -3)
 
           %{ctx.context | iterations: iterations_to_keep}
@@ -46,7 +44,6 @@ defmodule AshAgent.Integration.ProgressiveDisclosureTest do
 
     @impl true
     def on_iteration_start(ctx) do
-      # Custom stopping condition: stop after 3 iterations
       if ctx.iteration_number >= 3 do
         {:error,
          AshAgent.Error.llm_error("Custom stop condition reached", %{
@@ -60,7 +57,6 @@ defmodule AshAgent.Integration.ProgressiveDisclosureTest do
 
     @impl true
     def on_iteration_complete(ctx) do
-      # Send message to test process for verification
       test_pid = Process.get(:test_pid)
 
       if test_pid do
@@ -91,7 +87,6 @@ defmodule AshAgent.Integration.ProgressiveDisclosureTest do
 
   describe "tool result compaction" do
     test "truncates large tool results to 100 characters" do
-      # Hooks that only truncate results (no custom stopping conditions)
       defmodule TruncateOnlyHooks do
         @moduledoc false
         @behaviour AshAgent.Runtime.Hooks
@@ -115,7 +110,6 @@ defmodule AshAgent.Integration.ProgressiveDisclosureTest do
         end
       end
 
-      # Create agent with truncate-only hooks
       defmodule ToolCompactionAgent do
         @moduledoc false
         use Ash.Resource,
@@ -144,12 +138,10 @@ defmodule AshAgent.Integration.ProgressiveDisclosureTest do
         end
 
         def get_large_data_func(_args, _context) do
-          # Return deterministic large string (500 chars)
           {:ok, String.duplicate("A", 500)}
         end
       end
 
-      # Stub LLM with sequence: first call tool, then return structured output
       call_count = :counters.new(1, [])
 
       Req.Test.stub(AshAgent.LLMStub, fn conn ->
@@ -157,7 +149,6 @@ defmodule AshAgent.Integration.ProgressiveDisclosureTest do
         :counters.add(call_count, 1, 1)
 
         if count == 0 do
-          # First call: use the tool
           Req.Test.json(conn, %{
             "id" => "msg_test",
             "type" => "message",
@@ -178,7 +169,6 @@ defmodule AshAgent.Integration.ProgressiveDisclosureTest do
             }
           })
         else
-          # Second call: return structured output
           Req.Test.json(conn, %{
             "id" => "msg_final",
             "type" => "message",
@@ -203,20 +193,15 @@ defmodule AshAgent.Integration.ProgressiveDisclosureTest do
         end
       end)
 
-      # Call agent
       result = AshAgent.Runtime.call(ToolCompactionAgent, %{})
 
-      # Verify tool was called and result was truncated
       assert {:ok, response} = result
 
-      # Check that context contains truncated result (100 chars, not 500)
       assert response.context.iterations[1].tool_results != nil
 
-      # Get the tool result from context
       tool_results = response.context.iterations[1].tool_results
       assert [{_tool_name, {:ok, truncated_data}}] = tool_results
 
-      # Verify truncation happened (should be 100 chars, not 500)
       assert String.length(truncated_data) == 100
       assert truncated_data == String.duplicate("A", 100)
     end
