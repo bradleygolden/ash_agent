@@ -61,4 +61,43 @@ defmodule AshAgent.Info do
       on_error: Extension.get_opt(resource, [:tools], :on_error, :continue)
     }
   end
+
+  @doc """
+  Get the configured token budget for an agent resource.
+
+  Returns the maximum number of tokens allowed for agent execution,
+  or nil if no budget is configured.
+
+  ## Examples
+
+      iex> AshAgent.Info.token_budget(MyAgent)
+      10000
+
+      iex> AshAgent.Info.token_budget(UnlimitedAgent)
+      nil
+  """
+  @spec token_budget(Ash.Resource.t()) :: pos_integer() | nil
+  def token_budget(resource) do
+    Extension.get_opt(resource, [:agent], :token_budget, nil)
+  end
+
+  @doc """
+  Get the configured budget strategy for an agent resource.
+
+  Returns the strategy for handling token budget limits:
+  - :halt - Stop execution and return error when limit exceeded
+  - :warn - Emit warning but continue (default)
+
+  ## Examples
+
+      iex> AshAgent.Info.budget_strategy(MyAgent)
+      :halt
+
+      iex> AshAgent.Info.budget_strategy(DefaultAgent)
+      :warn
+  """
+  @spec budget_strategy(Ash.Resource.t()) :: :halt | :warn
+  def budget_strategy(resource) do
+    Extension.get_opt(resource, [:agent], :budget_strategy, :warn)
+  end
 end

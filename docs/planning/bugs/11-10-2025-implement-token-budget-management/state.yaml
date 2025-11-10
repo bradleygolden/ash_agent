@@ -1,0 +1,20 @@
+type: bug
+id: 11-10-2025-implement-token-budget-management
+status: planning
+phase: design
+complexity: SIMPLE
+created: 2025-11-10
+updated: 2025-11-10
+session:
+  id: 11-10-2025-implement-token-budget-management
+  path: /Users/bradleygolden/Development/bradleygolden/ash_agent/.springfield/11-10-2025-implement-token-budget-management/
+documentation:
+  primary: doc.md
+  session_research: /Users/bradleygolden/Development/bradleygolden/ash_agent/.springfield/11-10-2025-implement-token-budget-management/research.md
+  session_plan: /Users/bradleygolden/Development/bradleygolden/ash_agent/.springfield/11-10-2025-implement-token-budget-management/prompt.md
+workflow:
+  created_by: martin
+  implements_by: ralph
+  validated_by: comic-book-guy
+ready_for_implementation: true
+blocking_issues: []

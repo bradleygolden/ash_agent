@@ -145,6 +145,28 @@ defmodule AshAgent.DSL do
 
         See `AshAgent.Runtime.Hooks` for more details.
         """
+      ],
+      token_budget: [
+        type: :pos_integer,
+        required: false,
+        doc: """
+        Maximum number of tokens allowed for this agent execution.
+
+        When set, the agent will track cumulative token usage and enforce
+        the budget according to the configured budget_strategy.
+        """
+      ],
+      budget_strategy: [
+        type: {:in, [:halt, :warn]},
+        default: :warn,
+        doc: """
+        Strategy for handling token budget limits.
+
+        - :halt - Stop execution and return budget error when limit exceeded
+        - :warn - Emit telemetry warning at threshold (default 80%) but continue
+
+        Defaults to :warn for backward compatibility.
+        """
       ]
     ],
     sections: [@input]
