@@ -73,8 +73,8 @@ defmodule AshAgent.Runtime.DefaultHooks do
     if ctx.iteration_number >= ctx.max_iterations do
       {:error,
        Error.llm_error(
-         message: "Max iterations (#{ctx.max_iterations}) exceeded",
-         details: %{
+         "Max iterations (#{ctx.max_iterations}) exceeded",
+         %{
            max: ctx.max_iterations,
            current: ctx.iteration_number
          }
