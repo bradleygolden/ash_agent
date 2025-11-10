@@ -821,7 +821,13 @@ defmodule AshAgent.Runtime do
   end
 
   defp execute_on_iteration_start_hook(ctx, %LoopState{} = state) do
-    # Check max iterations first (always enforced)
+    with :ok <- check_max_iterations(ctx, state),
+         :ok <- check_token_budget(ctx, state) do
+      execute_custom_iteration_start_hook(ctx, state)
+    end
+  end
+
+  defp check_max_iterations(ctx, %LoopState{} = state) do
     if ctx.current_iteration >= state.tool_config.max_iterations do
       {:error,
        Error.llm_error(
@@ -832,38 +838,84 @@ defmodule AshAgent.Runtime do
          }
        )}
     else
-      # Then call custom hook if configured
-      if state.config.hooks do
-        hook_context = %{
-          agent: state.module,
-          iteration_number: ctx.current_iteration,
-          context: ctx,
-          result: nil,
-          token_usage: Context.get_cumulative_tokens(ctx),
-          max_iterations: state.tool_config.max_iterations,
-          client: state.config.client
-        }
+      :ok
+    end
+  end
 
+  defp execute_custom_iteration_start_hook(ctx, %LoopState{} = state) do
+    if state.config.hooks do
+      hook_context = %{
+        agent: state.module,
+        iteration_number: ctx.current_iteration,
+        context: ctx,
+        result: nil,
+        token_usage: Context.get_cumulative_tokens(ctx),
+        max_iterations: state.tool_config.max_iterations,
+        client: state.config.client
+      }
+
+      :telemetry.execute(
+        [:ash_agent, :hook, :start],
+        %{},
+        %{hook_name: :on_iteration_start}
+      )
+
+      start_time = System.monotonic_time()
+      result = Hooks.execute(state.config.hooks, :on_iteration_start, hook_context)
+      duration = System.monotonic_time() - start_time
+
+      :telemetry.execute(
+        [:ash_agent, :hook, :stop],
+        %{duration: duration},
+        %{hook_name: :on_iteration_start}
+      )
+
+      result
+    else
+      {:ok, ctx}
+    end
+  end
+
+  defp check_token_budget(ctx, %LoopState{} = state) do
+    budget = Extension.get_opt(state.module, [:agent], :token_budget, nil)
+    strategy = Extension.get_opt(state.module, [:agent], :budget_strategy, :warn)
+    cumulative = Context.get_cumulative_tokens(ctx)
+
+    case AshAgent.TokenLimits.check_limit(
+           cumulative.total_tokens,
+           state.config.client,
+           nil,
+           nil,
+           budget,
+           strategy
+         ) do
+      :ok ->
+        :ok
+
+      {:warn, limit, threshold} ->
         :telemetry.execute(
-          [:ash_agent, :hook, :start],
-          %{},
-          %{hook_name: :on_iteration_start}
+          [:ash_agent, :token_limit_warning],
+          %{cumulative_tokens: cumulative.total_tokens},
+          %{
+            agent: state.module,
+            limit: limit,
+            threshold_percent: trunc(threshold * 100),
+            cumulative_tokens: cumulative.total_tokens
+          }
         )
 
-        start_time = System.monotonic_time()
-        result = Hooks.execute(state.config.hooks, :on_iteration_start, hook_context)
-        duration = System.monotonic_time() - start_time
+        :ok
 
-        :telemetry.execute(
-          [:ash_agent, :hook, :stop],
-          %{duration: duration},
-          %{hook_name: :on_iteration_start}
-        )
-
-        result
-      else
-        {:ok, ctx}
-      end
+      {:error, :budget_exceeded} ->
+        {:error,
+         Error.budget_error(
+           "Token budget (#{budget}) exceeded",
+           %{
+             token_budget: budget,
+             cumulative_tokens: cumulative.total_tokens,
+             exceeded_by: cumulative.total_tokens - budget
+           }
+         )}
     end
   end
 

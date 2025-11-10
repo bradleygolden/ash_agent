@@ -240,6 +240,8 @@ defmodule AshAgent.RuntimeTest do
 
       stream = Runtime.stream!(MinimalAgent, %{})
       assert is_function(stream) or is_struct(stream, Stream)
+
+      _results = Enum.to_list(stream)
     end
   end
 

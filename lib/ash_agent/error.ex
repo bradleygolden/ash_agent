@@ -21,6 +21,7 @@ defmodule AshAgent.Error do
           | :parse_error
           | :hook_error
           | :validation_error
+          | :budget_error
 
   def config_error(message, details \\ %{}) do
     %__MODULE__{
@@ -73,6 +74,14 @@ defmodule AshAgent.Error do
   def validation_error(message, details \\ %{}) do
     %__MODULE__{
       type: :validation_error,
+      message: message,
+      details: details
+    }
+  end
+
+  def budget_error(message, details \\ %{}) do
+    %__MODULE__{
+      type: :budget_error,
       message: message,
       details: details
     }

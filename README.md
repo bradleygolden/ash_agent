@@ -101,7 +101,7 @@ MyApp.Agents.Assistant.stream(message: "Hello!")
   - [x] Tool calling support
   - [x] Iteration-based context tracking
   - [x] Structured message history
-  - [ ] Token budget management
+  - [x] Token budget management
   - [ ] Context compaction/summarization
   - [ ] Progressive disclosure for large tool results
   - [ ] External memory persistence
