@@ -718,8 +718,12 @@ defmodule AshAgent.Runtime do
       }
 
       case Hooks.execute(state.config.hooks, :prepare_tool_results, hook_context) do
-        {:ok, updated_results} ->
+        {:ok, updated_results} when is_list(updated_results) ->
           updated_results
+
+        {:ok, ^hook_context} ->
+          # Hook not implemented, Hooks.execute returned the context map as-is
+          results
 
         {:error, reason} ->
           require Logger
@@ -751,8 +755,12 @@ defmodule AshAgent.Runtime do
       }
 
       case Hooks.execute(state.config.hooks, :prepare_context, hook_context) do
-        {:ok, updated_ctx} ->
+        {:ok, %AshAgent.Context{} = updated_ctx} ->
           updated_ctx
+
+        {:ok, ^hook_context} ->
+          # Hook not implemented, Hooks.execute returned the context map as-is
+          ctx
 
         {:error, reason} ->
           require Logger
@@ -785,8 +793,12 @@ defmodule AshAgent.Runtime do
       }
 
       case Hooks.execute(state.config.hooks, :prepare_messages, hook_context) do
-        {:ok, updated_messages} ->
+        {:ok, updated_messages} when is_list(updated_messages) ->
           updated_messages
+
+        {:ok, ^hook_context} ->
+          # Hook not implemented, Hooks.execute returned the context map as-is
+          messages
 
         {:error, reason} ->
           require Logger

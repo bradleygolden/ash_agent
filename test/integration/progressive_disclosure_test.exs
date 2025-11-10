@@ -91,7 +91,31 @@ defmodule AshAgent.Integration.ProgressiveDisclosureTest do
 
   describe "tool result compaction" do
     test "truncates large tool results to 100 characters" do
-      # Create agent WITHOUT hooks first to test basic flow
+      # Hooks that only truncate results (no custom stopping conditions)
+      defmodule TruncateOnlyHooks do
+        @moduledoc false
+        @behaviour AshAgent.Runtime.Hooks
+
+        @impl true
+        def prepare_tool_results(ctx) do
+          truncated_results =
+            Enum.map(ctx.results, fn
+              {tool_name, {:ok, data}} when is_binary(data) ->
+                if String.length(data) > 100 do
+                  {tool_name, {:ok, String.slice(data, 0, 100)}}
+                else
+                  {tool_name, {:ok, data}}
+                end
+
+              {tool_name, result} ->
+                {tool_name, result}
+            end)
+
+          {:ok, truncated_results}
+        end
+      end
+
+      # Create agent with truncate-only hooks
       defmodule ToolCompactionAgent do
         @moduledoc false
         use Ash.Resource,
@@ -106,6 +130,8 @@ defmodule AshAgent.Integration.ProgressiveDisclosureTest do
           client "test-stub:model"
           output AshAgent.Integration.ProgressiveDisclosureTest.TestOutput
           prompt "Get the large data"
+
+          hooks AshAgent.Integration.ProgressiveDisclosureTest.ToolCompactionAgent.TruncateOnlyHooks
         end
 
         tools do
