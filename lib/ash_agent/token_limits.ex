@@ -63,9 +63,10 @@ defmodule AshAgent.TokenLimits do
   end
 
   @doc """
-  Checks if cumulative tokens have exceeded the warning threshold.
+  Checks if cumulative tokens have exceeded the warning threshold or hard limit.
 
-  Returns `{:warn, limit, threshold}` if threshold exceeded,
+  Returns `{:error, :budget_exceeded}` if hard limit exceeded and strategy is :halt,
+  `{:warn, limit, threshold}` if threshold exceeded,
   or `:ok` otherwise.
 
   ## Parameters
@@ -73,6 +74,8 @@ defmodule AshAgent.TokenLimits do
     - `client` - The client identifier
     - `limits` - Optional limits map. If provided, uses this instead of application config.
     - `threshold` - Optional threshold value. If provided, uses this instead of application config.
+    - `budget` - Optional hard budget limit. If provided and exceeded, returns error when strategy is :halt.
+    - `strategy` - Budget enforcement strategy (:halt or :warn). Defaults to :warn.
 
   ## Examples
 
@@ -81,24 +84,53 @@ defmodule AshAgent.TokenLimits do
 
       iex> TokenLimits.check_limit(180_000, "anthropic:claude-3-5-sonnet")
       {:warn, 200_000, 0.8}
+
+      iex> TokenLimits.check_limit(150_000, "anthropic:claude-3-5-sonnet", nil, nil, 100_000, :halt)
+      {:error, :budget_exceeded}
+
+      iex> TokenLimits.check_limit(150_000, "anthropic:claude-3-5-sonnet", nil, nil, 100_000, :warn)
+      {:warn, 100_000, 0.8}
   """
-  @spec check_limit(non_neg_integer(), String.t() | atom(), map() | nil, float() | nil) ::
-          :ok | {:warn, non_neg_integer(), float()}
-  def check_limit(cumulative_tokens, client, limits \\ nil, threshold \\ nil)
+  @spec check_limit(
+          non_neg_integer(),
+          String.t() | atom(),
+          map() | nil,
+          float() | nil,
+          pos_integer() | nil,
+          :halt | :warn
+        ) ::
+          :ok | {:warn, non_neg_integer(), float()} | {:error, :budget_exceeded}
+  def check_limit(
+        cumulative_tokens,
+        client,
+        limits \\ nil,
+        threshold \\ nil,
+        budget \\ nil,
+        strategy \\ :warn
+      )
       when is_integer(cumulative_tokens) do
-    case get_limit(client, limits) do
-      nil ->
+    effective_limit = budget || get_limit(client, limits)
+
+    cond do
+      is_nil(effective_limit) ->
         :ok
 
-      limit ->
-        threshold = get_warning_threshold(threshold)
-        threshold_tokens = trunc(limit * threshold)
+      budget && strategy == :halt && cumulative_tokens >= budget ->
+        {:error, :budget_exceeded}
 
-        if cumulative_tokens >= threshold_tokens do
-          {:warn, limit, threshold}
-        else
-          :ok
-        end
+      true ->
+        check_warning_threshold(cumulative_tokens, effective_limit, threshold)
+    end
+  end
+
+  defp check_warning_threshold(cumulative_tokens, limit, threshold) do
+    threshold = get_warning_threshold(threshold)
+    threshold_tokens = trunc(limit * threshold)
+
+    if cumulative_tokens >= threshold_tokens do
+      {:warn, limit, threshold}
+    else
+      :ok
     end
   end
 end
