@@ -272,6 +272,7 @@ defmodule AshAgent.Runtime do
     }
 
     results = ToolExecutor.execute_tools(tool_calls, state.config.tools, runtime_context)
+    results = execute_prepare_tool_results_hook(results, tool_calls, ctx, state)
 
     if has_tool_errors?(results, state.tool_config) do
       {:error, Error.llm_error("Tool execution failed")}
@@ -720,5 +721,40 @@ defmodule AshAgent.Runtime do
       client: config.client,
       type: type
     }
+  end
+
+  defp execute_prepare_tool_results_hook(results, tool_calls, ctx, %LoopState{} = state) do
+    if state.config.hooks do
+      hook_context = %{
+        agent: state.module,
+        iteration: ctx.current_iteration,
+        tool_calls: tool_calls,
+        results: results,
+        context: ctx,
+        token_usage: ctx.token_usage
+      }
+
+      case Hooks.execute(state.config.hooks, :prepare_tool_results, hook_context) do
+        {:ok, updated_results} ->
+          updated_results
+
+        {:error, reason} ->
+          require Logger
+
+          Logger.warning(
+            "prepare_tool_results hook failed: #{inspect(reason)}, using original results"
+          )
+
+          :telemetry.execute(
+            [:ash_agent, :hook, :error],
+            %{},
+            %{hook_name: :prepare_tool_results, error: reason}
+          )
+
+          results
+      end
+    else
+      results
+    end
   end
 end
