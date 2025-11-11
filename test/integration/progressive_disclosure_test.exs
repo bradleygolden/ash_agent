@@ -19,40 +19,24 @@ defmodule AshAgent.Integration.ProgressiveDisclosureTest do
     @moduledoc """
     Hooks module implementing Progressive Disclosure patterns.
 
-    Configuration can be overridden per test via state map.
+    Uses default configuration: truncate to 100 bytes for testing.
     """
     @behaviour AshAgent.Runtime.Hooks
 
-    def prepare_tool_results(%{results: results} = state) do
-      opts = Map.get(state, :pd_result_opts, [])
-      processed = ProgressiveDisclosure.process_tool_results(results, opts)
+    def prepare_tool_results(%{results: results}) do
+      # Use truncation for testing (max 100 bytes)
+      processed = ProgressiveDisclosure.process_tool_results(results, truncate: 100)
       {:ok, processed}
     end
 
-    def prepare_context(%{context: ctx} = state) do
-      opts = Map.get(state, :pd_context_opts, [])
-
-      compacted =
-        case Keyword.get(opts, :strategy) do
-          :sliding_window ->
-            window_size = Keyword.fetch!(opts, :window_size)
-            ProgressiveDisclosure.sliding_window_compact(ctx, window_size: window_size)
-
-          :token_based ->
-            budget = Keyword.fetch!(opts, :budget)
-            threshold = Keyword.get(opts, :threshold, 1.0)
-            ProgressiveDisclosure.token_based_compact(ctx, budget: budget, threshold: threshold)
-
-          nil ->
-            ctx
-        end
-
-      {:ok, compacted}
+    def prepare_context(%{context: ctx}) do
+      # No compaction by default in this test hook
+      {:ok, ctx}
     end
 
     def prepare_messages(%{messages: msgs}), do: {:ok, msgs}
-    def on_iteration_start(%{iteration_context: ctx}), do: {:ok, ctx}
-    def on_iteration_complete(%{iteration_context: ctx}), do: {:ok, ctx}
+    def on_iteration_start(ctx), do: {:ok, ctx}
+    def on_iteration_complete(ctx), do: {:ok, ctx}
   end
 
   # ============================================================================
@@ -147,9 +131,145 @@ defmodule AshAgent.Integration.ProgressiveDisclosureTest do
   end
 
   # ============================================================================
+  # Subtask 4.2: Tool Result Truncation Integration Test
+  # ============================================================================
+
+  describe "tool result truncation" do
+    defmodule TruncationTestAgent do
+      @moduledoc """
+      Agent that uses PDHooks for truncation testing.
+
+      Returns large data from tools to demonstrate truncation.
+      """
+      use Ash.Resource,
+        domain: TestDomain,
+        extensions: [AshAgent.Resource]
+
+      resource do
+        require_primary_key? false
+      end
+
+      defmodule LargeOutput do
+        use Ash.TypedStruct
+
+        typed_struct do
+          field :content, :string
+        end
+      end
+
+      # Tool that returns large binary data
+      def get_large_data(_args, _context) do
+        # Generate ~10KB of data
+        large_string = String.duplicate("Large data chunk. ", 500)
+        {:ok, %{data: large_string}}
+      end
+
+      # Tool that returns small data
+      def get_small_data(_args, _context) do
+        {:ok, %{data: "Small data"}}
+      end
+
+      agent do
+        provider :req_llm
+
+        client("openai:qwen3:1.7b",
+          base_url: "http://localhost:11434/v1",
+          api_key: "ollama",
+          temperature: 0.0
+        )
+
+        output LargeOutput
+
+        input do
+          argument :message, :string, allow_nil?: false
+        end
+
+        prompt """
+        You are a test assistant.
+        When asked for data, use the appropriate tool and return the result.
+        Reply with JSON matching ctx.output_format exactly.
+        {{ output_format }}
+        """
+
+        hooks PDHooks
+
+        tools do
+          max_iterations(3)
+          timeout 30_000
+          on_error(:continue)
+
+          tool :get_large_data do
+            description "Get large test data"
+            function({__MODULE__, :get_large_data, []})
+            parameters([])
+          end
+
+          tool :get_small_data do
+            description "Get small test data"
+            function({__MODULE__, :get_small_data, []})
+            parameters([])
+          end
+        end
+      end
+
+      code_interface do
+        define :call, args: [:message]
+      end
+    end
+
+    test "large tool results are truncated via hooks" do
+      # Note: This test requires Ollama with qwen3:1.7b to be running
+      # The hook is configured in PDHooks with truncate: 100
+      result = TruncationTestAgent.call("Get large data")
+
+      # Extract context safely
+      context = extract_context!(result)
+
+      # Verify agent executed at least one iteration
+      iteration_count = Context.count_iterations(context)
+
+      assert iteration_count > 0,
+             "Agent did not iterate (count=#{iteration_count})"
+
+      # Find iteration that called get_large_data tool
+      iteration = find_iteration_with_tool!(context, "get_large_data")
+
+      # Extract the tool result safely
+      tool_result = extract_tool_result!(iteration, "get_large_data")
+
+      # Verify result was truncated
+      # Original result would be ~10KB (500 * 18 bytes)
+      # Truncated result should be much smaller (~100 bytes + marker)
+      result_size = byte_size(tool_result)
+
+      assert result_size <= 200,
+             "Result not truncated: #{result_size} bytes (expected ≤200)"
+
+      # Verify truncation marker is present
+      assert String.contains?(tool_result, "[truncated]") or
+               String.contains?(tool_result, "..."),
+             "Truncation marker not found in result"
+    end
+
+    test "small tool results are not truncated" do
+      result = TruncationTestAgent.call("Get small data")
+
+      context = extract_context!(result)
+      iteration = find_iteration_with_tool!(context, "get_small_data")
+      tool_result = extract_tool_result!(iteration, "get_small_data")
+
+      # Small result should NOT contain truncation marker
+      refute String.contains?(tool_result, "[truncated]"),
+             "Small result was unexpectedly truncated"
+
+      refute String.contains?(tool_result, "..."),
+             "Small result was unexpectedly truncated"
+    end
+  end
+
+  # ============================================================================
   # Placeholder for future subtasks
   # ============================================================================
-  # Subtask 4.2: Tool Result Truncation Integration Test
   # Subtask 4.3: Context Compaction Integration Test
   # Subtask 4.4: Token Budget Integration Test
   # Subtask 4.5: Processor Composition Integration Test
