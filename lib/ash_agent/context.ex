@@ -217,7 +217,6 @@ defmodule AshAgent.Context do
       iex> Enum.map(compacted.iterations, & &1.number)
       [4, 5]
   """
-  @spec keep_last_iterations(t(), pos_integer()) :: t()
   def keep_last_iterations(context, count) when is_integer(count) and count > 0 do
     recent_iterations = Enum.take(context.iterations, -count)
     %{context | iterations: recent_iterations}
@@ -240,7 +239,6 @@ defmodule AshAgent.Context do
       iex> length(recent.iterations)
       1
   """
-  @spec remove_old_iterations(t(), non_neg_integer()) :: t()
   def remove_old_iterations(context, max_age_seconds)
       when is_integer(max_age_seconds) and max_age_seconds >= 0 do
     cutoff = DateTime.add(DateTime.utc_now(), -max_age_seconds, :second)
@@ -265,7 +263,6 @@ defmodule AshAgent.Context do
       iex> AshAgent.Context.count_iterations(context)
       3
   """
-  @spec count_iterations(t()) :: non_neg_integer()
   def count_iterations(context), do: length(context.iterations)
 
   @doc """
@@ -280,7 +277,6 @@ defmodule AshAgent.Context do
       iex> Enum.map(sliced.iterations, & &1.n)
       [2, 3, 4]
   """
-  @spec get_iteration_range(t(), non_neg_integer(), non_neg_integer()) :: t()
   def get_iteration_range(context, start_idx, end_idx)
       when is_integer(start_idx) and is_integer(end_idx) and start_idx >= 0 and
              end_idx >= start_idx do
@@ -306,7 +302,6 @@ defmodule AshAgent.Context do
       iex> summarized.metadata.summary
       "User asked about weather"
   """
-  @spec mark_as_summarized(map(), String.t()) :: map()
   def mark_as_summarized(iteration, summary) when is_map(iteration) and is_binary(summary) do
     updated_metadata =
       Map.get(iteration, :metadata, %{})
@@ -330,7 +325,6 @@ defmodule AshAgent.Context do
       iex> AshAgent.Context.is_summarized?(iteration)
       false
   """
-  @spec is_summarized?(map()) :: boolean()
   def is_summarized?(iteration) when is_map(iteration) do
     get_in(iteration, [:metadata, :summarized]) == true
   end
@@ -350,7 +344,6 @@ defmodule AshAgent.Context do
       iex> AshAgent.Context.get_summary(iteration)
       nil
   """
-  @spec get_summary(map()) :: String.t() | nil
   def get_summary(iteration) when is_map(iteration) do
     get_in(iteration, [:metadata, :summary])
   end
@@ -365,7 +358,6 @@ defmodule AshAgent.Context do
       iex> updated.metadata.custom_key
       "value"
   """
-  @spec update_iteration_metadata(map(), atom(), any()) :: map()
   def update_iteration_metadata(iteration, key, value)
       when is_map(iteration) and is_atom(key) do
     updated_metadata =
@@ -390,7 +382,6 @@ defmodule AshAgent.Context do
       iex> AshAgent.Context.exceeds_token_budget?(small_context, 100_000)
       false
   """
-  @spec exceeds_token_budget?(t(), pos_integer()) :: boolean()
   def exceeds_token_budget?(context, budget)
       when is_integer(budget) and budget > 0 do
     estimate_token_count(context) > budget
@@ -420,7 +411,6 @@ defmodule AshAgent.Context do
       iex> estimate > 0
       true
   """
-  @spec estimate_token_count(t()) :: non_neg_integer()
   def estimate_token_count(context) do
     messages = to_messages(context)
 
@@ -446,7 +436,6 @@ defmodule AshAgent.Context do
       iex> AshAgent.Context.tokens_remaining(context, 50_000)
       50_000
   """
-  @spec tokens_remaining(t(), pos_integer()) :: non_neg_integer()
   def tokens_remaining(context, budget)
       when is_integer(budget) and budget > 0 do
     max(0, budget - estimate_token_count(context))
@@ -464,7 +453,6 @@ defmodule AshAgent.Context do
       iex> utilization >= 0.0 and utilization < 0.1
       true
   """
-  @spec budget_utilization(t(), pos_integer()) :: float()
   def budget_utilization(context, budget)
       when is_integer(budget) and budget > 0 do
     estimate_token_count(context) / budget

@@ -146,10 +146,6 @@ end
 - **Token Budget**: Enforce token limits with automatic compaction
 - **Telemetry**: Monitor PD usage and effectiveness
 
-### Learn More
-
-See the [Progressive Disclosure Guide](documentation/guides/progressive-disclosure.md) for comprehensive documentation.
-
 ## Documentation
 
 - API Reference: `mix docs && open doc/index.html`
