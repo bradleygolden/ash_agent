@@ -342,6 +342,10 @@ defmodule AshAgentWeb.AgentLive do
   def render(assigns) do
     ~H"""
     <div class="agent-dashboard">
+      <div class="breadcrumb">
+        <a href="/" class="breadcrumb-link">← All Agents</a>
+      </div>
+
       <div class="header">
         <h1>AshAgent Monitor</h1>
         <%= if @agent do %>
@@ -492,6 +496,17 @@ defmodule AshAgentWeb.AgentLive do
 
       <style>
         .agent-dashboard { padding: 2rem; font-family: system-ui, -apple-system, sans-serif; max-width: 1200px; margin: 0 auto; }
+
+        .breadcrumb { margin-bottom: 1rem; }
+        .breadcrumb-link {
+          color: #3b82f6;
+          text-decoration: none;
+          font-size: 0.875rem;
+          font-weight: 500;
+          transition: color 0.2s;
+        }
+        .breadcrumb-link:hover { color: #2563eb; }
+
         .header { margin-bottom: 2rem; }
         .header h1 { margin: 0; font-size: 2rem; color: #1a1a1a; }
         .header h2 { margin: 0.5rem 0 0; font-size: 1.25rem; color: #666; font-weight: 500; }

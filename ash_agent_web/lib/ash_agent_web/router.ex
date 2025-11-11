@@ -14,7 +14,7 @@ defmodule AshAgentWeb.Router do
   scope "/", AshAgentWeb do
     pipe_through :browser
 
-    live "/", AgentLive
+    live "/", HomeLive
     live "/agents/:agent", AgentLive
   end
 end
