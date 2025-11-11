@@ -47,7 +47,6 @@ defmodule AshAgent.ResultProcessors.Truncate do
     max_size = Keyword.get(opts, :max_size, @default_max_size)
     marker = Keyword.get(opts, :marker, @default_marker)
 
-    # Validate max_size
     unless is_integer(max_size) and max_size > 0 do
       raise ArgumentError, "max_size must be a positive integer, got: #{inspect(max_size)}"
     end
@@ -57,25 +56,20 @@ defmodule AshAgent.ResultProcessors.Truncate do
     end)
   end
 
-  # Truncate a single result entry
   defp truncate_result({name, {:ok, data}} = entry, max_size, marker) do
     if ResultProcessors.large?(data, max_size) do
       truncated_data = truncate_data(data, max_size, marker)
       {name, {:ok, truncated_data}}
     else
-      # Data is small enough, pass through unchanged
       entry
     end
   end
 
-  # Preserve error results unchanged
   defp truncate_result({_name, {:error, _reason}} = entry, _max_size, _marker) do
     entry
   end
 
-  # Truncate binary data (UTF-8 safe!)
   defp truncate_data(data, max_size, marker) when is_binary(data) do
-    # Use String.slice for UTF-8 safety, not binary_part
     if String.length(data) > max_size do
       String.slice(data, 0, max_size) <> marker
     else
@@ -83,7 +77,6 @@ defmodule AshAgent.ResultProcessors.Truncate do
     end
   end
 
-  # Truncate list data
   defp truncate_data(data, max_size, marker) when is_list(data) do
     if length(data) > max_size do
       Enum.take(data, max_size) ++ [marker]
@@ -92,24 +85,20 @@ defmodule AshAgent.ResultProcessors.Truncate do
     end
   end
 
-  # Truncate map data
   defp truncate_data(data, max_size, marker) when is_map(data) do
     keys = Map.keys(data)
     key_count = length(keys)
 
     if key_count > max_size do
-      # Take first max_size keys
       kept_keys = Enum.take(keys, max_size)
       truncated_map = Map.take(data, kept_keys)
 
-      # Add truncation marker
       Map.put(truncated_map, :__truncated__, marker)
     else
       data
     end
   end
 
-  # Pass through other types unchanged
   defp truncate_data(data, _max_size, _marker) do
     data
   end

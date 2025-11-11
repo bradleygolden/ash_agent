@@ -347,7 +347,6 @@ defmodule AshAgent.ProgressiveDisclosure do
   end
 
   defp compact_until_under_budget(%Context{iterations: [_single]} = context, _budget) do
-    # Can't remove the last iteration - safety constraint
     token_count = Context.estimate_token_count(context)
 
     Logger.warning(
