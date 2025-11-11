@@ -203,6 +203,97 @@ defmodule AshAgent.Context do
     })
   end
 
+  @doc """
+  Keeps only the last N iterations in the context.
+
+  Useful for sliding window compaction where older iterations are discarded.
+
+  ## Examples
+
+      iex> context = %AshAgent.Context{iterations: [%{number: 1}, %{number: 2}, %{number: 3}, %{number: 4}, %{number: 5}], current_iteration: 5}
+      iex> compacted = AshAgent.Context.keep_last_iterations(context, 2)
+      iex> length(compacted.iterations)
+      2
+      iex> Enum.map(compacted.iterations, & &1.number)
+      [4, 5]
+  """
+  @spec keep_last_iterations(t(), pos_integer()) :: t()
+  def keep_last_iterations(context, count) when is_integer(count) and count > 0 do
+    recent_iterations = Enum.take(context.iterations, -count)
+    %{context | iterations: recent_iterations}
+  end
+
+  @doc """
+  Removes iterations older than the specified duration (in seconds).
+
+  ## Examples
+
+      iex> old_time = DateTime.add(DateTime.utc_now(), -7200, :second)
+      iex> context = %AshAgent.Context{
+      ...>   iterations: [
+      ...>     %{number: 1, started_at: old_time, metadata: %{}},
+      ...>     %{number: 2, started_at: DateTime.utc_now(), metadata: %{}}
+      ...>   ],
+      ...>   current_iteration: 2
+      ...> }
+      iex> recent = AshAgent.Context.remove_old_iterations(context, 3600)
+      iex> length(recent.iterations)
+      1
+  """
+  @spec remove_old_iterations(t(), non_neg_integer()) :: t()
+  def remove_old_iterations(context, max_age_seconds)
+      when is_integer(max_age_seconds) and max_age_seconds >= 0 do
+    cutoff = DateTime.add(DateTime.utc_now(), -max_age_seconds, :second)
+
+    recent_iterations =
+      Enum.filter(context.iterations, fn iteration ->
+        case Map.get(iteration, :started_at) do
+          nil -> true
+          started_at -> DateTime.compare(started_at, cutoff) != :lt
+        end
+      end)
+
+    %{context | iterations: recent_iterations}
+  end
+
+  @doc """
+  Returns the number of iterations in the context.
+
+  ## Examples
+
+      iex> context = %AshAgent.Context{iterations: [%{number: 1}, %{number: 2}, %{number: 3}], current_iteration: 3}
+      iex> AshAgent.Context.count_iterations(context)
+      3
+  """
+  @spec count_iterations(t()) :: non_neg_integer()
+  def count_iterations(context), do: length(context.iterations)
+
+  @doc """
+  Gets a slice of iterations by index range.
+
+  ## Examples
+
+      iex> context = %AshAgent.Context{iterations: [%{n: 1}, %{n: 2}, %{n: 3}, %{n: 4}, %{n: 5}], current_iteration: 5}
+      iex> sliced = AshAgent.Context.get_iteration_range(context, 1, 3)
+      iex> length(sliced.iterations)
+      3
+      iex> Enum.map(sliced.iterations, & &1.n)
+      [2, 3, 4]
+  """
+  @spec get_iteration_range(t(), non_neg_integer(), non_neg_integer()) :: t()
+  def get_iteration_range(context, start_idx, end_idx)
+      when is_integer(start_idx) and is_integer(end_idx) and start_idx >= 0 and
+             end_idx >= start_idx do
+    count = end_idx - start_idx + 1
+
+    sliced_iterations =
+      context.iterations
+      |> Enum.drop(start_idx)
+      |> Enum.take(count)
+
+    %{context | iterations: sliced_iterations}
+  end
+
   defp get_current_iteration(context) do
     Enum.at(context.iterations, context.current_iteration - 1)
   end
