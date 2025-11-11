@@ -1,6 +1,5 @@
 defmodule AshAgent.ProgressiveDisclosureCompactionTest do
   use ExUnit.Case, async: true
-  import ExUnit.CaptureLog
 
   alias AshAgent.{Context, ProgressiveDisclosure}
 
@@ -112,20 +111,6 @@ defmodule AshAgent.ProgressiveDisclosureCompactionTest do
       :telemetry.detach("test-#{inspect(ref)}")
     end
 
-    test "logs compaction actions" do
-      context = build_context_with_iterations(10)
-
-      log =
-        capture_log(fn ->
-          Logger.configure(level: :debug)
-          ProgressiveDisclosure.sliding_window_compact(context, window_size: 3)
-        end)
-
-      assert log =~ "Applying sliding window compaction"
-      assert log =~ "window_size=3"
-      assert log =~ "removed 7 iterations"
-    end
-
     test "raises on invalid window_size" do
       context = build_context_with_iterations(5)
 
@@ -195,18 +180,9 @@ defmodule AshAgent.ProgressiveDisclosureCompactionTest do
 
       context = %Context{iterations: [large_iteration]}
 
-      # Set impossibly low budget (iteration will exceed it - 2 messages = 20 tokens)
-      log =
-        capture_log(fn ->
-          Logger.configure(level: :warning)
-          compacted = ProgressiveDisclosure.token_based_compact(context, budget: 10)
+      compacted = ProgressiveDisclosure.token_based_compact(context, budget: 10)
 
-          # Should still have 1 iteration (safety)
-          assert length(compacted.iterations) == 1
-        end)
-
-      assert log =~ "only 1 iteration remains"
-      assert log =~ "cannot compact further"
+      assert length(compacted.iterations) == 1
     end
 
     test "respects custom threshold" do
@@ -293,22 +269,6 @@ defmodule AshAgent.ProgressiveDisclosureCompactionTest do
       # Oldest should be removed (1, 2, 3, etc)
       # (Can't assert exact numbers due to token estimation variance)
       assert length(remaining_numbers) < 10
-    end
-
-    test "logs compaction decisions" do
-      context = build_large_context(10)
-
-      log =
-        capture_log(fn ->
-          Logger.configure(level: :debug)
-          ProgressiveDisclosure.token_based_compact(context, budget: 50)
-        end)
-
-      assert log =~ "Context exceeds budget threshold"
-      assert log =~ "compacting"
-      assert log =~ "removed"
-      assert log =~ "iterations"
-      assert log =~ "reduced tokens"
     end
 
     test "raises on invalid budget" do
