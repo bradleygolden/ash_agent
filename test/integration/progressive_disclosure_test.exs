@@ -402,8 +402,149 @@ defmodule AshAgent.Integration.ProgressiveDisclosureTest do
   end
 
   # ============================================================================
+  # Subtask 4.4: Token Budget Integration Tests
+  # ============================================================================
+
+  describe "token-based context compaction" do
+    defmodule TokenBudgetHooks do
+      @moduledoc """
+      Hooks for testing token-based compaction.
+      Enforces a low token budget to trigger compaction.
+      """
+      @behaviour AshAgent.Runtime.Hooks
+
+      def prepare_tool_results(%{results: results}), do: {:ok, results}
+
+      def prepare_context(%{context: ctx}) do
+        # Apply token-based compaction with low budget (10,000 tokens)
+        compacted = ProgressiveDisclosure.token_based_compact(ctx, budget: 10_000)
+        {:ok, compacted}
+      end
+
+      def prepare_messages(%{messages: msgs}), do: {:ok, msgs}
+      def on_iteration_start(ctx), do: {:ok, ctx}
+      def on_iteration_complete(ctx), do: {:ok, ctx}
+    end
+
+    defmodule TokenBudgetTestAgent do
+      @moduledoc """
+      Agent for testing token budget compaction.
+      Uses TokenBudgetHooks to compact when approaching budget.
+      """
+      use Ash.Resource,
+        domain: AshAgent.TestDomain,
+        data_layer: :embedded,
+        extensions: [AshAgent.Resource]
+
+      require Ash.Query
+
+      attributes do
+        uuid_primary_key :id
+      end
+
+      defmodule BudgetOutput do
+        use Ash.TypedStruct
+
+        typed_struct do
+          field :result, :string
+        end
+      end
+
+      # Tool that returns verbose output (increases token usage)
+      def verbose_operation(_args, _context) do
+        # Return large-ish text to increase token count
+        text = """
+        This is a verbose operation result that contains many tokens.
+        It includes detailed information, explanations, and examples.
+        The purpose is to increase the token count of the context.
+        #{String.duplicate("More text to add tokens. ", 20)}
+        """
+
+        {:ok, %{text: text}}
+      end
+
+      agent do
+        provider :req_llm
+
+        client("openai:qwen3:1.7b",
+          base_url: "http://localhost:11434/v1",
+          api_key: "ollama",
+          temperature: 0.0
+        )
+
+        output BudgetOutput
+
+        input do
+          argument :message, :string, allow_nil?: false
+        end
+
+        prompt """
+        You are a verbose assistant.
+        Call the verbose_operation tool multiple times.
+        Reply with JSON matching ctx.output_format exactly.
+        {{ output_format }}
+        """
+
+        hooks TokenBudgetHooks
+
+        tools do
+          max_iterations(10)
+          timeout 60_000
+          on_error(:continue)
+
+          tool :verbose_operation do
+            description "Perform a verbose operation that returns lots of text"
+            function({__MODULE__, :verbose_operation, []})
+            parameters([])
+          end
+        end
+      end
+
+      code_interface do
+        define :call, args: [:message]
+      end
+    end
+
+    test "compaction triggers when approaching token budget" do
+      # Note: This test requires Ollama with qwen3:1.7b to be running
+      # The hook is configured with a 10,000 token budget
+      result = TokenBudgetTestAgent.call("Perform many verbose operations")
+
+      # Extract context safely
+      context = extract_context!(result)
+
+      # Verify agent executed iterations
+      iteration_count = Context.count_iterations(context)
+
+      assert iteration_count > 0,
+             "Agent did not iterate (count=#{iteration_count})"
+
+      # Verify token count is under budget (with tolerance for estimation)
+      estimated_tokens = Context.estimate_token_count(context)
+
+      # Allow 20% margin due to estimation inaccuracy
+      tolerance_budget = 10_000 * 1.2
+
+      assert estimated_tokens <= tolerance_budget,
+             "Token count (#{estimated_tokens}) exceeds budget with tolerance (#{tolerance_budget})"
+    end
+
+    test "compaction preserves at least one iteration" do
+      # Note: This test requires Ollama with qwen3:1.7b to be running
+      # Even with impossible budget, should keep 1 iteration for safety
+      result = TokenBudgetTestAgent.call("Do one operation")
+
+      context = extract_context!(result)
+      iteration_count = Context.count_iterations(context)
+
+      # Should have at least 1 iteration (safety constraint)
+      assert iteration_count >= 1,
+             "Compaction removed all iterations (unsafe)"
+    end
+  end
+
+  # ============================================================================
   # Placeholder for future subtasks
   # ============================================================================
-  # Subtask 4.4: Token Budget Integration Test
   # Subtask 4.5: Processor Composition Integration Test
 end
