@@ -1,5 +1,6 @@
 defmodule AshAgent.ResultProcessors.SummarizeTest do
   use ExUnit.Case, async: true
+  doctest AshAgent.ResultProcessors.Summarize
 
   alias AshAgent.ResultProcessors.Summarize
 

@@ -16,6 +16,7 @@ defmodule AshAgent.ResultProcessors.Summarize do
 
   ## Examples
 
+      iex> alias AshAgent.ResultProcessors.Summarize
       iex> results = [{"query", {:ok, Enum.to_list(1..100)}}]
       iex> summarized = Summarize.process(results, sample_size: 3)
       iex> [{"query", {:ok, summary}}] = summarized
