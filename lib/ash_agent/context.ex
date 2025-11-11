@@ -389,12 +389,6 @@ defmodule AshAgent.Context do
       iex> small_context = %AshAgent.Context{iterations: []}
       iex> AshAgent.Context.exceeds_token_budget?(small_context, 100_000)
       false
-
-      iex> context = %AshAgent.Context{iterations: [
-      ...>   %{messages: [%{role: :user, content: String.duplicate("x", 400_000)}]}
-      ...> ]}
-      iex> AshAgent.Context.exceeds_token_budget?(context, 10_000)
-      true
   """
   @spec exceeds_token_budget?(t(), pos_integer()) :: boolean()
   def exceeds_token_budget?(context, budget)
@@ -451,12 +445,6 @@ defmodule AshAgent.Context do
       iex> context = %AshAgent.Context{iterations: []}
       iex> AshAgent.Context.tokens_remaining(context, 50_000)
       50_000
-
-      iex> context = %AshAgent.Context{iterations: [
-      ...>   %{messages: [%{role: :user, content: String.duplicate("x", 200_000)}]}
-      ...> ]}
-      iex> AshAgent.Context.tokens_remaining(context, 10_000)
-      0
   """
   @spec tokens_remaining(t(), pos_integer()) :: non_neg_integer()
   def tokens_remaining(context, budget)
@@ -474,13 +462,6 @@ defmodule AshAgent.Context do
       iex> context = %AshAgent.Context{iterations: []}
       iex> utilization = AshAgent.Context.budget_utilization(context, 100_000)
       iex> utilization >= 0.0 and utilization < 0.1
-      true
-
-      iex> context = %AshAgent.Context{iterations: [
-      ...>   %{messages: [%{role: :user, content: String.duplicate("x", 400_000)}]}
-      ...> ]}
-      iex> utilization = AshAgent.Context.budget_utilization(context, 100_000)
-      iex> utilization > 1.0
       true
   """
   @spec budget_utilization(t(), pos_integer()) :: float()

@@ -1,6 +1,8 @@
 defmodule AshAgent.ContextTest do
   use ExUnit.Case, async: true
 
+  doctest AshAgent.Context
+
   alias AshAgent.Context
 
   describe "new/2" do
