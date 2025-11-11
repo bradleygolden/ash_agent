@@ -4,10 +4,12 @@ A minimal Phoenix LiveView dashboard for monitoring AshAgent executions in real-
 
 ## Features
 
+- **Interactive agent testing** - Call agents directly from the UI with a built-in form
+- **Conversation history** - See your questions and agent responses in a chat-like interface
 - **Real-time monitoring** via telemetry and PubSub
-- **Token tracking** with cost estimation
+- **Token tracking** with cost estimation per call and cumulative
 - **Call history** with status and timing
-- **Active call tracking** to see agents in progress
+- **Active call tracking** to see agents in progress with loading indicators
 - **Simple metrics** dashboard showing totals
 
 ## Installation
