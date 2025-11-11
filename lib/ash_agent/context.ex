@@ -375,6 +375,120 @@ defmodule AshAgent.Context do
     Map.put(iteration, :metadata, updated_metadata)
   end
 
+  @doc """
+  Checks if the context exceeds the specified token budget.
+
+  This is a convenience function for Progressive Disclosure hooks.
+  Uses `estimate_token_count/1` internally for fast local checking.
+
+  **Note:** This uses token estimation and may be inaccurate. For precise
+  tracking, use the provider's actual token counting.
+
+  ## Examples
+
+      iex> small_context = %AshAgent.Context{iterations: []}
+      iex> AshAgent.Context.exceeds_token_budget?(small_context, 100_000)
+      false
+
+      iex> context = %AshAgent.Context{iterations: [
+      ...>   %{messages: [%{role: :user, content: String.duplicate("x", 400_000)}]}
+      ...> ]}
+      iex> AshAgent.Context.exceeds_token_budget?(context, 10_000)
+      true
+  """
+  @spec exceeds_token_budget?(t(), pos_integer()) :: boolean()
+  def exceeds_token_budget?(context, budget)
+      when is_integer(budget) and budget > 0 do
+    estimate_token_count(context) > budget
+  end
+
+  @doc """
+  Estimates the token count for the context using a rough heuristic.
+
+  **WARNING:** This is an APPROXIMATION. Assumes ~4 characters per token.
+  For accurate counts, use the provider's actual token counting.
+
+  Useful for quick budget checks in hooks without calling external services.
+
+  ## Examples
+
+      iex> context = %AshAgent.Context{iterations: []}
+      iex> estimate = AshAgent.Context.estimate_token_count(context)
+      iex> is_integer(estimate)
+      true
+      iex> estimate >= 0
+      true
+
+      iex> context = %AshAgent.Context{iterations: [
+      ...>   %{messages: [%{role: :user, content: "Hello"}]}
+      ...> ]}
+      iex> estimate = AshAgent.Context.estimate_token_count(context)
+      iex> estimate > 0
+      true
+  """
+  @spec estimate_token_count(t()) :: non_neg_integer()
+  def estimate_token_count(context) do
+    messages = to_messages(context)
+
+    Enum.reduce(messages, 0, fn message, acc ->
+      content = Map.get(message, "content", "")
+
+      content_tokens = div(String.length(content), 4)
+
+      message_overhead = 10
+
+      acc + content_tokens + message_overhead
+    end)
+  end
+
+  @doc """
+  Calculates remaining tokens before hitting budget.
+
+  Returns 0 if already over budget.
+
+  ## Examples
+
+      iex> context = %AshAgent.Context{iterations: []}
+      iex> AshAgent.Context.tokens_remaining(context, 50_000)
+      50_000
+
+      iex> context = %AshAgent.Context{iterations: [
+      ...>   %{messages: [%{role: :user, content: String.duplicate("x", 200_000)}]}
+      ...> ]}
+      iex> AshAgent.Context.tokens_remaining(context, 10_000)
+      0
+  """
+  @spec tokens_remaining(t(), pos_integer()) :: non_neg_integer()
+  def tokens_remaining(context, budget)
+      when is_integer(budget) and budget > 0 do
+    max(0, budget - estimate_token_count(context))
+  end
+
+  @doc """
+  Calculates budget utilization as a percentage.
+
+  Returns value between 0.0 and 1.0 (or > 1.0 if over budget).
+
+  ## Examples
+
+      iex> context = %AshAgent.Context{iterations: []}
+      iex> utilization = AshAgent.Context.budget_utilization(context, 100_000)
+      iex> utilization >= 0.0 and utilization < 0.1
+      true
+
+      iex> context = %AshAgent.Context{iterations: [
+      ...>   %{messages: [%{role: :user, content: String.duplicate("x", 400_000)}]}
+      ...> ]}
+      iex> utilization = AshAgent.Context.budget_utilization(context, 100_000)
+      iex> utilization > 1.0
+      true
+  """
+  @spec budget_utilization(t(), pos_integer()) :: float()
+  def budget_utilization(context, budget)
+      when is_integer(budget) and budget > 0 do
+    estimate_token_count(context) / budget
+  end
+
   defp get_current_iteration(context) do
     Enum.at(context.iterations, context.current_iteration - 1)
   end
