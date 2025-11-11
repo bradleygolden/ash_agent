@@ -544,7 +544,143 @@ defmodule AshAgent.Integration.ProgressiveDisclosureTest do
   end
 
   # ============================================================================
-  # Placeholder for future subtasks
-  # ============================================================================
   # Subtask 4.5: Processor Composition Integration Test
+  # ============================================================================
+
+  describe "processor composition" do
+    # Agent that returns large data for testing composition
+    defmodule CompositionTestHooks do
+      @behaviour AshAgent.Runtime.Hooks
+
+      alias AshAgent.ProgressiveDisclosure
+
+      def prepare_tool_results(%{results: results}) do
+        # Apply multiple processors in sequence
+        processed =
+          ProgressiveDisclosure.process_tool_results(results,
+            truncate: 500,
+            summarize: true,
+            sample: 3
+          )
+
+        {:ok, processed}
+      end
+
+      def prepare_context(%{context: ctx}), do: {:ok, ctx}
+      def prepare_messages(%{messages: msgs}), do: {:ok, msgs}
+      def on_iteration_start(%{context: ctx}), do: {:ok, ctx}
+      def on_iteration_complete(%{context: ctx}), do: {:ok, ctx}
+    end
+
+    defmodule CompositionTestAgent do
+      use Ash.Resource,
+        domain: AshAgent.TestDomain,
+        extensions: [AshAgent.Resource]
+
+      defmodule CompositionOutput do
+        use Ash.TypedStruct
+
+        typed_struct do
+          field :content, :string
+        end
+      end
+
+      agent do
+        client "baml:ollama/qwen2.5:3b"
+        hooks CompositionTestHooks
+        output CompositionOutput
+
+        prompt """
+        You are a test agent. When asked to get data, use the get_large_data tool.
+        Return exactly what the tool returns without modification.
+        """
+
+        tools do
+          max_iterations(5)
+          timeout 30_000
+          on_error(:continue)
+
+          tool :get_large_data do
+            description "Get large test data"
+            function({LargeDataTool, :execute, []})
+          end
+        end
+      end
+
+      code_interface do
+        define :call, args: [:message]
+      end
+    end
+
+    test "multiple processors compose correctly" do
+      # Note: This test requires Ollama with qwen2.5:3b to be running
+      result = CompositionTestAgent.call("Get large data using the tool")
+
+      # Extract context safely
+      context = extract_context!(result)
+
+      # Verify agent executed
+      assert Context.count_iterations(context) > 0, "Agent did not iterate"
+
+      # Find iteration with tool call
+      iteration = find_iteration_with_tool!(context, "get_large_data")
+
+      # Extract tool result safely
+      tool_result = extract_tool_result!(iteration, "get_large_data")
+
+      # Result should be processed by all processors
+      # The exact format depends on implementation, but it should be transformed
+      result_size = :erlang.external_size(tool_result)
+
+      # Original data is ~10KB, after truncate (500), summarize, and sample it should be much smaller
+      assert result_size < 2000,
+             "Result not processed by pipeline (size=#{result_size}, expected <2000)"
+
+      # Verify agent completed successfully
+      assert result.status in [:completed, :success], "Agent did not complete successfully"
+    end
+
+    test "processor pipeline is deterministic" do
+      # Note: This test requires Ollama with qwen2.5:3b to be running
+      # Same options should produce consistent processing
+      result1 = CompositionTestAgent.call("Get large data using the tool")
+      result2 = CompositionTestAgent.call("Get large data using the tool")
+
+      # Extract contexts
+      context1 = extract_context!(result1)
+      context2 = extract_context!(result2)
+
+      # Find iterations with tool calls
+      iter1 = find_iteration_with_tool!(context1, "get_large_data")
+      iter2 = find_iteration_with_tool!(context2, "get_large_data")
+
+      # Extract tool results
+      result1_data = extract_tool_result!(iter1, "get_large_data")
+      result2_data = extract_tool_result!(iter2, "get_large_data")
+
+      # Both results should be processed identically (deterministic composition)
+      # Compare sizes since exact content may vary but processing should be consistent
+      size1 = :erlang.external_size(result1_data)
+      size2 = :erlang.external_size(result2_data)
+
+      # Allow small variance (within 10%) for minor differences
+      variance = abs(size1 - size2) / max(size1, size2)
+
+      assert variance < 0.1,
+             "Processor composition is non-deterministic (size1=#{size1}, size2=#{size2}, variance=#{Float.round(variance * 100, 1)}%)"
+    end
+
+    test "composition handles empty results gracefully" do
+      # Note: This test requires Ollama with qwen2.5:3b to be running
+      # Agent may not call tools, or tools may return empty results
+      result = CompositionTestAgent.call("Say hello without using any tools")
+
+      # Extract context safely
+      context = extract_context!(result)
+
+      # Agent should still complete successfully even with no tool results to process
+      assert result.status in [:completed, :success], "Agent did not complete successfully"
+      assert Context.count_iterations(context) > 0, "Agent did not iterate"
+    end
+  end
 end
