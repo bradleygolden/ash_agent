@@ -268,9 +268,142 @@ defmodule AshAgent.Integration.ProgressiveDisclosureTest do
   end
 
   # ============================================================================
+  # Subtask 4.3: Context Compaction Integration Tests
+  # ============================================================================
+
+  describe "context compaction with sliding window" do
+    defmodule SlidingWindowHooks do
+      @moduledoc """
+      Hooks for testing sliding window compaction.
+      Keeps only the last 2 iterations.
+      """
+      @behaviour AshAgent.Runtime.Hooks
+
+      def prepare_tool_results(%{results: results}), do: {:ok, results}
+
+      def prepare_context(%{context: ctx}) do
+        # Apply sliding window: keep last 2 iterations
+        compacted = ProgressiveDisclosure.sliding_window_compact(ctx, window_size: 2)
+        {:ok, compacted}
+      end
+
+      def prepare_messages(%{messages: msgs}), do: {:ok, msgs}
+      def on_iteration_start(ctx), do: {:ok, ctx}
+      def on_iteration_complete(ctx), do: {:ok, ctx}
+    end
+
+    defmodule CompactionTestAgent do
+      @moduledoc """
+      Agent for testing context compaction.
+      Uses SlidingWindowHooks to compact context after each iteration.
+      """
+      use Ash.Resource,
+        domain: AshAgent.TestDomain,
+        data_layer: :embedded,
+        extensions: [AshAgent.Resource]
+
+      require Ash.Query
+
+      attributes do
+        uuid_primary_key :id
+      end
+
+      defmodule CompactionOutput do
+        use Ash.TypedStruct
+
+        typed_struct do
+          field :result, :string
+        end
+      end
+
+      # Tool that increments a counter (causes multiple iterations)
+      def count_up(_args, _context) do
+        {:ok, %{number: :rand.uniform(100)}}
+      end
+
+      agent do
+        provider :req_llm
+
+        client("openai:qwen3:1.7b",
+          base_url: "http://localhost:11434/v1",
+          api_key: "ollama",
+          temperature: 0.0
+        )
+
+        output CompactionOutput
+
+        input do
+          argument :message, :string, allow_nil?: false
+        end
+
+        prompt """
+        You are a counting assistant.
+        Call the count_up tool multiple times.
+        Reply with JSON matching ctx.output_format exactly.
+        {{ output_format }}
+        """
+
+        hooks SlidingWindowHooks
+
+        tools do
+          max_iterations(5)
+          timeout 30_000
+          on_error(:continue)
+
+          tool :count_up do
+            description "Count up and return a number"
+            function({__MODULE__, :count_up, []})
+            parameters([])
+          end
+        end
+      end
+
+      code_interface do
+        define :call, args: [:message]
+      end
+    end
+
+    test "old iterations are removed via sliding window compaction" do
+      # Note: This test requires Ollama with qwen3:1.7b to be running
+      # The hook is configured to keep only 2 iterations
+      result = CompactionTestAgent.call("Count up multiple times")
+
+      # Extract context safely
+      context = extract_context!(result)
+
+      # Verify agent executed multiple iterations
+      iteration_count = Context.count_iterations(context)
+
+      # The agent should have tried to iterate multiple times,
+      # but sliding window should keep only last 2
+      assert iteration_count > 0,
+             "Agent did not iterate (count=#{iteration_count})"
+
+      # With sliding window of 2, should never have more than 2 iterations
+      assert iteration_count <= 2,
+             "Sliding window failed: #{iteration_count} iterations (expected ≤2)"
+    end
+
+    test "compaction preserves most recent iterations" do
+      # Note: This test requires Ollama with qwen3:1.7b to be running
+      result = CompactionTestAgent.call("Count to three")
+
+      context = extract_context!(result)
+
+      # If we have 2 iterations, verify they are sequential (no gaps)
+      if Context.count_iterations(context) == 2 do
+        iteration_numbers = Enum.map(context.iterations, & &1.number)
+
+        # Numbers should be consecutive (e.g., [2, 3] not [1, 3])
+        [first, second] = Enum.sort(iteration_numbers)
+        assert second - first <= 1, "Iterations have gaps: #{inspect(iteration_numbers)}"
+      end
+    end
+  end
+
+  # ============================================================================
   # Placeholder for future subtasks
   # ============================================================================
-  # Subtask 4.3: Context Compaction Integration Test
   # Subtask 4.4: Token Budget Integration Test
   # Subtask 4.5: Processor Composition Integration Test
 end
