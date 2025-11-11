@@ -271,4 +271,3 @@ This project is licensed under the MIT License.
 ## Links
 
 - [Source Code](https://github.com/bradleygolden/ash_agent)
-- [Changelog](CHANGELOG.md)
