@@ -1,0 +1,20 @@
+type: task
+id: 11-10-2025-review-progressive-disclosure-pr-7-to-ensure-all-agents-md-preferences-are-followed-imperative-mood-commits-no-spec-annotations-no-new-code-comments-proper-test-configuration-with-testdomain-deterministic-unit-tests-and-proper-testing-practices
+status: planning
+phase: design
+complexity: SIMPLE
+created: 2025-11-10
+updated: 2025-11-10
+session:
+  id: 11-10-2025-review-progressive-disclosure-pr-7-to-ensure-all-agents-md-preferences-are-followed-imperative-mood-commits-no-spec-annotations-no-new-code-comments-proper-test-configuration-with-testdomain-deterministic-unit-tests-and-proper-testing-practices
+  path: .springfield/11-10-2025-review-progressive-disclosure-pr-7-to-ensure-all-agents-md-preferences-are-followed-imperative-mood-commits-no-spec-annotations-no-new-code-comments-proper-test-configuration-with-testdomain-deterministic-unit-tests-and-proper-testing-practices/
+documentation:
+  primary: doc.md
+  session_research: .springfield/11-10-2025-review-progressive-disclosure-pr-7-to-ensure-all-agents-md-preferences-are-followed-imperative-mood-commits-no-spec-annotations-no-new-code-comments-proper-test-configuration-with-testdomain-deterministic-unit-tests-and-proper-testing-practices/research.md
+  session_plan: .springfield/11-10-2025-review-progressive-disclosure-pr-7-to-ensure-all-agents-md-preferences-are-followed-imperative-mood-commits-no-spec-annotations-no-new-code-comments-proper-test-configuration-with-testdomain-deterministic-unit-tests-and-proper-testing-practices/prompt.md
+workflow:
+  created_by: martin
+  implements_by: ralph
+  validated_by: comic-book-guy
+ready_for_implementation: true
+blocking_issues: []

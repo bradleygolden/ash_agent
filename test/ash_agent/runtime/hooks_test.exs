@@ -1,4 +1,4 @@
-defmodule AshAgent.Runtime.HooksExtendedTest do
+defmodule AshAgent.Runtime.HooksTest do
   use ExUnit.Case, async: true
 
   alias AshAgent.Context
@@ -101,6 +101,60 @@ defmodule AshAgent.Runtime.HooksExtendedTest do
       assert {:error, :something_went_wrong} =
                Hooks.execute(ErrorHook, :prepare_tool_results, ctx)
     end
+
+    test "preserves error results" do
+      defmodule ErrorPreservingHook do
+        @behaviour Hooks
+
+        def prepare_tool_results(%{results: results}) do
+          modified =
+            Enum.map(results, fn {name, result} ->
+              case result do
+                {:ok, data} ->
+                  {name, {:ok, "modified: #{data}"}}
+
+                error ->
+                  {name, error}
+              end
+            end)
+
+          {:ok, modified}
+        end
+      end
+
+      ctx = %{
+        agent: MyAgent,
+        iteration: 1,
+        tool_calls: [],
+        results: [
+          {"success_tool", {:ok, "data"}},
+          {"error_tool", {:error, "tool failed"}}
+        ],
+        context: %Context{},
+        token_usage: nil
+      }
+
+      assert {:ok, modified_results} =
+               Hooks.execute(ErrorPreservingHook, :prepare_tool_results, ctx)
+
+      assert [
+               {"success_tool", {:ok, "modified: data"}},
+               {"error_tool", {:error, "tool failed"}}
+             ] = modified_results
+    end
+
+    test "hooks can be nil (no hooks configured)" do
+      ctx = %{
+        agent: TestAgent,
+        iteration: 1,
+        tool_calls: [],
+        results: [{"tool", {:ok, "data"}}],
+        context: %Context{},
+        token_usage: nil
+      }
+
+      assert {:ok, ^ctx} = Hooks.execute(nil, :prepare_tool_results, ctx)
+    end
   end
 
   describe "prepare_context/1 hook" do
@@ -166,6 +220,25 @@ defmodule AshAgent.Runtime.HooksExtendedTest do
       }
 
       assert {:ok, %Context{}} = Hooks.execute(ContextStructureHook, :prepare_context, ctx)
+    end
+
+    test "hooks can be optional (not implemented)" do
+      defmodule OptionalHooks do
+        @behaviour Hooks
+
+        def prepare_tool_results(%{results: results}) do
+          {:ok, results}
+        end
+      end
+
+      ctx = %{
+        agent: TestAgent,
+        context: %Context{},
+        token_usage: nil,
+        iteration: 1
+      }
+
+      assert {:ok, ^ctx} = Hooks.execute(OptionalHooks, :prepare_context, ctx)
     end
   end
 

@@ -102,14 +102,15 @@ MyApp.Agents.Assistant.stream(message: "Hello!")
   - [x] Iteration-based context tracking
   - [x] Structured message history
   - [x] Token budget management
-  - [ ] Context compaction/summarization
-  - [ ] Progressive disclosure for large tool results
+  - [x] Context compaction/summarization
+  - [x] Progressive disclosure for large tool results
   - [ ] External memory persistence
 - [ ] Agent chaining
 - [ ] Advanced orchestration (parallel execution, routing, DSL)
 
 ### Needs Research
 
+- [ ] Tool result caching and lookup
 - [ ] Guardrails & safety hooks
 - [ ] Structured prompt segmentation (XML/Markdown sections)
 - [ ] Evaluation harness for agents
@@ -216,4 +217,3 @@ This project is licensed under the MIT License.
 ## Links
 
 - [Source Code](https://github.com/bradleygolden/ash_agent)
-- [Changelog](CHANGELOG.md)
