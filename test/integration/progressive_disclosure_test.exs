@@ -213,7 +213,7 @@ defmodule AshAgent.Integration.ProgressiveDisclosureTest do
       end
 
       code_interface do
-        define :call, args: [:message]
+        define :call
       end
     end
 
@@ -359,7 +359,7 @@ defmodule AshAgent.Integration.ProgressiveDisclosureTest do
       end
 
       code_interface do
-        define :call, args: [:message]
+        define :call
       end
     end
 
@@ -501,7 +501,7 @@ defmodule AshAgent.Integration.ProgressiveDisclosureTest do
       end
 
       code_interface do
-        define :call, args: [:message]
+        define :call
       end
     end
 
@@ -577,6 +577,10 @@ defmodule AshAgent.Integration.ProgressiveDisclosureTest do
         domain: AshAgent.TestDomain,
         extensions: [AshAgent.Resource]
 
+      resource do
+        require_primary_key? false
+      end
+
       defmodule CompositionOutput do
         use Ash.TypedStruct
 
@@ -608,7 +612,7 @@ defmodule AshAgent.Integration.ProgressiveDisclosureTest do
       end
 
       code_interface do
-        define :call, args: [:message]
+        define :call
       end
     end
 
