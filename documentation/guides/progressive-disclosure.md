@@ -1,894 +1,365 @@
-# Progressive Disclosure Guide
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="ExDoc v0.39.1">
+    <meta name="project" content="ash_agent v0.1.0">
+
+
+    <title>AshAgent.ProgressiveDisclosure — ash_agent v0.1.0</title>
+
+    <link rel="stylesheet" href="dist/html-elixir-ZFNMEJKT.css" />
+
+    <script defer src="dist/sidebar_items-943756EC.js"></script>
+    <script defer src="docs_config.js"></script>
+    <script defer src="dist/html-HBZYRXZS.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.2.0/dist/mermaid.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: document.body.className.includes("dark") ? "dark" : "default"
+    });
+    let id = 0;
+    for (const codeEl of document.querySelectorAll("pre code.mermaid")) {
+      const preEl = codeEl.parentElement;
+      const graphDefinition = codeEl.textContent;
+      const graphEl = document.createElement("div");
+      const graphId = "mermaid-graph-" + id++;
+      mermaid.render(graphId, graphDefinition).then(({svg, bindFunctions}) => {
+        graphEl.innerHTML = svg;
+        bindFunctions?.(graphEl);
+        preEl.insertAdjacentElement("afterend", graphEl);
+        preEl.remove();
+      });
+    }
+  });
+</script>
+
+  </head>
+  <body>
+    <script>(()=>{var t="ex_doc:settings",e="dark";var o="dark",s="light";var E="sidebar_state",n="closed";var r="sidebar_width";var a="sidebar-open";var i=new URLSearchParams(window.location.search),S=i.get("theme")||JSON.parse(localStorage.getItem(t)||"{}").theme;(S===o||S!==s&&window.matchMedia("(prefers-color-scheme: dark)").matches)&&document.body.classList.add(e);var d=sessionStorage.getItem(E),A=d!==n&&!window.matchMedia(`screen and (max-width: ${768}px)`).matches;document.body.classList.toggle(a,A);var c=sessionStorage.getItem(r);c&&document.body.style.setProperty("--sidebarWidth",`${c}px`);var p=/(Macintosh|iPhone|iPad|iPod)/.test(window.navigator.userAgent);document.documentElement.classList.toggle("apple-os",p);})();
+</script>
+
+<div class="body-wrapper">
+
+<button id="sidebar-menu" class="sidebar-button sidebar-toggle" aria-label="toggle sidebar" aria-controls="sidebar">
+  <i class="ri-menu-line ri-lg" title="Collapse/expand sidebar"></i>
+</button>
+
+<nav id="sidebar" class="sidebar">
+
+  <div class="sidebar-header">
+    <div class="sidebar-projectInfo">
+
+      <div>
+        <a href="readme.html" class="sidebar-projectName" translate="no">
+ash_agent
+        </a>
+        <div class="sidebar-projectVersion" translate="no">
+          v0.1.0
+        </div>
+      </div>
+    </div>
+    <ul id="sidebar-list-nav" class="sidebar-list-nav" role="tablist" data-extras=""></ul>
+  </div>
+</nav>
+
+<output role="status" id="toast"></output>
+
+<main class="content page-module" id="main" data-type="modules">
+  <div id="content" class="content-inner">
+    <div class="top-search">
+      <div class="search-settings">
+        <form class="search-bar" action="search.html">
+          <label class="search-label">
+            <span class="sr-only">Search documentation of ash_agent</span>
+            <div class="search-input-wrapper">
+              <input name="q" type="text" class="search-input" placeholder="Press / to search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+              <button type="button" tabindex="-1" class="search-close-button" aria-hidden="true">
+                <i class="ri-close-line ri-lg" title="Cancel search"></i>
+              </button>
+            </div>
+          </label>
+        </form>
+        <div class="autocomplete">
+        </div>
+        <div class="engine-selector" data-multiple="false">
+          <button type="button" class="engine-button" aria-label="Select search engine" aria-haspopup="true" aria-expanded="false">
+            <i class="ri-search-2-line" aria-hidden="true"></i>
+            <span class="engine-name">Default</span>
+            <i class="ri-arrow-down-s-line" aria-hidden="true"></i>
+          </button>
+          <div class="engine-dropdown" hidden role="menu">
+
+              <button type="button"
+                      class="engine-option"
+                      data-engine-url="search.html?q="
+                      role="menuitemradio"
+                      aria-checked="true">
+                <span class="name">Default</span>
+                <span class="help">In-browser search</span>
+              </button>
 
-A comprehensive guide to managing large tool results and growing context in AshAgent.
+          </div>
+        </div>
+        <button class="icon-settings display-settings">
+          <i class="ri-settings-3-line"></i>
+          <span class="sr-only">Settings</span>
+        </button>
+      </div>
+    </div>
 
-## Table of Contents
+<div id="top-content">
+  <div class="heading-with-actions top-heading">
+    <h1>
+      <span translate="no">AshAgent.ProgressiveDisclosure</span> 
+      <small class="app-vsn" translate="no">(ash_agent v0.1.0)</small>
 
-1. [What is Progressive Disclosure?](#what-is-progressive-disclosure)
-2. [Why Use Progressive Disclosure?](#why-use-progressive-disclosure)
-3. [Architecture Overview](#architecture-overview)
-4. [Hook-Based Approach](#hook-based-approach)
-5. [Built-in Processors](#built-in-processors)
-6. [Context Compaction Strategies](#context-compaction-strategies)
-7. [Common Patterns & Cookbook](#common-patterns--cookbook)
-8. [Advanced Patterns](#advanced-patterns)
-9. [Performance Considerations](#performance-considerations)
-10. [Troubleshooting](#troubleshooting)
+    </h1>
 
----
+      <a href="https://github.com/bradleygolden/ash_agent/blob/v0.1.0/lib/ash_agent/progressive_disclosure.ex#L1" title="View Source" class="icon-action" rel="help">
+        <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        <span class="sr-only">View Source</span>
+      </a>
 
-## What is Progressive Disclosure?
+  </div>
 
-Progressive Disclosure is a pattern for managing the growth of context in AI agent interactions. As agents iterate and accumulate tool results and conversation history, they face two key challenges:
 
-1. **Token Budget Limits** - LLM providers impose maximum token limits per request
-2. **Context Quality** - Too much information can dilute important details
+    <section id="moduledoc">
+<p>Helper utilities for implementing Progressive Disclosure patterns.</p><p>This module provides high-level functions for common Progressive Disclosure
+scenarios:</p><ul><li><strong>Result Processing</strong>: Truncate, summarize, or sample large tool results</li><li><strong>Context Compaction</strong>: Remove old iterations using sliding window or token budget</li></ul><h2 id="module-quick-start" class="section-heading"><a href="#module-quick-start" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Quick Start</span></h2><p>Use in your hook implementations:</p><pre><code class="makeup elixir" translate="no"><span class="kd">defmodule</span><span class="w"> </span><span class="nc">MyApp.PDHooks</span><span class="w"> </span><span class="k" data-group-id="0452523151-1">do</span><span class="w">
+  </span><span class="na">@behaviour</span><span class="w"> </span><span class="nc">AshAgent.Runtime.Hooks</span><span class="w">
 
-Progressive Disclosure addresses these challenges through two techniques:
+  </span><span class="kn">alias</span><span class="w"> </span><span class="nc">AshAgent.ProgressiveDisclosure</span><span class="w">
 
-- **Result Processing** - Transform large tool results into compact representations
-- **Context Compaction** - Remove or summarize old iterations to keep context focused
+  </span><span class="kd">def</span><span class="w"> </span><span class="nf">prepare_tool_results</span><span class="p" data-group-id="0452523151-2">(</span><span class="p" data-group-id="0452523151-3">%{</span><span class="ss">results</span><span class="p">:</span><span class="w"> </span><span class="n">results</span><span class="p" data-group-id="0452523151-3">}</span><span class="p" data-group-id="0452523151-2">)</span><span class="w"> </span><span class="k" data-group-id="0452523151-4">do</span><span class="w">
+    </span><span class="n">processed</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">ProgressiveDisclosure</span><span class="o">.</span><span class="n">process_tool_results</span><span class="p" data-group-id="0452523151-5">(</span><span class="n">results</span><span class="p">,</span><span class="w">
+      </span><span class="ss">truncate</span><span class="p">:</span><span class="w"> </span><span class="mi">1000</span><span class="p">,</span><span class="w">
+      </span><span class="ss">summarize</span><span class="p">:</span><span class="w"> </span><span class="no">true</span><span class="p">,</span><span class="w">
+      </span><span class="ss">sample</span><span class="p">:</span><span class="w"> </span><span class="mi">5</span><span class="w">
+    </span><span class="p" data-group-id="0452523151-5">)</span><span class="w">
+    </span><span class="p" data-group-id="0452523151-6">{</span><span class="ss">:ok</span><span class="p">,</span><span class="w"> </span><span class="n">processed</span><span class="p" data-group-id="0452523151-6">}</span><span class="w">
+  </span><span class="k" data-group-id="0452523151-4">end</span><span class="w">
 
-### The Problem
+  </span><span class="kd">def</span><span class="w"> </span><span class="nf">prepare_context</span><span class="p" data-group-id="0452523151-7">(</span><span class="p" data-group-id="0452523151-8">%{</span><span class="ss">context</span><span class="p">:</span><span class="w"> </span><span class="n">ctx</span><span class="p" data-group-id="0452523151-8">}</span><span class="p" data-group-id="0452523151-7">)</span><span class="w"> </span><span class="k" data-group-id="0452523151-9">do</span><span class="w">
+    </span><span class="n">compacted</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">ProgressiveDisclosure</span><span class="o">.</span><span class="n">sliding_window_compact</span><span class="p" data-group-id="0452523151-10">(</span><span class="n">ctx</span><span class="p">,</span><span class="w"> </span><span class="ss">window_size</span><span class="p">:</span><span class="w"> </span><span class="mi">5</span><span class="p" data-group-id="0452523151-10">)</span><span class="w">
+    </span><span class="p" data-group-id="0452523151-11">{</span><span class="ss">:ok</span><span class="p">,</span><span class="w"> </span><span class="n">compacted</span><span class="p" data-group-id="0452523151-11">}</span><span class="w">
+  </span><span class="k" data-group-id="0452523151-9">end</span><span class="w">
+</span><span class="k" data-group-id="0452523151-1">end</span></code></pre><h2 id="module-architecture" class="section-heading"><a href="#module-architecture" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Architecture</span></h2><p>This module serves as a <strong>convenience layer</strong> over:</p><ul><li><code class="inline">AshAgent.ResultProcessors.*</code> - Individual result processors</li><li><a href="AshAgent.Context.html"><code class="inline">AshAgent.Context</code></a> helpers - Context manipulation functions</li></ul><p>It provides:</p><ul><li>Processor composition (apply multiple processors in sequence)</li><li>Common compaction strategies (sliding window, token-based)</li><li>Telemetry integration (track PD usage)</li><li>Sensible defaults (skip processing for small results)</li></ul><h2 id="module-see-also" class="section-heading"><a href="#module-see-also" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">See Also</span></h2><ul><li>Progressive Disclosure Guide: <code class="inline">documentation/guides/progressive-disclosure.md</code></li><li>Hook System: <a href="AshAgent.Runtime.Hooks.html"><code class="inline">AshAgent.Runtime.Hooks</code></a></li><li>Result Processors: <code class="inline">AshAgent.ResultProcessors.*</code></li></ul>
+    </section>
 
-Without Progressive Disclosure, agents can quickly hit token limits:
+</div>
 
-```
-Iteration 1:  5,000 tokens
-Iteration 2: 12,000 tokens (added 7K of tool results)
-Iteration 3: 25,000 tokens (added 13K more)
-Iteration 4: 48,000 tokens (added 23K more)
-Iteration 5: ERROR - Token limit exceeded!
-```
+  <section id="summary" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#summary">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Summary</span>
+    </h1>
+<div class="summary-functions summary">
+  <h2>
+    <a href="#functions">Functions</a>
+  </h2>
 
-### The Solution
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#process_tool_results/2" data-no-tooltip="" translate="no">process_tool_results(results, opts \\ [])</a>
 
-With Progressive Disclosure:
+      </div>
 
-```
-Iteration 1:  5,000 tokens
-Iteration 2:  8,000 tokens (tool results truncated)
-Iteration 3: 10,000 tokens (old iterations removed)
-Iteration 4: 11,000 tokens (continued compaction)
-Iteration 5: 12,000 tokens (SUCCESS - under budget!)
-```
+        <div class="summary-synopsis"><p>Applies a standard tool result processing pipeline.</p></div>
 
----
+    </div>
 
-## Why Use Progressive Disclosure?
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#sliding_window_compact/2" data-no-tooltip="" translate="no">sliding_window_compact(context, opts)</a>
 
-### Token Efficiency
+      </div>
 
-Reduce token usage by 50-70% in typical workflows:
+        <div class="summary-synopsis"><p>Applies sliding window context compaction.</p></div>
 
-- **Before:** 50,000 tokens for 10 iterations
-- **After:** 15,000 tokens for 10 iterations
-- **Savings:** 35,000 tokens (70%)
+    </div>
 
-### Cost Reduction
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#token_based_compact/2" data-no-tooltip="" translate="no">token_based_compact(context, opts)</a>
 
-Lower API costs with fewer tokens:
+      </div>
 
-- **Claude Sonnet:** $3/1M input tokens
-- **Savings:** $0.105 per 35K tokens saved
-- **10,000 agent runs:** $1,050 saved
+        <div class="summary-synopsis"><p>Applies token-based context compaction.</p></div>
 
-### Extended Conversations
+    </div>
 
-Enable longer agent interactions:
+</div>
 
-- Without PD: ~10 iterations before token limit
-- With PD: 50+ iterations possible
+  </section>
 
-### Improved Focus
 
-Keep agent context focused on recent, relevant information:
+  <section id="functions" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#functions">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Functions</span>
+    </h1>
 
-- Old iterations removed
-- Tool results summarized
-- Agent maintains coherence
+    <div class="functions-list">
+<section class="detail" id="process_tool_results/2">
 
----
+    <span id="process_tool_results/1"></span>
 
-## Architecture Overview
+  <div class="detail-header">
+    <a href="#process_tool_results/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">process_tool_results(results, opts \\ [])</h1>
 
-Progressive Disclosure integrates seamlessly with AshAgent's hook system:
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        AshAgent Runtime                     │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ├── Hook: prepare_tool_results
-                              │   └──> Result Processors
-                              │       ├── Truncate
-                              │       ├── Summarize
-                              │       └── Sample
-                              │
-                              ├── Hook: prepare_context
-                              │   └──> Context Compaction
-                              │       ├── Sliding Window
-                              │       └── Token-Based
-                              │
-                              └── Hook: prepare_messages
-                                  └──> Message Transformation
-```
-
-### Components
-
-1. **Hooks** - Integration points in the agent execution flow
-2. **Result Processors** - Transform individual tool results
-3. **Context Helpers** - Manage iteration history
-4. **ProgressiveDisclosure Module** - High-level convenience API
-
----
-
-## Hook-Based Approach
-
-Progressive Disclosure is implemented through AshAgent's hook system. Hooks are callbacks that intercept and transform data during agent execution.
-
-### Hook Execution Points
-
-```elixir
-defmodule AshAgent.Runtime.Hooks do
-  @callback prepare_tool_results(map()) :: {:ok, list()} | {:error, term()}
-  @callback prepare_context(map()) :: {:ok, Context.t()} | {:error, term()}
-  @callback prepare_messages(map()) :: {:ok, list()} | {:error, term()}
-  @callback on_iteration_start(map()) :: {:ok, Context.t()} | {:error, term()}
-  @callback on_iteration_complete(map()) :: {:ok, Context.t()} | {:error, term()}
-end
-```
+        <a href="https://github.com/bradleygolden/ash_agent/blob/v0.1.0/lib/ash_agent/progressive_disclosure.ex#L90" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
 
-### Minimal Hook Example
-
-```elixir
-defmodule MyApp.PDHooks do
-  @behaviour AshAgent.Runtime.Hooks
-
-  alias AshAgent.ProgressiveDisclosure
-
-  def prepare_tool_results(%{results: results}) do
-    # Truncate large results to 1000 bytes
-    processed = ProgressiveDisclosure.process_tool_results(results,
-      truncate: 1000
-    )
-    {:ok, processed}
-  end
+    </div>
+  </div>
 
-  def prepare_context(%{context: ctx}) do
-    # Keep only last 5 iterations
-    compacted = ProgressiveDisclosure.sliding_window_compact(ctx,
-      window_size: 5
-    )
-    {:ok, compacted}
-  end
+  <section class="docstring">
 
-  # Pass-through implementations for unused hooks
-  def prepare_messages(%{messages: msgs}), do: {:ok, msgs}
-  def on_iteration_start(%{context: ctx}), do: {:ok, ctx}
-  def on_iteration_complete(%{context: ctx}), do: {:ok, ctx}
-end
-```
+      <div class="specs">
 
-### Using Hooks in Your Agent
+          <pre translate="no"><span class="attribute">@spec</span> process_tool_results(
+  [<a href="AshAgent.ResultProcessor.html#t:result_entry/0">AshAgent.ResultProcessor.result_entry</a>()],
+  <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">keyword</a>()
+) :: [<a href="AshAgent.ResultProcessor.html#t:result_entry/0">AshAgent.ResultProcessor.result_entry</a>()]</pre>
 
-```elixir
-defmodule MyAgent do
-  use Ash.Resource,
-    extensions: [AshAgent.Resource]
+      </div>
 
-  agent do
-    client "anthropic:claude-3-5-sonnet-20241022"
-    hooks MyApp.PDHooks  # Enable Progressive Disclosure
-    max_iterations 50
-  end
-end
-```
+<p>Applies a standard tool result processing pipeline.</p><p>Composes multiple processors in sequence:</p><ol><li>Check if any results are large (skip processing if all small)</li><li>Apply truncation (if configured)</li><li>Apply summarization (if configured)</li><li>Apply sampling (if configured)</li><li>Emit telemetry</li></ol><h2 id="process_tool_results/2-options" class="section-heading"><a href="#process_tool_results/2-options" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Options</span></h2><ul><li><code class="inline">:truncate</code> - Max size for truncation (integer, default: no truncation)</li><li><code class="inline">:summarize</code> - Enable summarization (boolean or keyword, default: false)</li><li><code class="inline">:sample</code> - Sample size for lists (integer, default: no sampling)</li><li><code class="inline">:skip_small</code> - Skip processing if all results under threshold (boolean, default: true)</li></ul><h2 id="process_tool_results/2-examples" class="section-heading"><a href="#process_tool_results/2-examples" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Examples</span></h2><pre><code class="makeup elixir" translate="no"><span class="gp unselectable">iex&gt; </span><span class="n">results</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p" data-group-id="8366245443-1">[</span><span class="p" data-group-id="8366245443-2">{</span><span class="s">&quot;query&quot;</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="8366245443-3">{</span><span class="ss">:ok</span><span class="p">,</span><span class="w"> </span><span class="n">large_data</span><span class="p" data-group-id="8366245443-3">}</span><span class="p" data-group-id="8366245443-2">}</span><span class="p" data-group-id="8366245443-1">]</span><span class="w">
+</span><span class="gp unselectable">iex&gt; </span><span class="n">processed</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">ProgressiveDisclosure</span><span class="o">.</span><span class="n">process_tool_results</span><span class="p" data-group-id="8366245443-4">(</span><span class="n">results</span><span class="p">,</span><span class="w">
+</span><span class="gp unselectable">...&gt; </span><span class="w">  </span><span class="ss">truncate</span><span class="p">:</span><span class="w"> </span><span class="mi">1000</span><span class="p">,</span><span class="w">
+</span><span class="gp unselectable">...&gt; </span><span class="w">  </span><span class="ss">summarize</span><span class="p">:</span><span class="w"> </span><span class="no">true</span><span class="w">
+</span><span class="gp unselectable">...&gt; </span><span class="p" data-group-id="8366245443-4">)</span></code></pre><h2 id="process_tool_results/2-telemetry" class="section-heading"><a href="#process_tool_results/2-telemetry" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Telemetry</span></h2><p>Emits <code class="inline">[:ash_agent, :progressive_disclosure, :process_results]</code> event with:</p><ul><li>Measurements: <code class="inline">%{count: integer(), skipped: boolean()}</code></li><li>Metadata: <code class="inline">%{options: keyword()}</code></li></ul>
+  </section>
+</section>
+<section class="detail" id="sliding_window_compact/2">
 
----
+  <div class="detail-header">
+    <a href="#sliding_window_compact/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">sliding_window_compact(context, opts)</h1>
 
-## Built-in Processors
 
-AshAgent provides three built-in result processors that can be used individually or composed together.
+        <a href="https://github.com/bradleygolden/ash_agent/blob/v0.1.0/lib/ash_agent/progressive_disclosure.ex#L225" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
 
-### Truncate Processor
+    </div>
+  </div>
 
-Truncates large tool results to a specified size.
+  <section class="docstring">
 
-**When to use:**
-- Tool returns very large text responses (logs, documents)
-- You only need the beginning of the result
-- Speed is important (truncation is fast)
+      <div class="specs">
 
-**Options:**
-- `:max_size` - Maximum size in bytes/items (default: 1000)
-- `:marker` - Truncation indicator text (default: "... [truncated]")
+          <pre translate="no"><span class="attribute">@spec</span> sliding_window_compact(
+  <a href="AshAgent.Context.html#t:t/0">AshAgent.Context.t</a>(),
+  <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">keyword</a>()
+) :: <a href="AshAgent.Context.html#t:t/0">AshAgent.Context.t</a>()</pre>
 
-**Example:**
+      </div>
 
-```elixir
-alias AshAgent.ResultProcessors.Truncate
+<p>Applies sliding window context compaction.</p><p>Keeps the last N iterations in full detail, removes older ones.
+This is the <strong>simplest</strong> and most <strong>predictable</strong> compaction strategy.</p><h2 id="sliding_window_compact/2-options" class="section-heading"><a href="#sliding_window_compact/2-options" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Options</span></h2><ul><li><code class="inline">:window_size</code> - Number of recent iterations to keep (required)</li></ul><h2 id="sliding_window_compact/2-examples" class="section-heading"><a href="#sliding_window_compact/2-examples" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Examples</span></h2><pre><code class="makeup elixir" translate="no"><span class="gp unselectable">iex&gt; </span><span class="n">context</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p" data-group-id="5244264528-1">%</span><span class="nc" data-group-id="5244264528-1">AshAgent.Context</span><span class="p" data-group-id="5244264528-1">{</span><span class="ss">iterations</span><span class="p">:</span><span class="w"> </span><span class="p" data-group-id="5244264528-2">[</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span><span class="w"> </span><span class="mi">5</span><span class="p" data-group-id="5244264528-2">]</span><span class="p" data-group-id="5244264528-1">}</span><span class="w">
+</span><span class="gp unselectable">iex&gt; </span><span class="n">compacted</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">AshAgent.ProgressiveDisclosure</span><span class="o">.</span><span class="n">sliding_window_compact</span><span class="p" data-group-id="5244264528-3">(</span><span class="w">
+</span><span class="gp unselectable">...&gt; </span><span class="w">  </span><span class="n">context</span><span class="p">,</span><span class="w">
+</span><span class="gp unselectable">...&gt; </span><span class="w">  </span><span class="ss">window_size</span><span class="p">:</span><span class="w"> </span><span class="mi">3</span><span class="w">
+</span><span class="gp unselectable">...&gt; </span><span class="p" data-group-id="5244264528-3">)</span><span class="w">
+</span><span class="gp unselectable">iex&gt; </span><span class="n">length</span><span class="p" data-group-id="5244264528-4">(</span><span class="n">compacted</span><span class="o">.</span><span class="n">iterations</span><span class="p" data-group-id="5244264528-4">)</span><span class="w">
+</span><span class="mi">3</span></code></pre><h2 id="sliding_window_compact/2-when-to-use" class="section-heading"><a href="#sliding_window_compact/2-when-to-use" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">When to Use</span></h2><ul><li>Fixed iteration history limit</li><li>Predictable memory usage</li><li>Simple configuration</li></ul><h2 id="sliding_window_compact/2-telemetry" class="section-heading"><a href="#sliding_window_compact/2-telemetry" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Telemetry</span></h2><p>Emits <code class="inline">[:ash_agent, :progressive_disclosure, :sliding_window]</code> event with:</p><ul><li>Measurements: <code class="inline">%{before_count: int, after_count: int, removed: int}</code></li><li>Metadata: <code class="inline">%{window_size: int}</code></li></ul>
+  </section>
+</section>
+<section class="detail" id="token_based_compact/2">
 
-results = [
-  {"read_file", {:ok, large_file_contents}},
-  {"query_db", {:ok, large_result_set}}
-]
+  <div class="detail-header">
+    <a href="#token_based_compact/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">token_based_compact(context, opts)</h1>
 
-truncated = Truncate.process(results, max_size: 500, marker: "... (truncated)")
-```
 
-**Behavior:**
+        <a href="https://github.com/bradleygolden/ash_agent/blob/v0.1.0/lib/ash_agent/progressive_disclosure.ex#L292" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
 
-- Binaries (strings): Truncated by character count (UTF-8 safe)
-- Lists: Truncated by item count
-- Maps: Truncated by key count
-- Error results: Preserved unchanged
+    </div>
+  </div>
 
-**Example output:**
+  <section class="docstring">
 
-```elixir
-# Before
-{"read_file", {:ok, "This is a very long file with many lines...(10KB)"}}
+      <div class="specs">
 
-# After
-{"read_file", {:ok, "This is a very long file with many lines... [truncated]"}}
-```
+          <pre translate="no"><span class="attribute">@spec</span> token_based_compact(
+  <a href="AshAgent.Context.html#t:t/0">AshAgent.Context.t</a>(),
+  <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">keyword</a>()
+) :: <a href="AshAgent.Context.html#t:t/0">AshAgent.Context.t</a>()</pre>
 
-### Summarize Processor
+      </div>
 
-Summarizes tool results using rule-based heuristics.
+<p>Applies token-based context compaction.</p><p>Removes oldest iterations until context is under token budget.
+Preserves at least 1 iteration for safety.</p><h2 id="token_based_compact/2-options" class="section-heading"><a href="#token_based_compact/2-options" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Options</span></h2><ul><li><code class="inline">:budget</code> - Maximum token budget (required)</li><li><code class="inline">:threshold</code> - Utilization threshold to trigger compaction (default: 1.0)</li></ul><h2 id="token_based_compact/2-examples" class="section-heading"><a href="#token_based_compact/2-examples" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Examples</span></h2><pre><code class="makeup elixir" translate="no"><span class="gp unselectable">iex&gt; </span><span class="n">large_context</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p" data-group-id="5705453593-1">%</span><span class="nc" data-group-id="5705453593-1">AshAgent.Context</span><span class="p" data-group-id="5705453593-1">{</span><span class="ss">iterations</span><span class="p">:</span><span class="w"> </span><span class="nc">List</span><span class="o">.</span><span class="n">duplicate</span><span class="p" data-group-id="5705453593-2">(</span><span class="p" data-group-id="5705453593-3">%{</span><span class="ss">messages</span><span class="p">:</span><span class="w"> </span><span class="p" data-group-id="5705453593-4">[</span><span class="p" data-group-id="5705453593-5">%{</span><span class="ss">content</span><span class="p">:</span><span class="w"> </span><span class="nc">String</span><span class="o">.</span><span class="n">duplicate</span><span class="p" data-group-id="5705453593-6">(</span><span class="s">&quot;x&quot;</span><span class="p">,</span><span class="w"> </span><span class="mi">1000</span><span class="p" data-group-id="5705453593-6">)</span><span class="p" data-group-id="5705453593-5">}</span><span class="p" data-group-id="5705453593-4">]</span><span class="p" data-group-id="5705453593-3">}</span><span class="p">,</span><span class="w"> </span><span class="mi">10</span><span class="p" data-group-id="5705453593-2">)</span><span class="p" data-group-id="5705453593-1">}</span><span class="w">
+</span><span class="gp unselectable">iex&gt; </span><span class="n">compacted</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">AshAgent.ProgressiveDisclosure</span><span class="o">.</span><span class="n">token_based_compact</span><span class="p" data-group-id="5705453593-7">(</span><span class="w">
+</span><span class="gp unselectable">...&gt; </span><span class="w">  </span><span class="n">large_context</span><span class="p">,</span><span class="w">
+</span><span class="gp unselectable">...&gt; </span><span class="w">  </span><span class="ss">budget</span><span class="p">:</span><span class="w"> </span><span class="mi">100</span><span class="w">
+</span><span class="gp unselectable">...&gt; </span><span class="p" data-group-id="5705453593-7">)</span><span class="w">
+</span><span class="gp unselectable">iex&gt; </span><span class="nc">AshAgent.Context</span><span class="o">.</span><span class="n">estimate_token_count</span><span class="p" data-group-id="5705453593-8">(</span><span class="n">compacted</span><span class="p" data-group-id="5705453593-8">)</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="mi">100</span><span class="w"> </span><span class="ow">or</span><span class="w"> </span><span class="nc">AshAgent.Context</span><span class="o">.</span><span class="n">count_iterations</span><span class="p" data-group-id="5705453593-9">(</span><span class="n">compacted</span><span class="p" data-group-id="5705453593-9">)</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">1</span><span class="w">
+</span><span class="no">true</span></code></pre><h2 id="token_based_compact/2-when-to-use" class="section-heading"><a href="#token_based_compact/2-when-to-use" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">When to Use</span></h2><ul><li>Token budget constraints</li><li>Cost optimization</li><li>Dynamic history size based on content</li></ul><h2 id="token_based_compact/2-telemetry" class="section-heading"><a href="#token_based_compact/2-telemetry" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Telemetry</span></h2><p>Emits <code class="inline">[:ash_agent, :progressive_disclosure, :token_based]</code> event with:</p><ul><li>Measurements: <code class="inline">%{before_count: int, after_count: int, removed: int, final_tokens: int}</code></li><li>Metadata: <code class="inline">%{budget: int, threshold: float}</code></li></ul>
+  </section>
+</section>
 
-**When to use:**
-- Tool returns structured data (lists, maps)
-- You need to understand the shape/size without seeing all details
-- Result type matters more than specific values
+    </div>
+  </section>
 
-**Options:**
-- `:strategy` - Summarization strategy: `:auto`, `:list`, `:map`, `:text` (default: `:auto`)
-- `:sample_size` - Number of items to sample (default: 3)
-- `:max_summary_size` - Maximum size of summary output (default: 500)
+    <footer class="footer">
+      <p>
 
-**Example:**
+          <span class="line">
+            <a href="https://hex.pm/packages/ash_agent/0.1.0" class="footer-hex-package">Hex Package</a>
 
-```elixir
-alias AshAgent.ResultProcessors.Summarize
+            <a href="https://preview.hex.pm/preview/ash_agent/0.1.0">Hex Preview</a>
 
-results = [
-  {"list_users", {:ok, Enum.to_list(1..100)}}
-]
+          </span>
 
-summarized = Summarize.process(results, sample_size: 3)
-```
+        <span class="line">
+          <button class="a-main footer-button display-quick-switch" title="Search HexDocs packages">
+            Search HexDocs
+          </button>
 
-**Behavior:**
+            <a href="ash_agent.epub" title="ePub version">
+              Download ePub version
+            </a>
 
-- Auto-detects data type (list, map, text)
-- Returns structured summary with metadata
-- Includes representative samples
+        </span>
+      </p>
 
-**Example output:**
+      <p class="built-using">
+        Built using
+        <a href="https://github.com/elixir-lang/ex_doc" title="ExDoc" target="_blank" rel="help noopener" translate="no">ExDoc</a> (v0.39.1) for the
 
-```elixir
-# Before
-{"list_users", {:ok, [1, 2, 3, ..., 100]}}
+          <a href="https://elixir-lang.org" title="Elixir" target="_blank" translate="no">Elixir programming language</a>
 
-# After
-{"list_users", {:ok, %{
-  type: "list",
-  count: 100,
-  sample: [1, 2, 3],
-  summary: "List of 100 items (integers)"
-}}}
-```
+      </p>
 
-### Sample Processor
+    </footer>
+  </div>
+</main>
+</div>
 
-Samples items from list-based tool results.
-
-**When to use:**
-- Tool returns long lists
-- You only need a few examples
-- Order matters (preserves order)
-
-**Options:**
-- `:sample_size` - Number of items to keep (default: 5)
-- `:strategy` - Sampling strategy: `:first`, `:random`, `:distributed` (default: `:first`)
-
-**Example:**
-
-```elixir
-alias AshAgent.ResultProcessors.Sample
-
-results = [
-  {"list_items", {:ok, Enum.to_list(1..1000)}}
-]
-
-sampled = Sample.process(results, sample_size: 5, strategy: :first)
-```
-
-**Behavior:**
-
-- List results: Sampled by strategy
-- Non-list results: Passed through unchanged
-- Adds metadata about total count
-
-**Example output:**
-
-```elixir
-# Before
-{"list_items", {:ok, [1, 2, 3, ..., 1000]}}
-
-# After
-{"list_items", {:ok, %{
-  items: [1, 2, 3, 4, 5],
-  total_count: 1000,
-  strategy: :first
-}}}
-```
-
----
-
-## Context Compaction Strategies
-
-Context compaction removes or transforms old iterations to keep context size manageable.
-
-### Sliding Window
-
-Keeps the last N iterations in full detail, removes older ones.
-
-**When to use:**
-- You have a fixed iteration history limit
-- Recent interactions are most important
-- Predictable memory usage is required
-
-**Pros:**
-- Simple and predictable
-- Fast (no token counting needed)
-- Configurable window size
-
-**Cons:**
-- Doesn't account for actual token usage
-- May remove important context too early
-
-**Example:**
-
-```elixir
-alias AshAgent.ProgressiveDisclosure
-
-compacted = ProgressiveDisclosure.sliding_window_compact(context,
-  window_size: 5
-)
-
-# Before: 10 iterations
-# After:  5 iterations (last 5 kept)
-```
-
-**Configuration:**
-
-```elixir
-defmodule MyApp.SlidingWindowHooks do
-  @behaviour AshAgent.Runtime.Hooks
-
-  def prepare_context(%{context: ctx}) do
-    compacted = ProgressiveDisclosure.sliding_window_compact(ctx,
-      window_size: 5
-    )
-    {:ok, compacted}
-  end
-end
-```
-
-### Token-Based
-
-Removes oldest iterations until context is under token budget.
-
-**When to use:**
-- You have strict token budget constraints
-- Cost optimization is important
-- Variable iteration sizes (some large, some small)
-
-**Pros:**
-- Respects actual token limits
-- Cost-effective
-- Adaptive to content size
-
-**Cons:**
-- Requires token estimation (approximate)
-- Slightly slower (computes token counts)
-- May remove important context if budget is too tight
-
-**Example:**
-
-```elixir
-alias AshAgent.ProgressiveDisclosure
-
-compacted = ProgressiveDisclosure.token_based_compact(context,
-  budget: 50_000,
-  threshold: 0.9
-)
-
-# Before: ~60,000 tokens
-# After:  ~45,000 tokens (under budget)
-```
-
-**Configuration:**
-
-```elixir
-defmodule MyApp.TokenBudgetHooks do
-  @behaviour AshAgent.Runtime.Hooks
-
-  def prepare_context(%{context: ctx}) do
-    compacted = ProgressiveDisclosure.token_based_compact(ctx,
-      budget: 50_000
-    )
-    {:ok, compacted}
-  end
-end
-```
-
-### Comparison Table
-
-| Strategy       | Best For                      | Pros                          | Cons                           |
-|----------------|-------------------------------|-------------------------------|--------------------------------|
-| Sliding Window | Fixed history, chat agents    | Simple, predictable, fast     | Ignores token count            |
-| Token-Based    | Budget limits, cost control   | Respects limits, adaptive     | Approximate, requires compute  |
-
----
-
-## Common Patterns & Cookbook
-
-### Pattern 1: Truncate Large Tool Results
-
-**Use case:** Agent uses tools that return large text outputs (logs, documents).
-
-```elixir
-defmodule MyApp.TruncateHooks do
-  @behaviour AshAgent.Runtime.Hooks
-
-  alias AshAgent.ProgressiveDisclosure
-
-  def prepare_tool_results(%{results: results}) do
-    processed = ProgressiveDisclosure.process_tool_results(results,
-      truncate: 1000
-    )
-    {:ok, processed}
-  end
-
-  def prepare_context(%{context: ctx}), do: {:ok, ctx}
-  def prepare_messages(%{messages: msgs}), do: {:ok, msgs}
-  def on_iteration_start(%{context: ctx}), do: {:ok, ctx}
-  def on_iteration_complete(%{context: ctx}), do: {:ok, ctx}
-end
-```
-
-**Expected outcome:**
-- Tool results limited to ~1000 bytes
-- Agent maintains coherence with truncated results
-- 50-70% token reduction for large results
-
-### Pattern 2: Sliding Window for Chat Agents
-
-**Use case:** Multi-turn conversation agent where only recent context matters.
-
-```elixir
-defmodule MyApp.ChatHooks do
-  @behaviour AshAgent.Runtime.Hooks
-
-  alias AshAgent.ProgressiveDisclosure
-
-  def prepare_context(%{context: ctx}) do
-    compacted = ProgressiveDisclosure.sliding_window_compact(ctx,
-      window_size: 10
-    )
-    {:ok, compacted}
-  end
-
-  def prepare_tool_results(%{results: results}), do: {:ok, results}
-  def prepare_messages(%{messages: msgs}), do: {:ok, msgs}
-  def on_iteration_start(%{context: ctx}), do: {:ok, ctx}
-  def on_iteration_complete(%{context: ctx}), do: {:ok, ctx}
-end
-```
-
-**Expected outcome:**
-- Context limited to last 10 turns
-- Predictable memory usage
-- Agent maintains short-term context
-
-### Pattern 3: Token Budget Enforcement
-
-**Use case:** Cost-sensitive application with strict token budget.
-
-```elixir
-defmodule MyApp.BudgetHooks do
-  @behaviour AshAgent.Runtime.Hooks
-
-  alias AshAgent.ProgressiveDisclosure
-
-  @token_budget 50_000
-
-  def prepare_context(%{context: ctx}) do
-    compacted = ProgressiveDisclosure.token_based_compact(ctx,
-      budget: @token_budget,
-      threshold: 0.9
-    )
-    {:ok, compacted}
-  end
-
-  def prepare_tool_results(%{results: results}), do: {:ok, results}
-  def prepare_messages(%{messages: msgs}), do: {:ok, msgs}
-  def on_iteration_start(%{context: ctx}), do: {:ok, ctx}
-  def on_iteration_complete(%{context: ctx}), do: {:ok, ctx}
-end
-```
-
-**Expected outcome:**
-- Context stays under 50K tokens
-- Compaction triggers at 90% of budget
-- Cost control with adaptive history
-
-### Pattern 4: Combining Multiple Strategies
-
-**Use case:** Maximum efficiency with both result processing and context compaction.
-
-```elixir
-defmodule MyApp.MaxEfficiencyHooks do
-  @behaviour AshAgent.Runtime.Hooks
-
-  alias AshAgent.ProgressiveDisclosure
-
-  def prepare_tool_results(%{results: results}) do
-    processed = ProgressiveDisclosure.process_tool_results(results,
-      truncate: 1000,
-      summarize: true,
-      sample: 5
-    )
-    {:ok, processed}
-  end
-
-  def prepare_context(%{context: ctx}) do
-    compacted = ProgressiveDisclosure.token_based_compact(ctx,
-      budget: 50_000,
-      threshold: 0.85
-    )
-    {:ok, compacted}
-  end
-
-  def prepare_messages(%{messages: msgs}), do: {:ok, msgs}
-  def on_iteration_start(%{context: ctx}), do: {:ok, ctx}
-  def on_iteration_complete(%{context: ctx}), do: {:ok, ctx}
-end
-```
-
-**Expected outcome:**
-- Maximum token efficiency (70-80% reduction)
-- Tool results processed before adding to context
-- Context compacted to stay under budget
-- Agent maintains quality with processed data
-
----
-
-## Advanced Patterns
-
-### Custom Processors
-
-Create your own result processor for domain-specific transformations.
-
-```elixir
-defmodule MyApp.CustomProcessor do
-  @behaviour AshAgent.ResultProcessor
-
-  @impl true
-  def process(results, opts \\ []) do
-    Enum.map(results, fn
-      {name, {:ok, data}} = result ->
-        if custom_condition?(data) do
-          {name, {:ok, transform_data(data, opts)}}
-        else
-          result
-        end
-
-      error_result ->
-        error_result
-    end)
-  end
-
-  defp custom_condition?(data) do
-    # Your logic here
-  end
-
-  defp transform_data(data, opts) do
-    # Your transformation here
-  end
-end
-```
-
-### Conditional Processing
-
-Process only certain tools based on name or result type.
-
-```elixir
-defmodule MyApp.ConditionalHooks do
-  @behaviour AshAgent.Runtime.Hooks
-
-  alias AshAgent.ResultProcessors.Truncate
-
-  @large_result_tools ~w(read_file query_database fetch_logs)
-
-  def prepare_tool_results(%{results: results}) do
-    processed = Enum.map(results, fn
-      {name, {:ok, data}} = result when name in @large_result_tools ->
-        truncated = Truncate.process([result], max_size: 500)
-        List.first(truncated)
-
-      other_result ->
-        other_result
-    end)
-
-    {:ok, processed}
-  end
-end
-```
-
-### Dynamic Configuration
-
-Adjust Progressive Disclosure settings based on runtime conditions.
-
-```elixir
-defmodule MyApp.DynamicHooks do
-  @behaviour AshAgent.Runtime.Hooks
-
-  alias AshAgent.{Context, ProgressiveDisclosure}
-
-  def prepare_context(%{context: ctx}) do
-    utilization = Context.budget_utilization(ctx, 100_000)
-
-    compacted = cond do
-      utilization < 0.5 ->
-        # Under 50% - no compaction needed
-        ctx
-
-      utilization < 0.8 ->
-        # 50-80% - gentle compaction
-        ProgressiveDisclosure.sliding_window_compact(ctx, window_size: 10)
-
-      true ->
-        # Over 80% - aggressive compaction
-        ProgressiveDisclosure.token_based_compact(ctx, budget: 80_000)
-    end
-
-    {:ok, compacted}
-  end
-end
-```
-
----
-
-## Performance Considerations
-
-### Processing Overhead
-
-Progressive Disclosure adds minimal overhead:
-
-- **Truncation:** < 1ms per result (very fast)
-- **Summarization:** 1-5ms per result (moderate)
-- **Sampling:** < 1ms per result (very fast)
-- **Context compaction:** 10-50ms (depends on iteration count)
-
-### Skip-If-Small Optimization
-
-The `process_tool_results` pipeline automatically skips processing if all results are under the threshold:
-
-```elixir
-# This automatically skips if all results < 1000 bytes
-processed = ProgressiveDisclosure.process_tool_results(results,
-  truncate: 1000,
-  skip_small: true  # default
-)
-```
-
-Benefits:
-- No overhead for small results
-- Only processes when needed
-- Maintains performance
-
-### Token Estimation Accuracy
-
-Token estimation uses a heuristic (~4 chars per token) and is approximate:
-
-- **Accuracy:** ±20-30% of actual count
-- **Fast:** No API calls required
-- **Good enough:** For budget checking, estimates work well
-
-For exact token counts, use your provider's tokenizer:
-
-```elixir
-# Example with Anthropic
-{:ok, count} = Anthropic.count_tokens(messages)
-```
-
-### Memory Usage
-
-Context compaction reduces memory footprint:
-
-- **Before:** 10 iterations @ 5KB each = 50KB
-- **After:** 3 iterations @ 5KB each = 15KB
-- **Savings:** 35KB (70%)
-
----
-
-## Troubleshooting
-
-### Problem: Over-truncation removes critical information
-
-**Symptoms:**
-- Agent asks for the same information repeatedly
-- Agent says "I don't have enough information"
-- Tool results are too small to be useful
-
-**Solution:**
-Increase the truncation threshold or disable truncation for specific tools:
-
-```elixir
-# Option 1: Increase threshold
-processed = ProgressiveDisclosure.process_tool_results(results,
-  truncate: 5000  # Increased from 1000
-)
-
-# Option 2: Conditional processing
-def prepare_tool_results(%{results: results}) do
-  processed = Enum.map(results, fn
-    {name, _result} = entry when name == "critical_tool" ->
-      entry  # Don't process critical tool
-
-    other ->
-      Truncate.process([other], max_size: 1000) |> List.first()
-  end)
-
-  {:ok, processed}
-end
-```
-
-### Problem: Agent loses context coherence
-
-**Symptoms:**
-- Agent forgets previous interactions
-- Agent contradicts itself
-- Agent asks questions it already asked
-
-**Solution:**
-Increase sliding window size or use less aggressive compaction:
-
-```elixir
-# Option 1: Larger window
-compacted = ProgressiveDisclosure.sliding_window_compact(ctx,
-  window_size: 10  # Increased from 5
-)
-
-# Option 2: Higher token budget
-compacted = ProgressiveDisclosure.token_based_compact(ctx,
-  budget: 100_000  # Increased from 50_000
-)
-```
-
-### Problem: Token budget still exceeded
-
-**Symptoms:**
-- Agent hits token limit despite PD
-- Token estimates show under budget, but API rejects request
-- Compaction not removing enough iterations
-
-**Solution:**
-Use more aggressive compaction or combine strategies:
-
-```elixir
-# More aggressive token budget
-compacted = ProgressiveDisclosure.token_based_compact(ctx,
-  budget: 40_000,  # Reduced to leave buffer
-  threshold: 0.8   # Trigger earlier
-)
-
-# Or combine with result processing
-def prepare_tool_results(%{results: results}) do
-  ProgressiveDisclosure.process_tool_results(results,
-    truncate: 500,    # More aggressive
-    summarize: true   # Add summarization
-  )
-end
-```
-
-### Problem: Processing is too slow
-
-**Symptoms:**
-- Noticeable delay in agent responses
-- High CPU usage during hook execution
-- Telemetry shows long processing times
-
-**Solution:**
-Use skip optimization and selective processing:
-
-```elixir
-# Enable skip optimization (default, but be explicit)
-processed = ProgressiveDisclosure.process_tool_results(results,
-  truncate: 1000,
-  skip_small: true  # Skip if all results are small
-)
-
-# Or selectively process only large tools
-@large_tools ~w(fetch_logs query_database)
-
-def prepare_tool_results(%{results: results}) do
-  processed = Enum.map(results, fn
-    {name, _} = result when name in @large_tools ->
-      Truncate.process([result], max_size: 1000) |> List.first()
-
-    other ->
-      other  # Skip processing small tools
-  end)
-
-  {:ok, processed}
-end
-```
-
-### Problem: Summarization loses important details
-
-**Symptoms:**
-- Agent doesn't see specific values in summarized results
-- Agent says "I need more detail"
-- Summaries are too generic
-
-**Solution:**
-Increase sample size or use truncation instead:
-
-```elixir
-# Option 1: Larger samples
-summarized = Summarize.process(results,
-  sample_size: 10  # Increased from 3
-)
-
-# Option 2: Use truncation instead (preserves detail)
-truncated = Truncate.process(results,
-  max_size: 2000
-)
-```
-
-### Problem: Telemetry events not appearing
-
-**Symptoms:**
-- No PD telemetry in logs
-- Can't measure PD effectiveness
-- Monitoring not working
-
-**Solution:**
-Attach telemetry handlers:
-
-```elixir
-:telemetry.attach_many(
-  "progressive-disclosure-handler",
-  [
-    [:ash_agent, :progressive_disclosure, :process_results],
-    [:ash_agent, :progressive_disclosure, :sliding_window],
-    [:ash_agent, :progressive_disclosure, :token_based]
-  ],
-  fn event_name, measurements, metadata, _config ->
-    Logger.info("PD Event: #{inspect(event_name)}")
-    Logger.info("Measurements: #{inspect(measurements)}")
-    Logger.info("Metadata: #{inspect(metadata)}")
-  end,
-  nil
-)
-```
-
----
-
-## Additional Resources
-
-- [AshAgent Documentation](https://hexdocs.pm/ash_agent)
-- [Result Processors API](https://hexdocs.pm/ash_agent/AshAgent.ResultProcessors.html)
-- [Context Helpers API](https://hexdocs.pm/ash_agent/AshAgent.Context.html)
-- [ProgressiveDisclosure API](https://hexdocs.pm/ash_agent/AshAgent.ProgressiveDisclosure.html)
-- [Hook System Guide](https://hexdocs.pm/ash_agent/AshAgent.Runtime.Hooks.html)
-
----
-
-*Last updated: 2025-11-10*
+  </body>
+</html>
