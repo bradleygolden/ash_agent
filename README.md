@@ -165,6 +165,7 @@ end
 
 ### Needs Research
 
+- [ ] Tool result caching and lookup
 - [ ] Guardrails & safety hooks
 - [ ] Structured prompt segmentation (XML/Markdown sections)
 - [ ] Evaluation harness for agents
