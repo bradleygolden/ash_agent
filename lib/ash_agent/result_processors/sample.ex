@@ -13,6 +13,7 @@ defmodule AshAgent.ResultProcessors.Sample do
   ## Examples
 
       # Sample first 5 items from a large list
+      iex> alias AshAgent.ResultProcessors.Sample
       iex> results = [{"query", {:ok, Enum.to_list(1..100)}}]
       iex> sampled = Sample.process(results, sample_size: 5)
       iex> [{"query", {:ok, result}}] = sampled
@@ -22,12 +23,14 @@ defmodule AshAgent.ResultProcessors.Sample do
       100
 
       # Non-list data passes through unchanged
+      iex> alias AshAgent.ResultProcessors.Sample
       iex> results = [{"tool", {:ok, "not a list"}}]
       iex> sampled = Sample.process(results)
       iex> [{"tool", {:ok, "not a list"}}] = sampled
       true
 
       # Error results are preserved
+      iex> alias AshAgent.ResultProcessors.Sample
       iex> results = [{"tool", {:error, "oops"}}]
       iex> sampled = Sample.process(results)
       iex> [{"tool", {:error, "oops"}}] = sampled
