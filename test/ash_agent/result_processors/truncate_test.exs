@@ -3,6 +3,8 @@ defmodule AshAgent.ResultProcessors.TruncateTest do
 
   alias AshAgent.ResultProcessors.Truncate
 
+  doctest AshAgent.ResultProcessors.Truncate
+
   describe "process/2 with binary data" do
     test "truncates binary over max_size (UTF-8 safe)" do
       large_binary = String.duplicate("x", 2000)

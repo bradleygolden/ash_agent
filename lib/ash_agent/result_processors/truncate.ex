@@ -25,15 +25,13 @@ defmodule AshAgent.ResultProcessors.Truncate do
 
       # Small results pass through unchanged
       iex> results = [{"tool", {:ok, "small"}}]
-      iex> truncated = AshAgent.ResultProcessors.Truncate.process(results, max_size: 100)
-      iex> [{"tool", {:ok, "small"}}] = truncated
-      true
+      iex> [{"tool", {:ok, "small"}}] = AshAgent.ResultProcessors.Truncate.process(results, max_size: 100)
+      [{"tool", {:ok, "small"}}]
 
       # Error results are preserved
       iex> results = [{"tool", {:error, "oops"}}]
-      iex> truncated = AshAgent.ResultProcessors.Truncate.process(results)
-      iex> [{"tool", {:error, "oops"}}] = truncated
-      true
+      iex> [{"tool", {:error, "oops"}}] = AshAgent.ResultProcessors.Truncate.process(results)
+      [{"tool", {:error, "oops"}}]
 
   """
 
