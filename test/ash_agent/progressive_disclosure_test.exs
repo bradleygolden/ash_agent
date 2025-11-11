@@ -1,6 +1,8 @@
 defmodule AshAgent.ProgressiveDisclosureTest do
   use ExUnit.Case, async: true
 
+  doctest AshAgent.ProgressiveDisclosure
+
   alias AshAgent.ProgressiveDisclosure
 
   describe "process_tool_results/2 with single processor" do

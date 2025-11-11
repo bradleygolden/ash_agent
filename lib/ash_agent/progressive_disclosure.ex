@@ -73,11 +73,17 @@ defmodule AshAgent.ProgressiveDisclosure do
 
   ## Examples
 
+      iex> alias AshAgent.ProgressiveDisclosure
+      iex> large_data = String.duplicate("x", 2000)
       iex> results = [{"query", {:ok, large_data}}]
       iex> processed = ProgressiveDisclosure.process_tool_results(results,
       ...>   truncate: 1000,
-      ...>   summarize: true
+      ...>   summarize: true,
+      ...>   skip_small: false
       ...> )
+      iex> [{"query", {:ok, result}}] = processed
+      iex> is_binary(result) or is_map(result)
+      true
 
   ## Telemetry
 
@@ -268,12 +274,13 @@ defmodule AshAgent.ProgressiveDisclosure do
 
   ## Examples
 
-      iex> large_context = %AshAgent.Context{iterations: List.duplicate(%{messages: [%{content: String.duplicate("x", 1000)}]}, 10)}
-      iex> compacted = AshAgent.ProgressiveDisclosure.token_based_compact(
+      iex> alias AshAgent.{Context, ProgressiveDisclosure}
+      iex> large_context = %Context{iterations: List.duplicate(%{messages: [%{role: :user, content: String.duplicate("x", 1000)}]}, 10)}
+      iex> compacted = ProgressiveDisclosure.token_based_compact(
       ...>   large_context,
       ...>   budget: 100
       ...> )
-      iex> AshAgent.Context.estimate_token_count(compacted) <= 100 or AshAgent.Context.count_iterations(compacted) == 1
+      iex> Context.estimate_token_count(compacted) <= 100 or Context.count_iterations(compacted) == 1
       true
 
   ## When to Use
