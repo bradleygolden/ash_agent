@@ -51,7 +51,7 @@ defmodule AshAgent.ProgressiveDisclosure do
   - Result Processors: `AshAgent.ResultProcessors.*`
   """
 
-  alias AshAgent.ResultProcessors
+  alias AshAgent.{Context, ResultProcessors}
   require Logger
 
   @doc """
@@ -187,5 +187,71 @@ defmodule AshAgent.ProgressiveDisclosure do
     )
 
     results
+  end
+
+  @doc """
+  Applies sliding window context compaction.
+
+  Keeps the last N iterations in full detail, removes older ones.
+  This is the **simplest** and most **predictable** compaction strategy.
+
+  ## Options
+
+  - `:window_size` - Number of recent iterations to keep (required)
+
+  ## Examples
+
+      iex> context = %AshAgent.Context{iterations: [1, 2, 3, 4, 5]}
+      iex> compacted = AshAgent.ProgressiveDisclosure.sliding_window_compact(
+      ...>   context,
+      ...>   window_size: 3
+      ...> )
+      iex> length(compacted.iterations)
+      3
+
+  ## When to Use
+
+  - Fixed iteration history limit
+  - Predictable memory usage
+  - Simple configuration
+
+  ## Telemetry
+
+  Emits `[:ash_agent, :progressive_disclosure, :sliding_window]` event with:
+  - Measurements: `%{before_count: int, after_count: int, removed: int}`
+  - Metadata: `%{window_size: int}`
+  """
+  @spec sliding_window_compact(Context.t(), keyword()) :: Context.t()
+  def sliding_window_compact(%Context{} = context, opts) do
+    window_size = Keyword.fetch!(opts, :window_size)
+
+    unless is_integer(window_size) and window_size > 0 do
+      raise ArgumentError, "window_size must be a positive integer, got: #{inspect(window_size)}"
+    end
+
+    before_count = Context.count_iterations(context)
+
+    Logger.debug("Applying sliding window compaction with window_size=#{window_size}")
+
+    compacted = Context.keep_last_iterations(context, window_size)
+
+    after_count = Context.count_iterations(compacted)
+    removed = before_count - after_count
+
+    if removed > 0 do
+      Logger.info("Sliding window compaction removed #{removed} iterations")
+    end
+
+    :telemetry.execute(
+      [:ash_agent, :progressive_disclosure, :sliding_window],
+      %{
+        before_count: before_count,
+        after_count: after_count,
+        removed: removed
+      },
+      %{window_size: window_size}
+    )
+
+    compacted
   end
 end
