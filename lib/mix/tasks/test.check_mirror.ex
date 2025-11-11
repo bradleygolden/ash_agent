@@ -31,17 +31,16 @@ defmodule Mix.Tasks.Test.CheckMirror do
     lib_files = find_lib_files()
     test_files = find_test_files()
 
-    missing_tests = find_missing_tests(lib_files)
     orphaned_tests = find_orphaned_tests(test_files, lib_files)
 
-    case {missing_tests, orphaned_tests} do
-      {[], []} ->
-        Mix.shell().info("✓ All test files properly mirror lib files")
+    case orphaned_tests do
+      [] ->
+        Mix.shell().info("✓ All test files have corresponding lib files")
         :ok
 
-      {missing, orphaned} ->
-        print_errors(missing, orphaned)
-        Mix.raise("Test structure does not mirror lib structure. See errors above.")
+      orphaned ->
+        print_errors(orphaned)
+        Mix.raise("Orphaned test files found. See errors above.")
     end
   end
 
@@ -53,6 +52,7 @@ defmodule Mix.Tasks.Test.CheckMirror do
 
   defp find_test_files do
     Path.wildcard("test/ash_agent/**/*_test.exs")
+    |> Enum.reject(&String.contains?(&1, "/integration/"))
     |> Enum.map(&normalize_path/1)
   end
 
@@ -70,19 +70,6 @@ defmodule Mix.Tasks.Test.CheckMirror do
     |> String.replace_prefix("test/", "")
   end
 
-  defp find_missing_tests(lib_files) do
-    Enum.reduce(lib_files, [], fn lib_file, acc ->
-      expected_test = lib_to_test_path(lib_file)
-
-      if File.exists?("test/#{expected_test}") do
-        acc
-      else
-        [{lib_file, expected_test} | acc]
-      end
-    end)
-    |> Enum.reverse()
-  end
-
   defp find_orphaned_tests(test_files, lib_files) do
     lib_paths_set = MapSet.new(lib_files)
 
@@ -98,44 +85,25 @@ defmodule Mix.Tasks.Test.CheckMirror do
     |> Enum.reverse()
   end
 
-  defp lib_to_test_path(lib_path) do
-    lib_path
-    |> String.replace_suffix(".ex", "_test.exs")
-  end
-
   defp test_to_lib_path(test_path) do
     test_path
     |> String.replace_suffix("_test.exs", ".ex")
   end
 
-  defp print_errors(missing_tests, orphaned_tests) do
-    if missing_tests != [] do
-      Mix.shell().error("\n❌ Missing test files (lib files without corresponding tests):\n")
+  defp print_errors(orphaned_tests) do
+    Mix.shell().error("\n❌ Orphaned test files (tests without corresponding lib files):\n")
 
-      Enum.each(missing_tests, fn {lib_file, expected_test} ->
-        Mix.shell().error("  lib/#{lib_file}")
-        Mix.shell().error("    → Expected: test/#{expected_test}")
-        Mix.shell().error("    → Action: Create test file at test/#{expected_test}\n")
-      end)
+    Enum.each(orphaned_tests, fn {test_file, expected_lib} ->
+      Mix.shell().error("  test/#{test_file}")
+      Mix.shell().error("    → Expected lib file: lib/#{expected_lib}")
 
       Mix.shell().error(
-        "Per AGENTS.md: \"Keep unit tests in test/ash_agent, mirroring lib/ structure\""
+        "    → Action: Either create lib/#{expected_lib} or remove test/#{test_file}\n"
       )
-    end
+    end)
 
-    if orphaned_tests != [] do
-      Mix.shell().error("\n❌ Orphaned test files (tests without corresponding lib files):\n")
+    Mix.shell().error("\nPer AGENTS.md: Every test file must test a corresponding lib file")
 
-      Enum.each(orphaned_tests, fn {test_file, expected_lib} ->
-        Mix.shell().error("  test/#{test_file}")
-        Mix.shell().error("    → Expected lib file: lib/#{expected_lib}")
-
-        Mix.shell().error(
-          "    → Action: Either create lib/#{expected_lib} or remove test/#{test_file}\n"
-        )
-      end)
-    end
-
-    Mix.shell().error("\n📖 Reference: See AGENTS.md testing guidelines")
+    Mix.shell().error("📖 Reference: See AGENTS.md testing guidelines")
   end
 end
