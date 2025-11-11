@@ -51,5 +51,141 @@ defmodule AshAgent.ProgressiveDisclosure do
   - Result Processors: `AshAgent.ResultProcessors.*`
   """
 
-  # Public API will be implemented in subsequent subtasks
+  alias AshAgent.ResultProcessors
+  require Logger
+
+  @doc """
+  Applies a standard tool result processing pipeline.
+
+  Composes multiple processors in sequence:
+  1. Check if any results are large (skip processing if all small)
+  2. Apply truncation (if configured)
+  3. Apply summarization (if configured)
+  4. Apply sampling (if configured)
+  5. Emit telemetry
+
+  ## Options
+
+  - `:truncate` - Max size for truncation (integer, default: no truncation)
+  - `:summarize` - Enable summarization (boolean or keyword, default: false)
+  - `:sample` - Sample size for lists (integer, default: no sampling)
+  - `:skip_small` - Skip processing if all results under threshold (boolean, default: true)
+
+  ## Examples
+
+      iex> results = [{"query", {:ok, large_data}}]
+      iex> processed = ProgressiveDisclosure.process_tool_results(results,
+      ...>   truncate: 1000,
+      ...>   summarize: true
+      ...> )
+
+  ## Telemetry
+
+  Emits `[:ash_agent, :progressive_disclosure, :process_results]` event with:
+  - Measurements: `%{count: integer(), skipped: boolean()}`
+  - Metadata: `%{options: keyword()}`
+  """
+  @spec process_tool_results([AshAgent.ResultProcessor.result_entry()], keyword()) ::
+          [AshAgent.ResultProcessor.result_entry()]
+  def process_tool_results(results, opts \\ []) do
+    skip_small? = Keyword.get(opts, :skip_small, true)
+
+    results
+    |> maybe_skip_small(skip_small?, opts)
+    |> apply_truncate(opts)
+    |> apply_summarize(opts)
+    |> apply_sample(opts)
+    |> emit_processing_telemetry(opts)
+  end
+
+  defp maybe_skip_small(results, false, _opts), do: {:process, results}
+
+  defp maybe_skip_small(results, true, opts) do
+    truncate_threshold = Keyword.get(opts, :truncate, :infinity)
+
+    has_large_result? =
+      Enum.any?(results, fn
+        {_name, {:ok, data}} ->
+          ResultProcessors.estimate_size(data) > truncate_threshold
+
+        _ ->
+          false
+      end)
+
+    if has_large_result? do
+      {:process, results}
+    else
+      Logger.debug("All results under threshold, skipping processing")
+      {:skip, results}
+    end
+  end
+
+  defp apply_truncate({:skip, results}, _opts), do: {:skip, results}
+
+  defp apply_truncate({:process, results}, opts) do
+    case Keyword.get(opts, :truncate) do
+      nil ->
+        {:process, results}
+
+      max_size when is_integer(max_size) ->
+        Logger.debug("Truncating results to max_size=#{max_size}")
+        truncated = ResultProcessors.Truncate.process(results, max_size: max_size)
+        {:process, truncated}
+    end
+  end
+
+  defp apply_summarize({:skip, results}, _opts), do: {:skip, results}
+
+  defp apply_summarize({:process, results}, opts) do
+    summarize_opts = Keyword.get(opts, :summarize, false)
+
+    cond do
+      summarize_opts == false ->
+        {:process, results}
+
+      summarize_opts == true ->
+        Logger.debug("Summarizing results with defaults")
+        summarized = ResultProcessors.Summarize.process(results, [])
+        {:process, summarized}
+
+      is_list(summarize_opts) ->
+        Logger.debug("Summarizing results with options: #{inspect(summarize_opts)}")
+        summarized = ResultProcessors.Summarize.process(results, summarize_opts)
+        {:process, summarized}
+    end
+  end
+
+  defp apply_sample({:skip, results}, _opts), do: {:skip, results}
+
+  defp apply_sample({:process, results}, opts) do
+    case Keyword.get(opts, :sample) do
+      nil ->
+        {:process, results}
+
+      sample_size when is_integer(sample_size) ->
+        Logger.debug("Sampling results with size=#{sample_size}")
+        sampled = ResultProcessors.Sample.process(results, sample_size: sample_size)
+        {:process, sampled}
+    end
+  end
+
+  defp emit_processing_telemetry({:skip, results}, opts) do
+    :telemetry.execute(
+      [:ash_agent, :progressive_disclosure, :process_results],
+      %{count: length(results), skipped: true},
+      %{options: opts}
+    )
+
+    results
+  end
+
+  defp emit_processing_telemetry({:process, results}, opts) do
+    :telemetry.execute(
+      [:ash_agent, :progressive_disclosure, :process_results],
+      %{count: length(results), skipped: false},
+      %{options: opts}
+    )
+
+    results
+  end
 end
