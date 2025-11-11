@@ -254,4 +254,117 @@ defmodule AshAgent.ProgressiveDisclosure do
 
     compacted
   end
+
+  @doc """
+  Applies token-based context compaction.
+
+  Removes oldest iterations until context is under token budget.
+  Preserves at least 1 iteration for safety.
+
+  ## Options
+
+  - `:budget` - Maximum token budget (required)
+  - `:threshold` - Utilization threshold to trigger compaction (default: 1.0)
+
+  ## Examples
+
+      iex> large_context = %AshAgent.Context{iterations: List.duplicate(%{messages: [%{content: String.duplicate("x", 1000)}]}, 10)}
+      iex> compacted = AshAgent.ProgressiveDisclosure.token_based_compact(
+      ...>   large_context,
+      ...>   budget: 100
+      ...> )
+      iex> AshAgent.Context.estimate_token_count(compacted) <= 100 or AshAgent.Context.count_iterations(compacted) == 1
+      true
+
+  ## When to Use
+
+  - Token budget constraints
+  - Cost optimization
+  - Dynamic history size based on content
+
+  ## Telemetry
+
+  Emits `[:ash_agent, :progressive_disclosure, :token_based]` event with:
+  - Measurements: `%{before_count: int, after_count: int, removed: int, final_tokens: int}`
+  - Metadata: `%{budget: int, threshold: float}`
+  """
+  @spec token_based_compact(Context.t(), keyword()) :: Context.t()
+  def token_based_compact(%Context{} = context, opts) do
+    budget = Keyword.fetch!(opts, :budget)
+    threshold = Keyword.get(opts, :threshold, 1.0)
+
+    unless is_integer(budget) and budget > 0 do
+      raise ArgumentError, "budget must be a positive integer, got: #{inspect(budget)}"
+    end
+
+    unless is_number(threshold) do
+      raise ArgumentError, "threshold must be a number, got: #{inspect(threshold)}"
+    end
+
+    utilization = Context.budget_utilization(context, budget)
+
+    if utilization >= threshold do
+      Logger.debug(
+        "Context exceeds budget threshold (#{Float.round(utilization, 2)}), compacting"
+      )
+
+      do_compact_to_budget(context, budget, opts)
+    else
+      Logger.debug("Context under budget (#{Float.round(utilization, 2)}), no compaction needed")
+      context
+    end
+  end
+
+  defp do_compact_to_budget(%Context{} = context, budget, opts) do
+    before_count = Context.count_iterations(context)
+    compacted = compact_until_under_budget(context, budget)
+    after_count = Context.count_iterations(compacted)
+    removed = before_count - after_count
+    final_tokens = Context.estimate_token_count(compacted)
+
+    if removed > 0 do
+      Logger.info(
+        "Token-based compaction removed #{removed} iterations, " <>
+          "reduced tokens to ~#{final_tokens}"
+      )
+    end
+
+    :telemetry.execute(
+      [:ash_agent, :progressive_disclosure, :token_based],
+      %{
+        before_count: before_count,
+        after_count: after_count,
+        removed: removed,
+        final_tokens: final_tokens
+      },
+      %{budget: budget, threshold: Keyword.get(opts, :threshold, 1.0)}
+    )
+
+    compacted
+  end
+
+  defp compact_until_under_budget(%Context{iterations: [_single]} = context, _budget) do
+    # Can't remove the last iteration - safety constraint
+    token_count = Context.estimate_token_count(context)
+
+    Logger.warning(
+      "Context exceeds budget but only 1 iteration remains " <>
+        "(~#{token_count} tokens), cannot compact further"
+    )
+
+    context
+  end
+
+  defp compact_until_under_budget(%Context{iterations: iterations} = context, budget) do
+    token_count = Context.estimate_token_count(context)
+
+    if token_count <= budget do
+      # Under budget, done!
+      context
+    else
+      # Remove oldest iteration and recurse
+      compacted = %{context | iterations: Enum.drop(iterations, 1)}
+      compact_until_under_budget(compacted, budget)
+    end
+  end
 end
