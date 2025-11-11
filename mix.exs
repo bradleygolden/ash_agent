@@ -125,8 +125,7 @@ defmodule AshAgent.MixProject do
       "README.md",
       "CHANGELOG.md": [title: "Changelog"],
       "documentation/tutorials/getting-started.md": [title: "Getting Started"],
-      "documentation/topics/overview.md": [title: "Overview"],
-      "documentation/guides/progressive-disclosure.md": [title: "Progressive Disclosure"]
+      "documentation/topics/overview.md": [title: "Overview"]
     ]
   end
 

@@ -361,10 +361,8 @@ defmodule AshAgent.ProgressiveDisclosure do
     token_count = Context.estimate_token_count(context)
 
     if token_count <= budget do
-      # Under budget, done!
       context
     else
-      # Remove oldest iteration and recurse
       compacted = %{context | iterations: Enum.drop(iterations, 1)}
       compact_until_under_budget(compacted, budget)
     end
