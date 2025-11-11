@@ -91,8 +91,6 @@ defmodule AshAgent.ProgressiveDisclosure do
   - Measurements: `%{count: integer(), skipped: boolean()}`
   - Metadata: `%{options: keyword()}`
   """
-  @spec process_tool_results([AshAgent.ResultProcessor.result_entry()], keyword()) ::
-          [AshAgent.ResultProcessor.result_entry()]
   def process_tool_results(results, opts \\ []) do
     skip_small? = Keyword.get(opts, :skip_small, true)
 
@@ -227,7 +225,6 @@ defmodule AshAgent.ProgressiveDisclosure do
   - Measurements: `%{before_count: int, after_count: int, removed: int}`
   - Metadata: `%{window_size: int}`
   """
-  @spec sliding_window_compact(Context.t(), keyword()) :: Context.t()
   def sliding_window_compact(%Context{} = context, opts) do
     window_size = Keyword.fetch!(opts, :window_size)
 
@@ -295,7 +292,6 @@ defmodule AshAgent.ProgressiveDisclosure do
   - Measurements: `%{before_count: int, after_count: int, removed: int, final_tokens: int}`
   - Metadata: `%{budget: int, threshold: float}`
   """
-  @spec token_based_compact(Context.t(), keyword()) :: Context.t()
   def token_based_compact(%Context{} = context, opts) do
     budget = Keyword.fetch!(opts, :budget)
     threshold = Keyword.get(opts, :threshold, 1.0)

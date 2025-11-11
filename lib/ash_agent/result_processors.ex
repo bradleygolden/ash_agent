@@ -34,7 +34,6 @@ defmodule AshAgent.ResultProcessors do
       iex> AshAgent.ResultProcessors.large?(large, 1000)
       true
   """
-  @spec large?(any(), pos_integer()) :: boolean()
   def large?(data, threshold) do
     estimate_size(data) > threshold
   end
@@ -47,7 +46,6 @@ defmodule AshAgent.ResultProcessors do
   - Maps: map_size
   - Other: 0
   """
-  @spec estimate_size(any()) :: non_neg_integer()
   def estimate_size(data) when is_binary(data), do: byte_size(data)
   def estimate_size(data) when is_list(data), do: length(data)
   def estimate_size(data) when is_map(data), do: map_size(data)
@@ -58,9 +56,6 @@ defmodule AshAgent.ResultProcessors do
 
   Ensures errors remain as {:error, reason} and successes as {:ok, data}.
   """
-  @spec preserve_structure({tool_name, tool_result}, (any() -> any())) ::
-          {tool_name, tool_result}
-        when tool_name: String.t(), tool_result: {:ok, any()} | {:error, any()}
   def preserve_structure({name, {:ok, data}}, transform_fn) do
     {name, {:ok, transform_fn.(data)}}
   end
