@@ -294,6 +294,87 @@ defmodule AshAgent.Context do
     %{context | iterations: sliced_iterations}
   end
 
+  @doc """
+  Marks an iteration as summarized and stores the summary.
+
+  ## Examples
+
+      iex> iteration = %{number: 1, messages: [], metadata: %{}}
+      iex> summarized = AshAgent.Context.mark_as_summarized(iteration, "User asked about weather")
+      iex> summarized.metadata.summarized
+      true
+      iex> summarized.metadata.summary
+      "User asked about weather"
+  """
+  @spec mark_as_summarized(map(), String.t()) :: map()
+  def mark_as_summarized(iteration, summary) when is_map(iteration) and is_binary(summary) do
+    updated_metadata =
+      Map.get(iteration, :metadata, %{})
+      |> Map.put(:summarized, true)
+      |> Map.put(:summary, summary)
+      |> Map.put(:summarized_at, DateTime.utc_now())
+
+    Map.put(iteration, :metadata, updated_metadata)
+  end
+
+  @doc """
+  Checks if an iteration has been summarized.
+
+  ## Examples
+
+      iex> iteration = %{metadata: %{summarized: true}}
+      iex> AshAgent.Context.is_summarized?(iteration)
+      true
+
+      iex> iteration = %{metadata: %{}}
+      iex> AshAgent.Context.is_summarized?(iteration)
+      false
+  """
+  @spec is_summarized?(map()) :: boolean()
+  def is_summarized?(iteration) when is_map(iteration) do
+    get_in(iteration, [:metadata, :summarized]) == true
+  end
+
+  @doc """
+  Gets the summary from a summarized iteration.
+
+  Returns nil if iteration is not summarized.
+
+  ## Examples
+
+      iex> iteration = %{metadata: %{summarized: true, summary: "Weather query"}}
+      iex> AshAgent.Context.get_summary(iteration)
+      "Weather query"
+
+      iex> iteration = %{metadata: %{}}
+      iex> AshAgent.Context.get_summary(iteration)
+      nil
+  """
+  @spec get_summary(map()) :: String.t() | nil
+  def get_summary(iteration) when is_map(iteration) do
+    get_in(iteration, [:metadata, :summary])
+  end
+
+  @doc """
+  Updates iteration metadata with custom key-value pairs.
+
+  ## Examples
+
+      iex> iteration = %{metadata: %{}}
+      iex> updated = AshAgent.Context.update_iteration_metadata(iteration, :custom_key, "value")
+      iex> updated.metadata.custom_key
+      "value"
+  """
+  @spec update_iteration_metadata(map(), atom(), any()) :: map()
+  def update_iteration_metadata(iteration, key, value)
+      when is_map(iteration) and is_atom(key) do
+    updated_metadata =
+      Map.get(iteration, :metadata, %{})
+      |> Map.put(key, value)
+
+    Map.put(iteration, :metadata, updated_metadata)
+  end
+
   defp get_current_iteration(context) do
     Enum.at(context.iterations, context.current_iteration - 1)
   end
