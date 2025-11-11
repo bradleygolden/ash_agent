@@ -9,13 +9,21 @@ defmodule Examples.DemoAgent do
     domain: Examples.TestDomain,
     extensions: [AshAgent.Resource]
 
+  import AshAgent.Sigils
+
   agent do
     client "anthropic:claude-3-5-sonnet"
     output :string
-    prompt """
+    prompt ~p"""
     You are a helpful assistant. Use the available tools when appropriate.
     Always be concise in your responses.
+
+    User question: {{ question }}
     """
+
+    input do
+      argument :question, :string, allow_nil?: false
+    end
   end
 
   tools do
@@ -79,18 +87,6 @@ defmodule Examples.DemoAgent do
         end
       end
     end
-  end
-
-  attributes do
-    attribute :question, :string do
-      allow_nil? false
-      public? true
-    end
-  end
-
-  actions do
-    default_read_action :read
-    default_create_action :create
   end
 
   code_interface do

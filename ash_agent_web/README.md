@@ -4,7 +4,13 @@ A minimal Phoenix LiveView dashboard for monitoring AshAgent executions in real-
 
 ## Features
 
-- **Interactive agent testing** - Call agents directly from the UI with a built-in form
+- **Dynamic Form Generation** - Automatically introspects agent input schemas and generates appropriate form fields
+  - Single string inputs → textarea
+  - Multiple inputs → labeled form fields
+  - Integer/float inputs → number fields
+  - Boolean inputs → dropdown selectors
+  - Zero inputs → simple "Call Agent" button
+- **Interactive agent testing** - Call agents directly from the UI with proper type handling
 - **Conversation history** - See your questions and agent responses in a chat-like interface
 - **Real-time monitoring** via telemetry and PubSub
 - **Token tracking** with cost estimation per call and cumulative
@@ -113,6 +119,34 @@ You'll see:
 - Metrics update as calls complete
 - Token usage accumulate
 - Cost estimates calculate automatically
+
+## Example Agents
+
+The project includes two example agents to showcase different input patterns:
+
+### Simple Agent (Single String Input)
+
+```elixir
+# Visit: http://localhost:4001/agents/Elixir.Examples.DemoAgent
+Examples.DemoAgent
+```
+- **Input:** Single `question` field (textarea)
+- **Tools:** get_time, random_number, echo, calculate
+- Perfect for testing basic agent interactions
+
+### Multi-Input Agent (Complex Form)
+
+```elixir
+# Visit: http://localhost:4001/agents/Elixir.Examples.MultiInputAgent
+Examples.MultiInputAgent
+```
+- **Inputs:**
+  - `topic` (string, required) - The main subject
+  - `content_type` (string) - Type of content to generate
+  - `audience` (string) - Target audience
+  - `word_count` (integer) - Approximate length
+  - `include_examples` (boolean) - Whether to include examples
+- Demonstrates dynamic form with multiple field types
 
 ## How It Works
 

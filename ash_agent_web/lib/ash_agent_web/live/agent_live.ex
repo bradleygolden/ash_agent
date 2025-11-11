@@ -10,6 +10,7 @@ defmodule AshAgentWeb.AgentLive do
     end
 
     metrics = if agent, do: AshAgentWeb.Telemetry.get_metrics(agent), else: %{}
+    agent_inputs = if agent, do: introspect_agent_inputs(agent), else: %{arguments: [], form_data: %{}}
 
     socket =
       socket
@@ -19,7 +20,8 @@ defmodule AshAgentWeb.AgentLive do
       |> assign(:call_history, [])
       |> assign(:conversation_history, [])
       |> assign(:calling_agent, false)
-      |> assign(:question, "")
+      |> assign(:agent_inputs, agent_inputs)
+      |> assign(:form_data, agent_inputs.form_data)
 
     {:ok, socket}
   end
@@ -68,12 +70,12 @@ defmodule AshAgentWeb.AgentLive do
     socket =
       socket
       |> assign(:calling_agent, false)
-      |> assign(:question, "")
+      |> assign(:form_data, socket.assigns.agent_inputs.form_data)
 
     case result do
-      {:ok, response, question} ->
+      {:ok, response, input_summary} ->
         conversation_entry = %{
-          question: question,
+          question: input_summary,
           response: response,
           timestamp: System.system_time(:millisecond),
           status: :success
@@ -81,9 +83,9 @@ defmodule AshAgentWeb.AgentLive do
 
         {:noreply, update(socket, :conversation_history, &[conversation_entry | &1])}
 
-      {:error, error, question} ->
+      {:error, error, input_summary} ->
         conversation_entry = %{
-          question: question,
+          question: input_summary,
           response: nil,
           error: inspect(error),
           timestamp: System.system_time(:millisecond),
@@ -105,43 +107,235 @@ defmodule AshAgentWeb.AgentLive do
   end
 
   @impl true
-  def handle_event("update_question", %{"question" => question}, socket) do
-    {:noreply, assign(socket, :question, question)}
+  def handle_event("update_field", %{"field" => field, "value" => value}, socket) do
+    form_data = Map.put(socket.assigns.form_data, String.to_existing_atom(field), value)
+    {:noreply, assign(socket, :form_data, form_data)}
   end
 
   @impl true
-  def handle_event("call_agent", %{"question" => question}, socket) do
+  def handle_event("call_agent", params, socket) do
     agent = socket.assigns.agent
+    arguments = socket.assigns.agent_inputs.arguments
 
-    if agent && String.trim(question) != "" do
+    input_map = build_input_map(params, arguments)
+
+    if agent && valid_inputs?(input_map, arguments) do
       socket = assign(socket, :calling_agent, true)
+
+      input_summary = format_input_summary(input_map, arguments)
 
       Task.async(fn ->
         try do
-          action = find_call_action(agent)
-          result = Ash.ActionInput.for_action(agent, action, %{question: question})
-          |> Ash.run_action!()
+          result =
+            agent
+            |> Ash.ActionInput.for_action(:call, input_map)
+            |> Ash.run_action!()
 
-          {:ok, result, question}
+          {:ok, result, input_summary}
         rescue
-          e -> {:error, e, question}
+          e -> {:error, e, input_summary}
         end
       end)
 
       {:noreply, socket}
     else
-      {:noreply, put_flash(socket, :error, "Please enter a question")}
+      {:noreply, put_flash(socket, :error, "Please fill in all required fields")}
     end
   end
 
-  defp find_call_action(agent) do
-    actions = Ash.Resource.Info.actions(agent)
+  defp introspect_agent_inputs(agent) do
+    case Ash.Resource.Info.action(agent, :call) do
+      nil ->
+        %{arguments: [], form_data: %{}}
 
-    Enum.find_value(actions, :call, fn action ->
-      if action.name in [:call, :create] and action.type == :create do
-        action.name
-      end
+      action ->
+        arguments =
+          action.arguments
+          |> Enum.map(fn arg ->
+            %{
+              name: arg.name,
+              type: arg.type,
+              required: !arg.allow_nil?,
+              default: arg.default,
+              description: arg.description
+            }
+          end)
+
+        form_data =
+          arguments
+          |> Enum.map(fn arg -> {arg.name, arg.default || ""} end)
+          |> Map.new()
+
+        %{arguments: arguments, form_data: form_data}
+    end
+  end
+
+  defp build_input_map(params, arguments) do
+    arguments
+    |> Enum.map(fn arg ->
+      value = params[to_string(arg.name)] || arg.default
+
+      parsed_value =
+        case arg.type do
+          :integer -> parse_integer(value)
+          :float -> parse_float(value)
+          :boolean -> parse_boolean(value)
+          _ -> value
+        end
+
+      {arg.name, parsed_value}
     end)
+    |> Enum.reject(fn {_k, v} -> is_nil(v) || v == "" end)
+    |> Map.new()
+  end
+
+  defp valid_inputs?(input_map, arguments) do
+    required_args = Enum.filter(arguments, & &1.required)
+
+    Enum.all?(required_args, fn arg ->
+      value = Map.get(input_map, arg.name)
+      value != nil && value != ""
+    end)
+  end
+
+  defp format_input_summary(input_map, arguments) do
+    case arguments do
+      [] ->
+        "Agent called"
+
+      [single] ->
+        Map.get(input_map, single.name, "") |> to_string()
+
+      multiple ->
+        multiple
+        |> Enum.map(fn arg ->
+          value = Map.get(input_map, arg.name, "")
+          "#{arg.name}: #{value}"
+        end)
+        |> Enum.join(", ")
+    end
+  end
+
+  defp parse_integer(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {int, _} -> int
+      :error -> nil
+    end
+  end
+
+  defp parse_integer(value), do: value
+
+  defp parse_float(value) when is_binary(value) do
+    case Float.parse(value) do
+      {float, _} -> float
+      :error -> nil
+    end
+  end
+
+  defp parse_float(value), do: value
+
+  defp parse_boolean("true"), do: true
+  defp parse_boolean("false"), do: false
+  defp parse_boolean(value) when is_boolean(value), do: value
+  defp parse_boolean(_), do: nil
+
+  defp humanize_field_name(atom) do
+    atom
+    |> to_string()
+    |> String.split("_")
+    |> Enum.map(&String.capitalize/1)
+    |> Enum.join(" ")
+  end
+
+  defp render_input_field(arg, value, disabled) do
+    case arg.type do
+      :string ->
+        if String.contains?(to_string(arg.name), ["message", "question", "prompt", "text"]) do
+          assigns = %{arg: arg, value: value, disabled: disabled}
+
+          ~H"""
+          <textarea
+            name={to_string(@arg.name)}
+            placeholder={"Enter #{humanize_field_name(@arg.name)}..."}
+            rows="3"
+            disabled={@disabled}
+            class="question-input"
+            required={@arg.required}
+          ><%= @value %></textarea>
+          """
+        else
+          assigns = %{arg: arg, value: value, disabled: disabled}
+
+          ~H"""
+          <input
+            type="text"
+            name={to_string(@arg.name)}
+            value={@value}
+            placeholder={"Enter #{humanize_field_name(@arg.name)}..."}
+            disabled={@disabled}
+            class="text-input"
+            required={@arg.required}
+          />
+          """
+        end
+
+      :integer ->
+        assigns = %{arg: arg, value: value, disabled: disabled}
+
+        ~H"""
+        <input
+          type="number"
+          name={to_string(@arg.name)}
+          value={@value}
+          placeholder={"Enter #{humanize_field_name(@arg.name)}..."}
+          disabled={@disabled}
+          class="text-input"
+          required={@arg.required}
+        />
+        """
+
+      :float ->
+        assigns = %{arg: arg, value: value, disabled: disabled}
+
+        ~H"""
+        <input
+          type="number"
+          step="any"
+          name={to_string(@arg.name)}
+          value={@value}
+          placeholder={"Enter #{humanize_field_name(@arg.name)}..."}
+          disabled={@disabled}
+          class="text-input"
+          required={@arg.required}
+        />
+        """
+
+      :boolean ->
+        assigns = %{arg: arg, value: value, disabled: disabled}
+
+        ~H"""
+        <select name={to_string(@arg.name)} disabled={@disabled} class="select-input" required={@arg.required}>
+          <option value="">Select...</option>
+          <option value="true" selected={@value == true}>True</option>
+          <option value="false" selected={@value == false}>False</option>
+        </select>
+        """
+
+      _ ->
+        assigns = %{arg: arg, value: value, disabled: disabled}
+
+        ~H"""
+        <input
+          type="text"
+          name={to_string(@arg.name)}
+          value={to_string(@value)}
+          placeholder={"Enter #{humanize_field_name(@arg.name)}..."}
+          disabled={@disabled}
+          class="text-input"
+          required={@arg.required}
+        />
+        """
+    end
   end
 
   @impl true
@@ -160,25 +354,42 @@ defmodule AshAgentWeb.AgentLive do
       <%= if @agent do %>
         <div class="section interactive-section">
           <h3>Try the Agent</h3>
-          <form phx-submit="call_agent" class="agent-form">
-            <div class="form-group">
-              <textarea
-                name="question"
-                placeholder="Ask a question..."
-                rows="3"
-                disabled={@calling_agent}
-                phx-hook="AutoFocus"
-                class="question-input"
-              ><%= @question %></textarea>
-            </div>
-            <button type="submit" disabled={@calling_agent} class="submit-button">
-              <%= if @calling_agent do %>
-                <span class="spinner"></span> Calling agent...
-              <% else %>
-                Send Question
+          <%= if length(@agent_inputs.arguments) == 0 do %>
+            <form phx-submit="call_agent" class="agent-form">
+              <p class="info-text">This agent takes no input arguments.</p>
+              <button type="submit" disabled={@calling_agent} class="submit-button">
+                <%= if @calling_agent do %>
+                  <span class="spinner"></span> Calling agent...
+                <% else %>
+                  Call Agent
+                <% end %>
+              </button>
+            </form>
+          <% else %>
+            <form phx-submit="call_agent" class="agent-form">
+              <%= for arg <- @agent_inputs.arguments do %>
+                <div class="form-group">
+                  <label class="field-label">
+                    <%= humanize_field_name(arg.name) %>
+                    <%= if arg.required do %>
+                      <span class="required-indicator">*</span>
+                    <% end %>
+                  </label>
+                  <%= if arg.description do %>
+                    <div class="field-description"><%= arg.description %></div>
+                  <% end %>
+                  <%= render_input_field(arg, @form_data[arg.name], @calling_agent) %>
+                </div>
               <% end %>
-            </button>
-          </form>
+              <button type="submit" disabled={@calling_agent} class="submit-button">
+                <%= if @calling_agent do %>
+                  <span class="spinner"></span> Calling agent...
+                <% else %>
+                  Send Request
+                <% end %>
+              </button>
+            </form>
+          <% end %>
         </div>
 
         <%= if length(@conversation_history) > 0 do %>
@@ -289,18 +500,44 @@ defmodule AshAgentWeb.AgentLive do
         .interactive-section h3 { margin: 0 0 1rem; color: #1a1a1a; }
 
         .agent-form { display: flex; flex-direction: column; gap: 1rem; }
-        .form-group { display: flex; flex-direction: column; }
-        .question-input {
+        .form-group { display: flex; flex-direction: column; gap: 0.5rem; }
+
+        .field-label {
+          font-size: 0.875rem;
+          font-weight: 600;
+          color: #374151;
+        }
+        .required-indicator { color: #dc2626; margin-left: 0.25rem; }
+        .field-description {
+          font-size: 0.75rem;
+          color: #6b7280;
+          font-style: italic;
+          margin-top: -0.25rem;
+        }
+        .info-text {
+          color: #6b7280;
+          font-size: 0.875rem;
+          margin: 0 0 1rem 0;
+        }
+
+        .question-input, .text-input, .select-input {
           width: 100%;
           padding: 0.75rem;
           border: 1px solid #d1d5db;
           border-radius: 6px;
           font-size: 1rem;
           font-family: inherit;
-          resize: vertical;
         }
-        .question-input:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
-        .question-input:disabled { background: #f3f4f6; cursor: not-allowed; }
+        .question-input { resize: vertical; }
+        .question-input:focus, .text-input:focus, .select-input:focus {
+          outline: none;
+          border-color: #3b82f6;
+          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        .question-input:disabled, .text-input:disabled, .select-input:disabled {
+          background: #f3f4f6;
+          cursor: not-allowed;
+        }
 
         .submit-button {
           align-self: flex-start;

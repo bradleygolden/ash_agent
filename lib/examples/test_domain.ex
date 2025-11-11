@@ -3,5 +3,6 @@ defmodule Examples.TestDomain do
 
   resources do
     resource Examples.DemoAgent
+    resource Examples.MultiInputAgent
   end
 end
