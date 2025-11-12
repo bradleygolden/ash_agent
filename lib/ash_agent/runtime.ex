@@ -117,32 +117,54 @@ defmodule AshAgent.Runtime do
   end
 
   defp execute_single_turn(config, module, context, prompt, schema) do
+    metadata = telemetry_metadata(config, module, :call)
+    metadata = Map.put(metadata, :input, context.input)
+
+    rendered_prompt =
+      if prompt do
+        case PromptRenderer.render(prompt, context.input, config) do
+          {:ok, rendered} -> rendered
+          {:error, _} -> nil
+        end
+      else
+        nil
+      end
+
+    ctx = Context.new(context.input, system_prompt: rendered_prompt)
+
     Telemetry.span(
       :call,
-      telemetry_metadata(config, module, :call),
+      metadata,
       fn ->
-        LLMClient.generate_object(
-          module,
-          config.client,
-          prompt,
-          schema,
-          config.client_opts,
-          context,
-          nil,
-          nil
-        )
+        response_result =
+          LLMClient.generate_object(
+            module,
+            config.client,
+            prompt,
+            schema,
+            config.client_opts,
+            context,
+            nil,
+            nil
+          )
+
+        case response_result do
+          {:ok, response} ->
+            result = LLMClient.parse_response(config.output_type, response)
+            enriched_metadata = build_single_turn_metadata(metadata, result, response, ctx)
+            {result, enriched_metadata}
+
+          error ->
+            {error, Map.put(metadata, :context, ctx)}
+        end
       end
     )
-    |> then(fn
-      {:ok, response} ->
-        LLMClient.parse_response(config.output_type, response)
-
-      error ->
-        error
-    end)
   end
 
   defp execute_with_tool_calling(config, module, context, prompt, schema) do
+    metadata = telemetry_metadata(config, module, :call)
+    metadata = Map.put(metadata, :input, context.input)
+
     tools = ToolConverter.to_json_schema(config.tools)
     tool_config = config.tool_config
 
@@ -168,57 +190,103 @@ defmodule AshAgent.Runtime do
       tool_config: tool_config
     }
 
-    execute_tool_calling_loop(loop_state, ctx)
+    Telemetry.span(
+      :call,
+      metadata,
+      fn ->
+        {result, final_ctx} = execute_tool_calling_loop(loop_state, ctx)
+
+        usage = Context.get_cumulative_tokens(final_ctx)
+
+        enriched_metadata =
+          case result do
+            {:ok, parsed} ->
+              metadata
+              |> Map.put(:result, parsed)
+              |> Map.put(:context, final_ctx)
+              |> Map.put(:usage, usage)
+
+            _ ->
+              metadata
+              |> Map.put(:context, final_ctx)
+              |> Map.put(:usage, usage)
+          end
+
+        {result, enriched_metadata}
+      end
+    )
   end
 
   defp execute_tool_calling_loop(%LoopState{} = state, ctx) do
     case execute_on_iteration_start_hook(ctx, state) do
       {:ok, _ctx} ->
-        result = execute_tool_calling_iteration(state, ctx)
-        execute_on_iteration_complete_hook(ctx, result, state)
-        result
+        {result, updated_ctx} = execute_tool_calling_iteration(state, ctx)
+        execute_on_iteration_complete_hook(updated_ctx, result, state)
+        {result, updated_ctx}
 
       {:error, _reason} = error ->
-        error
+        {error, ctx}
     end
   end
 
   defp execute_tool_calling_iteration(%LoopState{} = state, ctx) do
+    :telemetry.execute(
+      [:ash_agent, :iteration, :start],
+      %{},
+      %{
+        agent: state.module,
+        iteration: ctx.current_iteration
+      }
+    )
+
     ctx = execute_prepare_context_hook(ctx, state)
     messages = Context.to_messages(ctx)
     messages = execute_prepare_messages_hook(messages, ctx, state)
     current_prompt = nil
 
-    case Telemetry.span(
-           :call,
-           telemetry_metadata(state.config, state.module, :call),
-           fn ->
-             LLMClient.generate_object(
-               state.module,
-               state.config.client,
-               current_prompt,
-               state.schema,
-               state.config.client_opts,
-               state.context,
-               state.tools,
-               messages
-             )
-           end
+    case LLMClient.generate_object(
+           state.module,
+           state.config.client,
+           current_prompt,
+           state.schema,
+           state.config.client_opts,
+           state.context,
+           state.tools,
+           messages
          ) do
       {:ok, response} ->
-        handle_llm_response(response, state, ctx)
+        {result, updated_ctx} = handle_llm_response(response, state, ctx)
+        {result, updated_ctx}
 
       {:error, _reason} = error ->
-        handle_tool_calling_error(error, state, ctx)
+        {result, updated_ctx} = handle_tool_calling_error(error, state, ctx)
+        {result, updated_ctx}
     end
   end
 
   defp handle_tool_calling_error(error, %LoopState{} = state, ctx) do
     if state.tool_config.on_error == :continue do
       ctx = Context.add_assistant_message(ctx, "", [])
+      next_iteration_number = ctx.current_iteration + 1
+
+      new_iteration = %{
+        number: next_iteration_number,
+        messages: [],
+        tool_calls: [],
+        started_at: DateTime.utc_now(),
+        completed_at: nil,
+        metadata: %{}
+      }
+
+      ctx =
+        Context.update!(ctx, %{
+          iterations: ctx.iterations ++ [new_iteration],
+          current_iteration: next_iteration_number
+        })
+
       execute_tool_calling_loop(state, ctx)
     else
-      error
+      {error, ctx}
     end
   end
 
@@ -227,6 +295,8 @@ defmodule AshAgent.Runtime do
     content = extract_content(response, state.config.provider)
 
     ctx = Context.add_assistant_message(ctx, content, tool_calls)
+
+    ctx = Context.add_llm_call_timing(ctx)
 
     ctx =
       case LLMClient.response_usage(response) do
@@ -239,7 +309,29 @@ defmodule AshAgent.Runtime do
 
     case tool_calls do
       [] ->
-        convert_baml_response_to_output(response, state.config.output_type, state.config.provider)
+        error_message =
+          "You must use a tool to respond. Please call the submit_answer tool with your final answer, or use other available tools to gather information."
+
+        ctx = Context.add_assistant_message(ctx, error_message, [])
+
+        next_iteration_number = ctx.current_iteration + 1
+
+        new_iteration = %{
+          number: next_iteration_number,
+          messages: [],
+          tool_calls: [],
+          started_at: DateTime.utc_now(),
+          completed_at: nil,
+          metadata: %{}
+        }
+
+        ctx =
+          Context.update!(ctx, %{
+            iterations: ctx.iterations ++ [new_iteration],
+            current_iteration: next_iteration_number
+          })
+
+        execute_tool_calling_loop(state, ctx)
 
       calls when is_list(calls) ->
         execute_tool_calls(calls, state, ctx)
@@ -247,6 +339,8 @@ defmodule AshAgent.Runtime do
   end
 
   defp execute_tool_calls(tool_calls, %LoopState{} = state, ctx) do
+    tool_call_start_times = emit_tool_call_start_telemetry(tool_calls, state, ctx)
+
     runtime_context = %{
       agent: state.module,
       domain: get_domain(state.module),
@@ -255,13 +349,140 @@ defmodule AshAgent.Runtime do
     }
 
     results = ToolExecutor.execute_tools(tool_calls, state.config.tools, runtime_context)
-    results = execute_prepare_tool_results_hook(results, tool_calls, ctx, state)
 
-    if has_tool_errors?(results, state.tool_config) do
-      {:error, Error.llm_error("Tool execution failed")}
-    else
-      ctx = Context.add_tool_results(ctx, results)
-      execute_tool_calling_loop(state, ctx)
+    end_time = DateTime.utc_now()
+
+    tool_calls_with_timing =
+      enrich_tool_calls_with_timing(tool_calls, tool_call_start_times, end_time)
+
+    emit_tool_call_complete_telemetry(results, tool_calls, state, ctx)
+
+    results = execute_prepare_tool_results_hook(results, tool_calls, ctx, state)
+    ctx = Context.update_tool_calls_timing(ctx, tool_calls_with_timing)
+
+    process_tool_results(results, state, ctx)
+  end
+
+  defp emit_tool_call_start_telemetry(tool_calls, state, ctx) do
+    Enum.map(tool_calls, fn tool_call ->
+      start_time = DateTime.utc_now()
+
+      :telemetry.execute(
+        [:ash_agent, :tool_call, :start],
+        %{},
+        %{
+          agent: state.module,
+          iteration: ctx.current_iteration,
+          tool_name: tool_call.name,
+          tool_id: tool_call.id,
+          arguments: tool_call.arguments
+        }
+      )
+
+      {tool_call.id, start_time}
+    end)
+    |> Map.new()
+  end
+
+  defp enrich_tool_calls_with_timing(tool_calls, start_times, end_time) do
+    Enum.map(tool_calls, fn tool_call ->
+      start_time = Map.get(start_times, tool_call.id)
+      duration_ms = if start_time, do: DateTime.diff(end_time, start_time, :millisecond), else: 0
+
+      Map.merge(tool_call, %{
+        started_at: start_time,
+        completed_at: end_time,
+        duration_ms: duration_ms
+      })
+    end)
+  end
+
+  defp emit_tool_call_complete_telemetry(results, tool_calls, state, ctx) do
+    Enum.each(results, fn {tool_call_id, result} ->
+      tool_call = Enum.find(tool_calls, &(&1.id == tool_call_id))
+
+      case result do
+        {:ok, value} ->
+          :telemetry.execute(
+            [:ash_agent, :tool_call, :complete],
+            %{},
+            %{
+              agent: state.module,
+              iteration: ctx.current_iteration,
+              tool_name: tool_call && tool_call.name,
+              tool_id: tool_call_id,
+              result: value,
+              status: :success
+            }
+          )
+
+        {:halt, value} ->
+          :telemetry.execute(
+            [:ash_agent, :tool_call, :complete],
+            %{},
+            %{
+              agent: state.module,
+              iteration: ctx.current_iteration,
+              tool_name: tool_call && tool_call.name,
+              tool_id: tool_call_id,
+              result: value,
+              status: :halt
+            }
+          )
+
+        {:error, reason} ->
+          :telemetry.execute(
+            [:ash_agent, :tool_call, :complete],
+            %{},
+            %{
+              agent: state.module,
+              iteration: ctx.current_iteration,
+              tool_name: tool_call && tool_call.name,
+              tool_id: tool_call_id,
+              error: reason,
+              status: :error
+            }
+          )
+      end
+    end)
+  end
+
+  defp process_tool_results(results, state, ctx) do
+    halt_result =
+      Enum.find_value(results, fn
+        {_id, {:halt, value}} -> value
+        _ -> nil
+      end)
+
+    cond do
+      halt_result != nil ->
+        ctx = Context.add_tool_results(ctx, results)
+        final_result = {:ok, halt_result}
+        {final_result, ctx}
+
+      has_tool_errors?(results, state.tool_config) ->
+        {{:error, Error.llm_error("Tool execution failed")}, ctx}
+
+      true ->
+        ctx = Context.add_tool_results(ctx, results)
+        next_iteration_number = ctx.current_iteration + 1
+
+        new_iteration = %{
+          number: next_iteration_number,
+          messages: [],
+          tool_calls: [],
+          started_at: DateTime.utc_now(),
+          completed_at: nil,
+          metadata: %{}
+        }
+
+        ctx =
+          Context.update!(ctx, %{
+            iterations: ctx.iterations ++ [new_iteration],
+            current_iteration: next_iteration_number
+          })
+
+        execute_tool_calling_loop(state, ctx)
     end
   end
 
@@ -271,65 +492,6 @@ defmodule AshAgent.Runtime do
         {_, {_, :error}} -> true
         _ -> false
       end)
-  end
-
-  defp convert_baml_response_to_output(response, output_type, provider)
-       when provider in [:baml, AshAgent.Providers.Baml] do
-    convert_baml_union_to_output(response, output_type)
-  end
-
-  defp convert_baml_response_to_output(response, output_type, _provider) do
-    LLMClient.parse_response(output_type, response)
-  end
-
-  defp convert_baml_union_to_output(%_{} = response, output_type) do
-    struct_module = response.__struct__
-
-    if Map.has_key?(response, :data) and function_exported?(struct_module, :usage, 1) do
-      convert_baml_union_to_output(response.data, output_type)
-    else
-      struct_map = Map.from_struct(response)
-      struct_name = struct_module |> Module.split() |> List.last()
-
-      handle_baml_struct(response, struct_map, struct_name, output_type)
-    end
-  end
-
-  defp convert_baml_union_to_output(response, output_type) do
-    LLMClient.parse_response(output_type, response)
-  end
-
-  defp handle_baml_struct(response, struct_map, struct_name, output_type) do
-    cond do
-      String.contains?(struct_name, "ToolCallResponse") ->
-        case Map.take(struct_map, [:content, :confidence]) do
-          data when map_size(data) > 0 ->
-            {:ok, struct(output_type, data)}
-
-          _ ->
-            LLMClient.parse_response(output_type, response)
-        end
-
-      Map.has_key?(struct_map, :content) and not Map.has_key?(struct_map, :tool_name) ->
-        case Map.take(struct_map, [:content, :confidence]) do
-          data when map_size(data) > 0 ->
-            {:ok, struct(output_type, data)}
-
-          _ ->
-            LLMClient.parse_response(output_type, response)
-        end
-
-      true ->
-        LLMClient.parse_response(output_type, response)
-    end
-  rescue
-    e ->
-      {:error,
-       Error.parse_error("Failed to convert BAML response to output type", %{
-         output_type: output_type,
-         response: response,
-         exception: e
-       })}
   end
 
   defp extract_content(response, provider) when provider in [:baml, AshAgent.Providers.Baml] do
@@ -485,15 +647,18 @@ defmodule AshAgent.Runtime do
   end
 
   defp normalize_baml_args(args) when is_binary(args) do
-    case Jason.decode!(args) do
-      map when is_map(map) ->
+    case Jason.decode(args) do
+      {:ok, map} when is_map(map) ->
         Enum.into(map, %{}, fn
           {k, v} when is_binary(k) -> {String.to_existing_atom(k), v}
           {k, v} -> {k, v}
         end)
 
-      other ->
+      {:ok, other} ->
         other
+
+      {:error, _} ->
+        %{}
     end
   end
 
@@ -507,10 +672,16 @@ defmodule AshAgent.Runtime do
   defp normalize_tool_calls(tool_calls) do
     Enum.map(tool_calls, fn
       %{id: id, name: name, arguments: args} when is_binary(args) ->
-        %{id: id, name: name, arguments: Jason.decode!(args)}
+        case Jason.decode(args) do
+          {:ok, decoded} -> %{id: id, name: name, arguments: decoded}
+          {:error, _} -> %{id: id, name: name, arguments: %{}}
+        end
 
       %{"id" => id, "name" => name, "arguments" => args} when is_binary(args) ->
-        %{id: id, name: name, arguments: Jason.decode!(args)}
+        case Jason.decode(args) do
+          {:ok, decoded} -> %{id: id, name: name, arguments: decoded}
+          {:error, _} -> %{id: id, name: name, arguments: %{}}
+        end
 
       tool_call ->
         tool_call
@@ -677,6 +848,9 @@ defmodule AshAgent.Runtime do
         nil ->
           {:error, Error.schema_error("No output type defined for agent")}
 
+        :string ->
+          {:ok, nil}
+
         type_module ->
           schema = SchemaConverter.to_req_llm_schema(type_module)
           {:ok, schema}
@@ -704,6 +878,24 @@ defmodule AshAgent.Runtime do
       client: config.client,
       type: type
     }
+  end
+
+  defp build_single_turn_metadata(metadata, result, response, ctx) do
+    base_metadata =
+      metadata
+      |> Map.put(:context, ctx)
+      |> Map.put(:response, response)
+
+    base_metadata =
+      case LLMClient.response_usage(response) do
+        nil -> base_metadata
+        usage -> Map.put(base_metadata, :usage, usage)
+      end
+
+    case result do
+      {:ok, parsed} -> Map.put(base_metadata, :result, parsed)
+      _ -> base_metadata
+    end
   end
 
   defp execute_prepare_tool_results_hook(results, tool_calls, ctx, %LoopState{} = state) do
@@ -828,7 +1020,7 @@ defmodule AshAgent.Runtime do
   end
 
   defp check_max_iterations(ctx, %LoopState{} = state) do
-    if ctx.current_iteration >= state.tool_config.max_iterations do
+    if ctx.current_iteration > state.tool_config.max_iterations do
       {:error,
        Error.llm_error(
          "Max iterations (#{state.tool_config.max_iterations}) exceeded",

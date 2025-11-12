@@ -99,14 +99,8 @@ defmodule AshAgent.Providers.Baml do
     end
   end
 
-  defp fetch_arguments(context, messages) do
-    case fetch_arguments_from_messages(messages) do
-      {:ok, args} ->
-        {:ok, args}
-
-      :error ->
-        fetch_arguments_from_context(context)
-    end
+  defp fetch_arguments(context, _messages) do
+    fetch_arguments_from_context(context)
   end
 
   defp fetch_arguments_from_context(%{input: input}) when is_map(input), do: {:ok, input}
@@ -116,45 +110,6 @@ defmodule AshAgent.Providers.Baml do
 
   defp fetch_arguments_from_context(_context) do
     {:error, Error.llm_error("BAML provider requires input arguments but none were provided")}
-  end
-
-  defp fetch_arguments_from_messages(messages) when is_list(messages) and length(messages) > 0 do
-    last_message = List.last(messages)
-    role = normalize_role(Map.get(last_message, :role) || Map.get(last_message, "role"))
-    content = Map.get(last_message, :content) || Map.get(last_message, "content")
-
-    extract_message_content(role, content)
-  end
-
-  defp fetch_arguments_from_messages(_), do: :error
-
-  defp extract_message_content("user", content) when is_binary(content) do
-    {:ok, %{message: content}}
-  end
-
-  defp extract_message_content("user", content) when is_list(content) do
-    case extract_tool_result_content(content) do
-      {:ok, result_content} -> {:ok, %{message: result_content}}
-      :error -> {:ok, %{}}
-    end
-  end
-
-  defp extract_message_content(_role, _content), do: {:ok, %{}}
-
-  defp normalize_role(role) when is_atom(role), do: Atom.to_string(role)
-  defp normalize_role(role) when is_binary(role), do: String.downcase(role)
-  defp normalize_role(_), do: nil
-
-  defp extract_tool_result_content(content_list) do
-    Enum.reduce_while(content_list, :error, fn item, acc ->
-      type = Map.get(item, :type) || Map.get(item, "type")
-
-      if type in [:tool_result, "tool_result"] do
-        {:halt, {:ok, Map.get(item, :content) || Map.get(item, "content")}}
-      else
-        {:cont, acc}
-      end
-    end)
   end
 
   defp resolve_client_module(client, opts) do

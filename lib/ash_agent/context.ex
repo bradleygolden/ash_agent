@@ -84,7 +84,17 @@ defmodule AshAgent.Context do
     }
 
     current_iter = get_current_iteration(context)
-    updated_iter = %{current_iter | messages: current_iter.messages ++ [message]}
+
+    updated_iter =
+      current_iter
+      |> Map.update!(:messages, &(&1 ++ [message]))
+      |> Map.update!(:tool_calls, fn existing_calls ->
+        if is_list(tool_calls) and length(tool_calls) > 0 do
+          existing_calls ++ tool_calls
+        else
+          existing_calls
+        end
+      end)
 
     iterations =
       List.replace_at(context.iterations, context.current_iteration - 1, updated_iter)
@@ -128,6 +138,52 @@ defmodule AshAgent.Context do
       _ ->
         []
     end
+  end
+
+  @doc """
+  Updates tool calls in the current iteration with timing and execution metadata.
+  """
+  def update_tool_calls_timing(context, tool_calls_with_timing) do
+    current_iter = get_current_iteration(context)
+
+    updated_iter = %{current_iter | tool_calls: tool_calls_with_timing}
+
+    iterations =
+      List.replace_at(context.iterations, context.current_iteration - 1, updated_iter)
+
+    update!(context, %{iterations: iterations})
+  end
+
+  @doc """
+  Adds LLM call timing information to the current iteration metadata.
+  Records when the LLM response was received relative to iteration start.
+  """
+  def add_llm_call_timing(context) do
+    current_iter = get_current_iteration(context)
+    current_metadata = current_iter.metadata || %{}
+
+    llm_response_time = DateTime.utc_now()
+    start_time = current_iter.started_at
+
+    duration_ms =
+      if start_time do
+        DateTime.diff(llm_response_time, start_time, :millisecond)
+      else
+        0
+      end
+
+    updated_metadata =
+      Map.merge(current_metadata, %{
+        llm_response_at: llm_response_time,
+        llm_duration_ms: duration_ms
+      })
+
+    updated_iter = %{current_iter | metadata: updated_metadata}
+
+    iterations =
+      List.replace_at(context.iterations, context.current_iteration - 1, updated_iter)
+
+    update!(context, %{iterations: iterations})
   end
 
   @doc """
@@ -513,6 +569,10 @@ defmodule AshAgent.Context do
         arguments: Jason.encode!(args)
       }
     }
+  end
+
+  defp format_tool_result({:ok, {:halt, result}}) when is_map(result) do
+    Jason.encode!(result)
   end
 
   defp format_tool_result({:ok, result}) when is_map(result) do

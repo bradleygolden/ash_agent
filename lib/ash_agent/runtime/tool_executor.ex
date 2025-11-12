@@ -44,7 +44,7 @@ defmodule AshAgent.Runtime.ToolExecutor do
 
     Enum.into(args, %{}, fn {key, value} ->
       key_atom = normalize_key(key)
-      param_spec = Enum.find(parameters, fn p -> p[:name] == key_atom end)
+      param_spec = find_parameter_spec(parameters, key_atom)
       normalized_value = normalize_value(value, param_spec)
 
       {key_atom, normalized_value}
@@ -52,6 +52,34 @@ defmodule AshAgent.Runtime.ToolExecutor do
   rescue
     _ -> args
   end
+
+  defp find_parameter_spec(parameters, key_atom) when is_list(parameters) do
+    # Parameters might be a keyword list [{:min, [type: :integer, ...]}, ...]
+    # or a list of maps [%{name: :min, type: :integer, ...}, ...]
+    case Keyword.get(parameters, key_atom) do
+      nil ->
+        # Try finding in list of maps
+        Enum.find(parameters, fn
+          %{name: ^key_atom} = spec ->
+            spec
+
+          {^key_atom, spec} when is_list(spec) ->
+            %{name: key_atom, type: Keyword.get(spec, :type)}
+
+          _ ->
+            nil
+        end)
+
+      spec when is_list(spec) ->
+        # It's a keyword list entry, convert to map format
+        %{name: key_atom, type: Keyword.get(spec, :type, :string)}
+
+      spec ->
+        spec
+    end
+  end
+
+  defp find_parameter_spec(_, _), do: nil
 
   defp normalize_key(key) when is_binary(key), do: String.to_existing_atom(key)
   defp normalize_key(key), do: key
@@ -74,6 +102,15 @@ defmodule AshAgent.Runtime.ToolExecutor do
     case String.downcase(value) do
       "true" -> true
       "false" -> false
+      _ -> value
+    end
+  end
+
+  # Handle nil param_spec - try to infer type from value
+  defp normalize_value(value, nil) when is_binary(value) do
+    # Try to parse as integer
+    case Integer.parse(value) do
+      {int, ""} -> int
       _ -> value
     end
   end
