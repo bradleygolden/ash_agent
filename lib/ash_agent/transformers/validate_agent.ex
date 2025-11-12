@@ -136,7 +136,7 @@ defmodule AshAgent.Transformers.ValidateAgent do
             {:error,
              DslError.exception(
                module: Transformer.get_persisted(dsl_state, :module),
-               message: reason,
+               message: String.trim(reason),
                path: [:agent, :client]
              )}
         end

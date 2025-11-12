@@ -32,10 +32,16 @@ defmodule AshAgent.Providers.ReqLLM do
     max_attempts = Keyword.get(opts, :max_retries, 3)
     base_delay_ms = Keyword.get(opts, :retry_base_delay_ms, 100)
 
-    req_opts = build_req_opts(opts, tools, messages, prompt)
+    {prompt_or_messages, req_opts} = build_req_args(prompt, messages, opts, tools)
 
     with_retry(
-      fn -> ReqLLM.generate_object(client, prompt, schema, req_opts) end,
+      fn ->
+        if is_nil(schema) do
+          ReqLLM.generate_text(client, prompt_or_messages, req_opts)
+        else
+          ReqLLM.generate_object(client, prompt_or_messages, schema, req_opts)
+        end
+      end,
       max_attempts,
       base_delay_ms
     )
@@ -43,14 +49,21 @@ defmodule AshAgent.Providers.ReqLLM do
 
   @impl true
   def stream(client, prompt, schema, opts, _context, tools, messages) do
-    req_opts = build_req_opts(opts, tools, messages, prompt)
-    ReqLLM.stream_object(client, prompt, schema, req_opts)
+    {prompt_or_messages, req_opts} = build_req_args(prompt, messages, opts, tools)
+
+    if is_nil(schema) do
+      ReqLLM.stream_text(client, prompt_or_messages, req_opts)
+    else
+      ReqLLM.stream_object(client, prompt_or_messages, schema, req_opts)
+    end
   end
 
-  defp build_req_opts(opts, tools, messages, prompt) do
-    opts
-    |> maybe_add_tools(tools)
-    |> maybe_add_messages(messages, prompt)
+  defp build_req_args(prompt, messages, opts, tools) do
+    prompt_or_messages = if messages && length(messages) > 0, do: messages, else: prompt
+
+    req_opts = opts |> maybe_add_tools(tools)
+
+    {prompt_or_messages, req_opts}
   end
 
   defp maybe_add_tools(opts, nil), do: opts
@@ -59,17 +72,6 @@ defmodule AshAgent.Providers.ReqLLM do
   defp maybe_add_tools(opts, tools) when is_list(tools) do
     Keyword.put(opts, :tools, tools)
   end
-
-  defp maybe_add_messages(opts, nil, prompt) when is_binary(prompt), do: opts
-  defp maybe_add_messages(opts, nil, _prompt), do: opts
-
-  defp maybe_add_messages(opts, messages, _prompt) when is_list(messages) do
-    opts
-    |> Keyword.put(:messages, messages)
-    |> Keyword.delete(:prompt)
-  end
-
-  defp maybe_add_messages(opts, _messages, _prompt), do: opts
 
   @impl true
   def introspect do
