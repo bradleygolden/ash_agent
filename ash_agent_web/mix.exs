@@ -20,6 +20,8 @@ defmodule AshAgentWeb.MixProject do
 
   defp deps do
     [
+      {:tidewave, "~> 0.5", only: [:dev]},
+      {:igniter, "~> 0.6", only: [:dev, :test]},
       {:ash_agent, path: ".."},
       {:phoenix, "~> 1.7.0"},
       {:phoenix_html, "~> 4.0"},

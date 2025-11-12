@@ -5,6 +5,7 @@ defmodule AshAgentWeb.Application do
   def start(_type, _args) do
     :ets.new(:ash_agent_calls, [:named_table, :public, :set, read_concurrency: true])
     :ets.new(:ash_agent_metrics, [:named_table, :public, :set, read_concurrency: true])
+    :ets.new(:ash_agent_call_results, [:named_table, :public, :set, read_concurrency: true])
 
     children = [
       {Phoenix.PubSub, name: AshAgentWeb.PubSub},

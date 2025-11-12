@@ -18,6 +18,10 @@ defmodule AshAgentWeb.Endpoint do
     gzip: false,
     only: AshAgentWeb.static_paths()
 
+  if Code.ensure_loaded?(Tidewave) do
+    plug Tidewave
+  end
+
   plug Plug.RequestId
   plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
 

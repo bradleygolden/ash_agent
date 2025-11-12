@@ -5,7 +5,7 @@ config :ash_agent_web, AshAgentWeb.Endpoint,
   check_origin: false,
   code_reloader: true,
   debug_errors: true,
-  secret_key_base: "ash_agent_web_dev_secret_key_base_replace_in_prod",
+  secret_key_base: "16UmpOSa3ASPMcmgFgxP3x+frJorMl4hZJKDmJ2Z5nDAsLarHK1fzyyMHetK9LXq",
   watchers: []
 
 config :ash_agent_web, dev_routes: true

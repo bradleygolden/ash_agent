@@ -1,5 +1,6 @@
 defmodule Examples.TestDomain do
-  use Ash.Domain
+  use Ash.Domain,
+    validate_config_inclusion?: false
 
   resources do
     resource Examples.DemoAgent

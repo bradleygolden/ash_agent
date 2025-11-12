@@ -202,18 +202,42 @@ defmodule AshAgentWeb.HomeLive do
   end
 
   defp discover_agents do
-    :code.all_loaded()
-    |> Enum.map(fn {module, _} -> module end)
+    (loaded_modules() ++ configured_app_modules())
+    |> Enum.uniq()
     |> Enum.filter(&agent_module?/1)
     |> Enum.map(&build_agent_info/1)
     |> Enum.sort_by(& &1.short_name)
   end
 
+  defp loaded_modules do
+    Enum.map(:code.all_loaded(), fn {module, _} -> module end)
+  end
+
+  defp configured_app_modules do
+    Application.get_env(:ash_agent_web, :agent_apps, [:ash_agent])
+    |> Enum.flat_map(&modules_for_app/1)
+  end
+
+  defp modules_for_app(app) do
+    case Application.spec(app, :modules) do
+      nil ->
+        case Application.load(app) do
+          :ok -> Application.spec(app, :modules) || []
+          {:error, _} -> []
+        end
+
+      modules ->
+        modules
+    end
+  rescue
+    _ -> []
+  end
+
   defp agent_module?(module) do
     try do
       Code.ensure_loaded?(module) &&
-        function_exported?(module, :spark_is?, 0) &&
-        module.spark_is?() == Ash.Resource &&
+        function_exported?(module, :spark_is, 0) &&
+        module.spark_is() == Ash.Resource &&
         AshAgent.Resource in Spark.extensions(module)
     rescue
       _ -> false

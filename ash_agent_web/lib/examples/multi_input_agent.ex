@@ -7,17 +7,14 @@ defmodule Examples.MultiInputAgent do
     domain: Examples.TestDomain,
     extensions: [AshAgent.Resource]
 
-  import AshAgent.Sigils
+  resource do
+    require_primary_key? false
+  end
 
   agent do
-    client "anthropic:claude-3-5-sonnet"
-    output :string
-    prompt ~p"""
-    Generate a {{ content_type }} about {{ topic }} with the following specifications:
-    - Target audience: {{ audience }}
-    - Word count: approximately {{ word_count }} words
-    - Include examples: {{ include_examples }}
-    """
+    provider :baml
+    client :default, function: :MultiInputAgent
+    output AshAgentWeb.BamlClient.Types.ContentResponse
 
     input do
       argument :topic, :string, allow_nil?: false
