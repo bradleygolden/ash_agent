@@ -154,6 +154,7 @@ defmodule AshAgent.MixProject do
 
   defp aliases do
     [
+      precommit: ["check"],
       check: [
         "deps.get",
         "deps.compile",
