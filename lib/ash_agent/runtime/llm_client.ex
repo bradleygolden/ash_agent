@@ -23,17 +23,11 @@ defmodule AshAgent.Runtime.LLMClient do
 
   Returns `{:ok, response}` with the provider response, or `{:error, reason}`.
   """
-  def generate_object(
-        resource,
-        client,
-        prompt,
-        schema,
-        opts \\ [],
-        context,
-        tools \\ nil,
-        messages \\ nil,
-        provider_override \\ nil
-      ) do
+  def generate_object(resource, client, prompt, schema, opts \\ [], context, options \\ []) do
+    provider_override = Keyword.get(options, :provider_override)
+    tools = Keyword.get(options, :tools)
+    messages = Keyword.get(options, :messages)
+
     with {:ok, provider} <- resolve_provider(resource, provider_override) do
       opts = merge_client_opts(opts)
 
@@ -62,17 +56,11 @@ defmodule AshAgent.Runtime.LLMClient do
 
   Returns `{:ok, stream}` with the provider stream response, or `{:error, reason}`.
   """
-  def stream_object(
-        resource,
-        client,
-        prompt,
-        schema,
-        opts \\ [],
-        context,
-        tools \\ nil,
-        messages \\ nil,
-        provider_override \\ nil
-      ) do
+  def stream_object(resource, client, prompt, schema, opts \\ [], context, options \\ []) do
+    provider_override = Keyword.get(options, :provider_override)
+    tools = Keyword.get(options, :tools)
+    messages = Keyword.get(options, :messages)
+
     with {:ok, provider} <- resolve_provider(resource, provider_override) do
       opts = merge_client_opts(opts)
 

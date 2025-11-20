@@ -1,6 +1,8 @@
 defmodule AshAgent.Providers.BamlProviderCallbackOrderTest do
   use ExUnit.Case, async: true
 
+  alias AshAgent.Providers.Baml
+
   defmodule StreamClient.Stream do
     def stream(args, callback) do
       callback.({:partial, %{message: {:partial, args[:message]}}})
@@ -19,7 +21,7 @@ defmodule AshAgent.Providers.BamlProviderCallbackOrderTest do
     opts = [client_module: StreamClient, function: :Stream]
 
     assert {:ok, stream} =
-             AshAgent.Providers.Baml.stream(:client, nil, nil, opts, context, nil, nil)
+             Baml.stream(:client, nil, nil, opts, context, nil, nil)
 
     assert [%{message: {:partial, "hi"}}, %{message: {:done, "hi"}}] == Enum.to_list(stream)
     assert_received {:opts_seen, %{}}

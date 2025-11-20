@@ -62,17 +62,15 @@ defmodule AshAgent.Providers.Baml do
          {:ok, client_module} <- resolve_client_module(client, opts),
          {:ok, function_module} <- resolve_function_module(client_module, function_name),
          {:ok, baml_opts} <- build_baml_opts(opts, tools, messages) do
-      cond do
-        function_exported?(function_module, :stream, 2) or
-            function_exported?(function_module, :stream, 3) ->
-          {:ok, create_stream(function_module, args, baml_opts)}
-
-        true ->
-          {:error,
-           Error.llm_error(
-             "BAML function #{inspect(function_module)} does not support streaming",
-             %{function: function_name}
-           )}
+      if function_exported?(function_module, :stream, 2) or
+           function_exported?(function_module, :stream, 3) do
+        {:ok, create_stream(function_module, args, baml_opts)}
+      else
+        {:error,
+         Error.llm_error(
+           "BAML function #{inspect(function_module)} does not support streaming",
+           %{function: function_name}
+         )}
       end
     else
       {:error, %Error{} = error} ->
@@ -233,16 +231,14 @@ defmodule AshAgent.Providers.Baml do
     stream_fn = build_stream_callback(parent, ref)
 
     result =
-      cond do
-        function_exported?(function_module, :stream, 3) ->
-          try do
-            function_module.stream(arguments, opts, stream_fn)
-          rescue
-            FunctionClauseError -> function_module.stream(arguments, stream_fn, opts)
-          end
-
-        true ->
-          function_module.stream(arguments, stream_fn)
+      if function_exported?(function_module, :stream, 3) do
+        try do
+          function_module.stream(arguments, opts, stream_fn)
+        rescue
+          FunctionClauseError -> function_module.stream(arguments, stream_fn, opts)
+        end
+      else
+        function_module.stream(arguments, stream_fn)
       end
 
     handle_stream_result(result, ref)

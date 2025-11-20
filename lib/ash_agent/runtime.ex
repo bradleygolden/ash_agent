@@ -156,9 +156,7 @@ defmodule AshAgent.Runtime do
             schema,
             config.client_opts,
             context,
-            nil,
-            nil,
-            config.provider
+            provider_override: config.provider
           )
 
         emit_llm_response(metadata, response_result, ctx, nil)
@@ -274,9 +272,9 @@ defmodule AshAgent.Runtime do
            state.schema,
            state.config.client_opts,
            state.context,
-           state.tools,
-           messages,
-           state.config.provider
+           tools: state.tools,
+           messages: messages,
+           provider_override: state.config.provider
          ) do
       {:ok, response} = ok_resp ->
         emit_llm_response(state.metadata, ok_resp, ctx, state)
@@ -803,9 +801,7 @@ defmodule AshAgent.Runtime do
              schema,
              config.client_opts,
              context,
-             nil,
-             nil,
-             config.provider
+             provider_override: config.provider
            ) do
       telemetry_span_context = make_ref()
       start_metadata = telemetry_metadata(config, module, :stream)
