@@ -177,8 +177,8 @@ defmodule AshAgent.RuntimeTest do
     tools do
       tool :do_thing do
         description "test"
-        function {__MODULE__, :do_thing, []}
-        parameters [input: [type: :string, required: false]]
+        function({__MODULE__, :do_thing, []})
+        parameters(input: [type: :string, required: false])
       end
     end
 
@@ -197,12 +197,15 @@ defmodule AshAgent.RuntimeTest do
 
     agent do
       provider :mock
-      client [:mock,
+
+      client [
+        :mock,
         mock_chunks: [
           %{result: "chunk", usage: %{input_tokens: 1, output_tokens: 2, total_tokens: 3}},
           %{result: "done", usage: %{input_tokens: 4, output_tokens: 6, total_tokens: 10}}
         ]
       ]
+
       output TestOutput
       prompt "Stream telemetry"
     end

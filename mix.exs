@@ -19,7 +19,8 @@ defmodule AshAgent.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       dialyzer: dialyzer(),
       preferred_cli_env: [
-        check: :test
+        check: :test,
+        precommit: :test
       ]
     ]
   end

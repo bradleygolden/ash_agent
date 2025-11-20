@@ -357,7 +357,7 @@ defmodule AshAgent.Runtime do
             current_iteration: next_iteration_number
           })
 
-          execute_tool_calling_loop(state, ctx)
+        execute_tool_calling_loop(state, ctx)
 
       calls when is_list(calls) ->
         emit_tool_decision_telemetry(calls, state, ctx)
@@ -801,53 +801,63 @@ defmodule AshAgent.Runtime do
              config.client,
              context.rendered_prompt,
              schema,
-            config.client_opts,
-            context,
-            nil,
-            nil,
-            config.provider
-          ) do
+             config.client_opts,
+             context,
+             nil,
+             nil,
+             config.provider
+           ) do
       telemetry_span_context = make_ref()
       start_metadata = telemetry_metadata(config, module, :stream)
       start_metadata = Map.put(start_metadata, :telemetry_span_context, telemetry_span_context)
       start_metadata = Map.put(start_metadata, :input, context.input)
 
       :telemetry.execute([:ash_agent, :stream, :start], %{}, start_metadata)
-      :telemetry.execute([:ash_agent, :llm, :request], %{}, Map.put(start_metadata, :iteration, 1))
+
+      :telemetry.execute(
+        [:ash_agent, :llm, :request],
+        %{},
+        Map.put(start_metadata, :iteration, 1)
+      )
 
       start_time = System.monotonic_time()
       stream = LLMClient.stream_to_structs(stream_response, config.output_type)
 
       wrapped_stream =
-        Stream.transform(stream, fn -> {start_time, nil, 0} end, fn result, {started_at, _last, idx} ->
-          context = Hooks.with_response(context, result)
+        Stream.transform(
+          stream,
+          fn -> {start_time, nil, 0} end,
+          fn result, {started_at, _last, idx} ->
+            context = Hooks.with_response(context, result)
 
-          delivered =
-            case Hooks.execute(config.hooks, :after_call, context) do
-              {:ok, context} -> context.response
-              {:error, _} -> result
-            end
+            delivered =
+              case Hooks.execute(config.hooks, :after_call, context) do
+                {:ok, context} -> context.response
+                {:error, _} -> result
+              end
 
-          chunk_meta =
-            start_metadata
-            |> Map.put(:telemetry_span_context, telemetry_span_context)
-            |> Map.put(:chunk, delivered)
-            |> Map.put(:iteration, 1)
+            chunk_meta =
+              start_metadata
+              |> Map.put(:telemetry_span_context, telemetry_span_context)
+              |> Map.put(:chunk, delivered)
+              |> Map.put(:iteration, 1)
 
-          :telemetry.execute([:ash_agent, :stream, :chunk], %{index: idx}, chunk_meta)
+            :telemetry.execute([:ash_agent, :stream, :chunk], %{index: idx}, chunk_meta)
 
-          {[delivered], {started_at, delivered, idx + 1}}
-        end, fn {started_at, last_chunk, _idx} ->
-          resp_meta =
-            start_metadata
-            |> Map.put(:telemetry_span_context, telemetry_span_context)
-            |> Map.put(:status, :ok)
-            |> Map.put(:response, last_chunk)
+            {[delivered], {started_at, delivered, idx + 1}}
+          end,
+          fn {started_at, last_chunk, _idx} ->
+            resp_meta =
+              start_metadata
+              |> Map.put(:telemetry_span_context, telemetry_span_context)
+              |> Map.put(:status, :ok)
+              |> Map.put(:response, last_chunk)
 
-          :telemetry.execute([:ash_agent, :llm, :response], %{}, resp_meta)
-          emit_stream_stop(telemetry_span_context, start_metadata, started_at, last_chunk, :ok)
-          []
-        end)
+            :telemetry.execute([:ash_agent, :llm, :response], %{}, resp_meta)
+            emit_stream_stop(telemetry_span_context, start_metadata, started_at, last_chunk, :ok)
+            []
+          end
+        )
 
       {:ok, wrapped_stream}
     else
@@ -921,7 +931,7 @@ defmodule AshAgent.Runtime do
       end
 
     client_opts =
-      (if provider_changed?, do: [], else: normalize_client_opts(config.client_opts))
+      if(provider_changed?, do: [], else: normalize_client_opts(config.client_opts))
       |> Keyword.merge(normalize_client_opts(client_override_opts))
       |> Keyword.merge(normalize_client_opts(Keyword.get(opts, :client_opts, [])))
 

@@ -68,5 +68,6 @@ defmodule AshAgent.Telemetry do
 
     :telemetry.execute([:ash_agent, event, :summary], %{}, summary_meta)
   end
+
   defp emit_summary(_event, _metadata), do: :ok
 end
