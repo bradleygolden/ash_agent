@@ -18,7 +18,7 @@ defmodule AshAgent.Integration.AgentActionsTest do
 
       agent do
         provider :baml
-        client :ollama, function: :AgentEcho
+        client :support, function: :AgentEcho
         output AgentReply
 
         input do

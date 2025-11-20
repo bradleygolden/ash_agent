@@ -10,12 +10,53 @@ defmodule AshAgent.RuntimeTest do
   alias AshAgent.Runtime
   alias AshAgent.Test.LLMStub
 
+  defmodule NoStreamProvider do
+    @behaviour AshAgent.Provider
+
+    def call(_client, _prompt, _schema, _opts, _context, _tools, _messages) do
+      {:ok, %{result: "override"}}
+    end
+
+    def stream(_client, _prompt, _schema, _opts, _context, _tools, _messages) do
+      {:error, :no_stream}
+    end
+
+    def introspect do
+      %{provider: :no_stream, features: [:sync_call]}
+    end
+  end
+
+  defmodule NoFunctionProvider do
+    @behaviour AshAgent.Provider
+
+    def call(_client, _prompt, _schema, opts, _context, _tools, _messages) do
+      if Keyword.has_key?(opts, :function) do
+        {:error, :unexpected_function_opt}
+      else
+        {:ok, %{result: "ok"}}
+      end
+    end
+
+    def stream(_client, _prompt, _schema, opts, _context, _tools, _messages) do
+      if Keyword.has_key?(opts, :function) do
+        {:error, :unexpected_function_opt}
+      else
+        {:error, :no_stream}
+      end
+    end
+
+    def introspect do
+      %{provider: :no_function, features: [:sync_call]}
+    end
+  end
+
   defmodule TestOutput do
     @moduledoc false
     use Ash.TypedStruct
 
     typed_struct do
       field :result, :string, allow_nil?: false
+      field :usage, :map
     end
   end
 
@@ -100,6 +141,73 @@ defmodule AshAgent.RuntimeTest do
     end
   end
 
+  defmodule AgentWithClientOpts do
+    @moduledoc false
+    use Ash.Resource,
+      domain: AshAgent.RuntimeTest.TestDomain,
+      extensions: [AshAgent.Resource]
+
+    resource do
+      require_primary_key? false
+    end
+
+    agent do
+      client(:mock_client, function: :streaming_chat_agent)
+      output TestOutput
+      prompt "Uses provider-specific client opts"
+    end
+  end
+
+  defmodule AgentWithTool do
+    @moduledoc false
+    use Ash.Resource,
+      domain: AshAgent.RuntimeTest.TestDomain,
+      extensions: [AshAgent.Resource]
+
+    resource do
+      require_primary_key? false
+    end
+
+    agent do
+      client "anthropic:claude-3-5-sonnet"
+      output TestOutput
+      prompt "Tool prompt"
+    end
+
+    tools do
+      tool :do_thing do
+        description "test"
+        function {__MODULE__, :do_thing, []}
+        parameters [input: [type: :string, required: false]]
+      end
+    end
+
+    def do_thing(_args), do: {:ok, %{result: "done"}}
+  end
+
+  defmodule StreamTelemetryAgent do
+    @moduledoc false
+    use Ash.Resource,
+      domain: AshAgent.RuntimeTest.TestDomain,
+      extensions: [AshAgent.Resource]
+
+    resource do
+      require_primary_key? false
+    end
+
+    agent do
+      provider :mock
+      client [:mock,
+        mock_chunks: [
+          %{result: "chunk", usage: %{input_tokens: 1, output_tokens: 2, total_tokens: 3}},
+          %{result: "done", usage: %{input_tokens: 4, output_tokens: 6, total_tokens: 10}}
+        ]
+      ]
+      output TestOutput
+      prompt "Stream telemetry"
+    end
+  end
+
   defmodule NilOutputAgent do
     @moduledoc false
     use Ash.Resource,
@@ -126,6 +234,7 @@ defmodule AshAgent.RuntimeTest do
       resource MinimalAgent
       resource AgentWithArgs
       resource AgentWithHooks
+      resource StreamTelemetryAgent
       resource NilOutputAgent
     end
   end
@@ -229,6 +338,46 @@ defmodule AshAgent.RuntimeTest do
       assert_received {:before_call, %{}}
       assert_received {:after_render, "Test with hooks"}
     end
+
+    test "emits stream summary telemetry with usage and result metadata" do
+      parent = self()
+      handler_id = {:runtime_stream_summary, make_ref()}
+
+      :telemetry.attach(
+        handler_id,
+        [:ash_agent, :stream, :summary],
+        fn _event, _measurements, metadata, _ ->
+          send(parent, {:stream_summary, metadata})
+        end,
+        nil
+      )
+
+      chunk_handler_id = {:runtime_stream_chunk, make_ref()}
+
+      :telemetry.attach(
+        chunk_handler_id,
+        [:ash_agent, :stream, :chunk],
+        fn _event, measurements, metadata, _ ->
+          send(parent, {:stream_chunk, measurements, metadata})
+        end,
+        nil
+      )
+
+      try do
+        assert {:ok, stream} = Runtime.stream(StreamTelemetryAgent, %{})
+        _ = Enum.to_list(stream)
+
+        assert_receive {:stream_summary, metadata}, 1_000
+        assert metadata.status == :ok
+        assert metadata.result.__struct__ == AshAgent.RuntimeTest.TestOutput
+        assert Map.get(metadata, :usage) == nil
+        assert_receive {:stream_chunk, %{index: 0}, _}, 1_000
+        assert_receive {:stream_chunk, %{index: 1}, _}, 1_000
+      after
+        :telemetry.detach(handler_id)
+        :telemetry.detach(chunk_handler_id)
+      end
+    end
   end
 
   describe "stream!/2" do
@@ -242,6 +391,28 @@ defmodule AshAgent.RuntimeTest do
       assert is_function(stream) or is_struct(stream, Stream)
 
       _results = Enum.to_list(stream)
+    end
+  end
+
+  describe "runtime overrides" do
+    test "allows overriding provider and client per call" do
+      assert {:ok, %TestOutput{result: "override"}} =
+               Runtime.call(MinimalAgent, %{}, provider: NoStreamProvider, client: :custom)
+    end
+
+    test "rejects streaming when provider lacks streaming support" do
+      assert {:error, %Error{type: :validation_error}} =
+               Runtime.stream(MinimalAgent, %{}, provider: NoStreamProvider)
+    end
+
+    test "rejects tool calling when provider lacks tool_calling support" do
+      assert {:error, %Error{type: :validation_error}} =
+               Runtime.call(AgentWithTool, %{}, provider: NoStreamProvider)
+    end
+
+    test "drops provider-specific client opts when provider changes" do
+      assert {:ok, %TestOutput{result: "ok"}} =
+               Runtime.call(AgentWithClientOpts, %{}, provider: NoFunctionProvider)
     end
   end
 

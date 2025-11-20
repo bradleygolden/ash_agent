@@ -89,7 +89,7 @@ defmodule AshAgent.SchemaConverter do
      ]}
   end
 
-  defp map_ash_type({:array, inner_type}), do: {:array, map_ash_type(inner_type)}
+  defp map_ash_type({:array, inner_type}), do: {:list, map_ash_type(inner_type)}
 
   defp map_ash_type({Ash.Type.Union, constraints}) do
     types = Keyword.get(constraints, :types, [])
