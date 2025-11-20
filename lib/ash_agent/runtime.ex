@@ -1043,6 +1043,7 @@ defmodule AshAgent.Runtime do
     :telemetry.execute([:ash_agent, :llm, :request], %{}, meta)
   end
 
+  @dialyzer {:nowarn_function, emit_llm_response: 4}
   defp emit_llm_response(metadata, response_result, ctx, state) do
     status =
       case response_result do
@@ -1067,6 +1068,7 @@ defmodule AshAgent.Runtime do
 
   defp maybe_put_tool_config(meta, _state), do: meta
 
+  @dialyzer {:nowarn_function, emit_iteration_stop: 5}
   defp emit_iteration_stop(iteration, result, ctx, updated_ctx, started_at) do
     duration_native = System.monotonic_time() - started_at
 
