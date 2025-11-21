@@ -127,7 +127,14 @@ defmodule AshAgent.TokenTrackingTest do
         assert {:ok, %TestOutput{result: "Success with tokens"}} =
                  Runtime.call(TokenTrackingAgent, %{})
 
-        assert_receive {:telemetry, metadata}
+        metadata =
+          receive do
+            {:telemetry, %{agent: TokenTrackingAgent} = meta} -> meta
+            _other -> flunk("received unexpected telemetry payload")
+          after
+            1000 -> flunk("did not receive telemetry for TokenTrackingAgent")
+          end
+
         assert metadata.status == :ok
         assert metadata.usage.input_tokens == 10
         assert metadata.usage.output_tokens == 20

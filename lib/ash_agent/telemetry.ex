@@ -21,22 +21,24 @@ defmodule AshAgent.Telemetry do
       case fun.() do
         {result, enriched_metadata}
         when is_map(enriched_metadata) and not is_map_key(enriched_metadata, :__struct__) ->
-          {result, stop_metadata(result, enriched_metadata)}
+          stop_meta = stop_metadata(result, enriched_metadata)
+          emit_summary(event, stop_meta)
+          {result, stop_meta}
 
         result ->
-          {result, stop_metadata(result, metadata)}
+          stop_meta = stop_metadata(result, metadata)
+          emit_summary(event, stop_meta)
+          {result, stop_meta}
       end
     end)
   end
 
   defp stop_metadata({:ok, response}, metadata) do
     metadata =
-      if Map.has_key?(metadata, :usage) do
-        metadata
-      else
-        response_for_usage = Map.get(metadata, :response, response)
-        maybe_put_usage(metadata, response_for_usage)
-      end
+      metadata
+      |> maybe_put_usage(response)
+      |> maybe_put_usage(Map.get(metadata, :response))
+      |> maybe_put_usage(Map.get(metadata, :result))
 
     Map.put(metadata, :status, :ok)
   end
@@ -52,9 +54,20 @@ defmodule AshAgent.Telemetry do
   end
 
   defp maybe_put_usage(metadata, response) do
-    case LLMClient.response_usage(response) do
+    case LLMClient.response_usage(metadata[:provider], response) do
       nil -> metadata
       usage -> Map.put(metadata, :usage, usage)
     end
   end
+
+  defp emit_summary(event, metadata) when event in [:call, :stream] do
+    summary_meta =
+      metadata
+      |> Map.put(:kind, event)
+      |> Map.put_new(:timestamp, DateTime.utc_now())
+
+    :telemetry.execute([:ash_agent, event, :summary], %{}, summary_meta)
+  end
+
+  defp emit_summary(_event, _metadata), do: :ok
 end

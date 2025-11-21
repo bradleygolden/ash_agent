@@ -10,7 +10,7 @@ defmodule AshAgent.Runtime do
   5. Parsing and returning structured results
   """
 
-  alias AshAgent.{Context, Error, Info, ToolConverter}
+  alias AshAgent.{Context, Error, Info, ProviderRegistry, ToolConverter}
   alias AshAgent.Runtime.{Hooks, LLMClient, ToolExecutor}
   alias AshAgent.Runtime.PromptRenderer
   alias AshAgent.SchemaConverter
@@ -27,7 +27,8 @@ defmodule AshAgent.Runtime do
       :prompt,
       :schema,
       :tools,
-      :tool_config
+      :tool_config,
+      :metadata
     ]
   end
 
@@ -72,10 +73,15 @@ defmodule AshAgent.Runtime do
   """
   @spec call(module(), keyword() | map()) :: {:ok, struct()} | {:error, term()}
   def call(module, args) do
-    case get_agent_config(module) do
-      {:ok, config} ->
-        call_with_hooks(config, module, args)
+    call(module, args, [])
+  end
 
+  def call(module, args, runtime_opts) do
+    with {:ok, config} <- get_agent_config(module),
+         {:ok, config} <- apply_runtime_overrides(config, runtime_opts),
+         :ok <- validate_provider_capabilities(config, :call) do
+      call_with_hooks(config, module, args)
+    else
       {:error, _} = error ->
         error
     end
@@ -130,12 +136,18 @@ defmodule AshAgent.Runtime do
         nil
       end
 
+    if rendered_prompt do
+      emit_prompt_rendered(metadata, rendered_prompt)
+    end
+
     ctx = Context.new(context.input, system_prompt: rendered_prompt)
 
     Telemetry.span(
       :call,
       metadata,
       fn ->
+        emit_llm_request(metadata, ctx, nil)
+
         response_result =
           LLMClient.generate_object(
             module,
@@ -144,9 +156,10 @@ defmodule AshAgent.Runtime do
             schema,
             config.client_opts,
             context,
-            nil,
-            nil
+            provider_override: config.provider
           )
+
+        emit_llm_response(metadata, response_result, ctx, nil)
 
         case response_result do
           {:ok, response} ->
@@ -187,7 +200,8 @@ defmodule AshAgent.Runtime do
       prompt: prompt,
       schema: schema,
       tools: tools,
-      tool_config: tool_config
+      tool_config: tool_config,
+      metadata: metadata
     }
 
     Telemetry.span(
@@ -218,13 +232,18 @@ defmodule AshAgent.Runtime do
   end
 
   defp execute_tool_calling_loop(%LoopState{} = state, ctx) do
+    iter_number = ctx.current_iteration
+    iter_started_at = System.monotonic_time()
+
     case execute_on_iteration_start_hook(ctx, state) do
       {:ok, _ctx} ->
         {result, updated_ctx} = execute_tool_calling_iteration(state, ctx)
+        emit_iteration_stop(iter_number, result, ctx, updated_ctx, iter_started_at)
         execute_on_iteration_complete_hook(updated_ctx, result, state)
         {result, updated_ctx}
 
       {:error, _reason} = error ->
+        emit_iteration_stop(iter_number, error, ctx, ctx, iter_started_at)
         {error, ctx}
     end
   end
@@ -244,6 +263,8 @@ defmodule AshAgent.Runtime do
     messages = execute_prepare_messages_hook(messages, ctx, state)
     current_prompt = nil
 
+    emit_llm_request(state.metadata, ctx, state)
+
     case LLMClient.generate_object(
            state.module,
            state.config.client,
@@ -251,14 +272,17 @@ defmodule AshAgent.Runtime do
            state.schema,
            state.config.client_opts,
            state.context,
-           state.tools,
-           messages
+           tools: state.tools,
+           messages: messages,
+           provider_override: state.config.provider
          ) do
-      {:ok, response} ->
+      {:ok, response} = ok_resp ->
+        emit_llm_response(state.metadata, ok_resp, ctx, state)
         {result, updated_ctx} = handle_llm_response(response, state, ctx)
         {result, updated_ctx}
 
       {:error, _reason} = error ->
+        emit_llm_response(state.metadata, error, ctx, state)
         {result, updated_ctx} = handle_tool_calling_error(error, state, ctx)
         {result, updated_ctx}
     end
@@ -299,7 +323,7 @@ defmodule AshAgent.Runtime do
     ctx = Context.add_llm_call_timing(ctx)
 
     ctx =
-      case LLMClient.response_usage(response) do
+      case LLMClient.response_usage(state.config.provider, response) do
         nil ->
           ctx
 
@@ -334,6 +358,7 @@ defmodule AshAgent.Runtime do
         execute_tool_calling_loop(state, ctx)
 
       calls when is_list(calls) ->
+        emit_tool_decision_telemetry(calls, state, ctx)
         execute_tool_calls(calls, state, ctx)
     end
   end
@@ -361,6 +386,21 @@ defmodule AshAgent.Runtime do
     ctx = Context.update_tool_calls_timing(ctx, tool_calls_with_timing)
 
     process_tool_results(results, state, ctx)
+  end
+
+  defp emit_tool_decision_telemetry(tool_calls, %LoopState{} = state, ctx) do
+    chosen = List.first(tool_calls)
+
+    :telemetry.execute(
+      [:ash_agent, :tool_call, :decision],
+      %{},
+      %{
+        agent: state.module,
+        iteration: ctx.current_iteration,
+        tool_name: chosen && chosen.name,
+        considered_tools: Enum.map(tool_calls, & &1.name)
+      }
+    )
   end
 
   defp emit_tool_call_start_telemetry(tool_calls, state, ctx) do
@@ -731,10 +771,15 @@ defmodule AshAgent.Runtime do
   """
   @spec stream(module(), keyword() | map()) :: {:ok, Enumerable.t()} | {:error, term()}
   def stream(module, args) do
-    case get_agent_config(module) do
-      {:ok, config} ->
-        stream_with_hooks(config, module, args)
+    stream(module, args, [])
+  end
 
+  def stream(module, args, runtime_opts) do
+    with {:ok, config} <- get_agent_config(module),
+         {:ok, config} <- apply_runtime_overrides(config, runtime_opts),
+         :ok <- validate_provider_capabilities(config, :stream) do
+      stream_with_hooks(config, module, args)
+    else
       {:error, _} = error ->
         error
     end
@@ -749,31 +794,66 @@ defmodule AshAgent.Runtime do
          {:ok, context} <- Hooks.execute(config.hooks, :after_render, context),
          {:ok, schema} <- build_schema(config),
          {:ok, stream_response} <-
-           Telemetry.span(
-             :stream,
-             telemetry_metadata(config, module, :stream),
-             fn ->
-               LLMClient.stream_object(
-                 module,
-                 config.client,
-                 context.rendered_prompt,
-                 schema,
-                 config.client_opts,
-                 context
-               )
-             end
+           LLMClient.stream_object(
+             module,
+             config.client,
+             context.rendered_prompt,
+             schema,
+             config.client_opts,
+             context,
+             provider_override: config.provider
            ) do
+      telemetry_span_context = make_ref()
+      start_metadata = telemetry_metadata(config, module, :stream)
+      start_metadata = Map.put(start_metadata, :telemetry_span_context, telemetry_span_context)
+      start_metadata = Map.put(start_metadata, :input, context.input)
+
+      :telemetry.execute([:ash_agent, :stream, :start], %{}, start_metadata)
+
+      :telemetry.execute(
+        [:ash_agent, :llm, :request],
+        %{},
+        Map.put(start_metadata, :iteration, 1)
+      )
+
+      start_time = System.monotonic_time()
       stream = LLMClient.stream_to_structs(stream_response, config.output_type)
 
       wrapped_stream =
-        Stream.map(stream, fn result ->
-          context = Hooks.with_response(context, result)
+        Stream.transform(
+          stream,
+          fn -> {start_time, nil, 0} end,
+          fn result, {started_at, _last, idx} ->
+            context = Hooks.with_response(context, result)
 
-          case Hooks.execute(config.hooks, :after_call, context) do
-            {:ok, context} -> context.response
-            {:error, _} -> result
+            delivered =
+              case Hooks.execute(config.hooks, :after_call, context) do
+                {:ok, context} -> context.response
+                {:error, _} -> result
+              end
+
+            chunk_meta =
+              start_metadata
+              |> Map.put(:telemetry_span_context, telemetry_span_context)
+              |> Map.put(:chunk, delivered)
+              |> Map.put(:iteration, 1)
+
+            :telemetry.execute([:ash_agent, :stream, :chunk], %{index: idx}, chunk_meta)
+
+            {[delivered], {started_at, delivered, idx + 1}}
+          end,
+          fn {started_at, last_chunk, _idx} ->
+            resp_meta =
+              start_metadata
+              |> Map.put(:telemetry_span_context, telemetry_span_context)
+              |> Map.put(:status, :ok)
+              |> Map.put(:response, last_chunk)
+
+            :telemetry.execute([:ash_agent, :llm, :response], %{}, resp_meta)
+            emit_stream_stop(telemetry_span_context, start_metadata, started_at, last_chunk, :ok)
+            []
           end
-        end)
+        )
 
       {:ok, wrapped_stream}
     else
@@ -814,7 +894,8 @@ defmodule AshAgent.Runtime do
       input_args: get_input_args(module),
       hooks: Extension.get_opt(module, [:agent], :hooks, nil, true),
       tools: tools,
-      tool_config: tool_config
+      tool_config: tool_config,
+      profile: nil
     }
 
     {:ok, config}
@@ -825,6 +906,76 @@ defmodule AshAgent.Runtime do
          module: module,
          exception: e
        })}
+  end
+
+  defp apply_runtime_overrides(config, runtime_opts) do
+    opts =
+      cond do
+        is_map(runtime_opts) -> Map.to_list(runtime_opts)
+        is_list(runtime_opts) -> runtime_opts
+        true -> []
+      end
+
+    provider = Keyword.get(opts, :provider, config.provider)
+    provider_changed? = provider != config.provider
+
+    {client_value, client_override_opts} =
+      case Keyword.fetch(opts, :client) do
+        {:ok, {value, override_opts}} -> {value, override_opts}
+        {:ok, value} -> {value, []}
+        :error -> {config.client, []}
+      end
+
+    client_opts =
+      if(provider_changed?, do: [], else: normalize_client_opts(config.client_opts))
+      |> Keyword.merge(normalize_client_opts(client_override_opts))
+      |> Keyword.merge(normalize_client_opts(Keyword.get(opts, :client_opts, [])))
+
+    profile = Keyword.get(opts, :profile, config.profile)
+
+    {:ok,
+     %{
+       config
+       | client: client_value,
+         client_opts: client_opts,
+         provider: provider,
+         profile: profile
+     }}
+  end
+
+  defp normalize_client_opts(nil), do: []
+  defp normalize_client_opts(opts) when is_list(opts), do: opts
+  defp normalize_client_opts(%{} = map), do: Map.to_list(map)
+  defp normalize_client_opts(other), do: List.wrap(other)
+
+  defp validate_provider_capabilities(config, type) do
+    features = ProviderRegistry.features(config.provider)
+
+    cond do
+      config.tools != [] and :tool_calling not in features ->
+        {:error,
+         Error.validation_error(
+           "Provider #{inspect(config.provider)} does not support tool calling",
+           %{provider: config.provider}
+         )}
+
+      type == :stream and :streaming not in features ->
+        {:error,
+         Error.validation_error(
+           "Provider #{inspect(config.provider)} does not support streaming",
+           %{provider: config.provider}
+         )}
+
+      type == :call and :sync_call not in features ->
+        {:error,
+         Error.validation_error(
+           "Provider #{inspect(config.provider)} does not support synchronous calls",
+           %{provider: config.provider}
+         )}
+
+      true ->
+        :ok
+    end
   end
 
   defp get_output_type(module) do
@@ -871,12 +1022,115 @@ defmodule AshAgent.Runtime do
     provider not in [:baml, AshAgent.Providers.Baml]
   end
 
+  defp emit_prompt_rendered(metadata, prompt) do
+    measurements = %{length: byte_size(prompt)}
+
+    meta =
+      (metadata || %{})
+      |> Map.put(:timestamp, DateTime.utc_now())
+      |> Map.put(:prompt_preview, String.slice(prompt, 0, 200))
+
+    :telemetry.execute([:ash_agent, :prompt, :rendered], measurements, meta)
+  end
+
+  defp emit_llm_request(metadata, ctx, state) do
+    meta =
+      (metadata || %{})
+      |> Map.put(:iteration, ctx.current_iteration)
+      |> maybe_put_tool_config(state)
+      |> Map.put(:timestamp, DateTime.utc_now())
+
+    :telemetry.execute([:ash_agent, :llm, :request], %{}, meta)
+  end
+
+  @dialyzer {:nowarn_function, emit_llm_response: 4}
+  defp emit_llm_response(metadata, response_result, ctx, state) do
+    status =
+      case response_result do
+        {:ok, _} -> :ok
+        {:error, _} -> :error
+        _ -> :unknown
+      end
+
+    meta =
+      (metadata || %{})
+      |> Map.put(:iteration, ctx.current_iteration)
+      |> maybe_put_tool_config(state)
+      |> Map.put(:timestamp, DateTime.utc_now())
+      |> Map.put(:status, status)
+
+    :telemetry.execute([:ash_agent, :llm, :response], %{}, meta)
+  end
+
+  defp maybe_put_tool_config(meta, %LoopState{} = state) do
+    Map.put(meta, :tool_config, state.tool_config)
+  end
+
+  defp maybe_put_tool_config(meta, _state), do: meta
+
+  @dialyzer {:nowarn_function, emit_iteration_stop: 5}
+  defp emit_iteration_stop(iteration, result, ctx, updated_ctx, started_at) do
+    duration_native = System.monotonic_time() - started_at
+
+    status =
+      case result do
+        {:ok, _} -> :ok
+        {:error, _} -> :error
+        _ -> :unknown
+      end
+
+    measurements = %{duration: duration_native}
+
+    metadata = %{
+      agent: Map.get(ctx, :module) || Map.get(updated_ctx, :module),
+      iteration: iteration,
+      status: status,
+      timestamp: DateTime.utc_now()
+    }
+
+    :telemetry.execute([:ash_agent, :iteration, :stop], measurements, metadata)
+  end
+
+  defp emit_stream_stop(span_context, metadata, started_at, last_chunk, status) do
+    duration_native = System.monotonic_time() - started_at
+
+    stop_meta =
+      metadata
+      |> Map.put(:telemetry_span_context, span_context)
+      |> Map.put(:status, status)
+      |> maybe_put_usage(last_chunk)
+      |> maybe_put_result(last_chunk)
+      |> Map.put(:response, last_chunk)
+
+    :telemetry.execute([:ash_agent, :stream, :stop], %{duration: duration_native}, stop_meta)
+
+    summary_meta =
+      stop_meta
+      |> Map.put(:kind, :stream)
+      |> Map.put_new(:timestamp, DateTime.utc_now())
+
+    :telemetry.execute([:ash_agent, :stream, :summary], %{}, summary_meta)
+  end
+
+  defp maybe_put_result(metadata, nil), do: metadata
+  defp maybe_put_result(metadata, result), do: Map.put(metadata, :result, result)
+
+  defp maybe_put_usage(metadata, nil), do: metadata
+
+  defp maybe_put_usage(metadata, chunk) do
+    case LLMClient.response_usage(metadata.provider, chunk) do
+      nil -> metadata
+      usage -> Map.put(metadata, :usage, usage)
+    end
+  end
+
   defp telemetry_metadata(config, module, type) do
     %{
       agent: module,
       provider: config.provider,
       client: config.client,
-      type: type
+      type: type,
+      profile: config.profile
     }
   end
 
@@ -887,7 +1141,7 @@ defmodule AshAgent.Runtime do
       |> Map.put(:response, response)
 
     base_metadata =
-      case LLMClient.response_usage(response) do
+      case LLMClient.response_usage(metadata.provider, response) do
         nil -> base_metadata
         usage -> Map.put(base_metadata, :usage, usage)
       end

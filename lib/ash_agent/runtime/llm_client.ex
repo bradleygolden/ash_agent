@@ -23,17 +23,12 @@ defmodule AshAgent.Runtime.LLMClient do
 
   Returns `{:ok, response}` with the provider response, or `{:error, reason}`.
   """
-  def generate_object(
-        resource,
-        client,
-        prompt,
-        schema,
-        opts \\ [],
-        context,
-        tools \\ nil,
-        messages \\ nil
-      ) do
-    with {:ok, provider} <- resolve_provider(resource) do
+  def generate_object(resource, client, prompt, schema, opts \\ [], context, options \\ []) do
+    provider_override = Keyword.get(options, :provider_override)
+    tools = Keyword.get(options, :tools)
+    messages = Keyword.get(options, :messages)
+
+    with {:ok, provider} <- resolve_provider(resource, provider_override) do
       opts = merge_client_opts(opts)
 
       Logger.debug("LLMClient: Calling provider #{inspect(provider)}")
@@ -61,17 +56,12 @@ defmodule AshAgent.Runtime.LLMClient do
 
   Returns `{:ok, stream}` with the provider stream response, or `{:error, reason}`.
   """
-  def stream_object(
-        resource,
-        client,
-        prompt,
-        schema,
-        opts \\ [],
-        context,
-        tools \\ nil,
-        messages \\ nil
-      ) do
-    with {:ok, provider} <- resolve_provider(resource) do
+  def stream_object(resource, client, prompt, schema, opts \\ [], context, options \\ []) do
+    provider_override = Keyword.get(options, :provider_override)
+    tools = Keyword.get(options, :tools)
+    messages = Keyword.get(options, :messages)
+
+    with {:ok, provider} <- resolve_provider(resource, provider_override) do
       opts = merge_client_opts(opts)
 
       Logger.debug("LLMClient: Streaming via provider #{inspect(provider)}")
@@ -203,15 +193,29 @@ defmodule AshAgent.Runtime.LLMClient do
        })}
   end
 
-  defp resolve_provider(resource) do
-    resource
-    |> AshAgent.Info.provider()
-    |> ProviderRegistry.resolve()
+  defp resolve_provider(resource, override) do
+    case override do
+      nil ->
+        resource
+        |> AshAgent.Info.provider()
+        |> ProviderRegistry.resolve()
+
+      other ->
+        ProviderRegistry.resolve(other)
+    end
   end
 
   @doc """
   Extracts provider usage metadata from a response or stream response, if available.
   """
+  @spec response_usage(atom() | module() | nil, term()) :: map() | nil
+  def response_usage(provider, response) do
+    case provider_usage(provider, response) do
+      nil -> response_usage(response)
+      usage -> usage
+    end
+  end
+
   @spec response_usage(term()) :: map() | nil
   def response_usage(%ReqLLM.Response{} = response) do
     ReqLLM.Response.usage(response)
@@ -220,9 +224,6 @@ defmodule AshAgent.Runtime.LLMClient do
   def response_usage(%StreamResponse{} = response) do
     StreamResponse.usage(response)
   end
-
-  def response_usage(%{usage: usage}) when is_map(usage), do: usage
-  def response_usage(%{"usage" => usage}) when is_map(usage), do: usage
 
   def response_usage(%module{} = response) do
     if function_exported?(module, :usage, 1) do
@@ -233,4 +234,14 @@ defmodule AshAgent.Runtime.LLMClient do
   end
 
   def response_usage(_), do: nil
+
+  defp provider_usage(provider, response) when provider in [:baml, AshAgent.Providers.Baml] do
+    map_usage(response)
+  end
+
+  defp provider_usage(_provider, _response), do: nil
+
+  defp map_usage(%{usage: usage}) when is_map(usage), do: usage
+  defp map_usage(%{"usage" => usage}) when is_map(usage), do: usage
+  defp map_usage(_), do: nil
 end

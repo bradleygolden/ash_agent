@@ -58,7 +58,7 @@ defmodule AshAgent.SchemaConverterTest do
       schema = SchemaConverter.to_req_llm_schema(ComplexTypes)
 
       nested_array_opts = schema[:nested_array]
-      assert nested_array_opts[:type] == {:array, {:array, :string}}
+      assert nested_array_opts[:type] == {:list, {:list, :string}}
       assert nested_array_opts[:required] == false
     end
 
@@ -66,7 +66,7 @@ defmodule AshAgent.SchemaConverterTest do
       schema = SchemaConverter.to_req_llm_schema(ComplexTypes)
 
       object_array_opts = schema[:object_array]
-      assert {:array, {:object, _fields}} = object_array_opts[:type]
+      assert {:list, {:object, _fields}} = object_array_opts[:type]
     end
   end
 
@@ -143,7 +143,7 @@ defmodule AshAgent.SchemaConverterTest do
         schema = SchemaConverter.to_req_llm_schema(ComplexTypes)
 
         nested_array = schema[:nested_array]
-        assert {:array, {:array, :string}} = nested_array[:type]
+        assert {:list, {:list, :string}} = nested_array[:type]
       end
     end
 

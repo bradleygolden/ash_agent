@@ -25,7 +25,7 @@ defmodule AshAgent.Integration.ToolCallingBamlTest do
 
     agent do
       provider :baml
-      client :ollama, function: :AgentToolEcho
+      client :support, function: :AgentToolEcho
       output Reply
 
       input do
