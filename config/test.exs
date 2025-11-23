@@ -15,10 +15,8 @@ config :ash_baml,
   clients:
     Keyword.merge(
       existing_clients,
-      [
-        support: {AshAgent.Test.BamlClient, []},
-        ollama: {AshAgent.Test.OllamaClient, baml_src: "test/support/ollama_baml/baml_src"}
-      ]
+      support: {AshAgent.Test.BamlClient, []},
+      ollama: {AshAgent.Test.OllamaClient, baml_src: "test/support/ollama_baml/baml_src"}
     )
 
 config :req_llm, :openai, base_url: "http://localhost:11434/v1"

@@ -5,10 +5,8 @@ Application.put_env(
   :clients,
   Keyword.merge(
     existing_clients,
-    [
-      support: {AshAgent.Test.BamlClient, []},
-      ollama: {AshAgent.Test.OllamaClient, baml_src: "test/support/ollama_baml/baml_src"}
-    ]
+    support: {AshAgent.Test.BamlClient, []},
+    ollama: {AshAgent.Test.OllamaClient, baml_src: "test/support/ollama_baml/baml_src"}
   )
 )
 
