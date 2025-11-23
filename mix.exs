@@ -54,7 +54,7 @@ defmodule AshAgent.MixProject do
 
     ash_baml_dep =
       if File.exists?("../ash_baml/mix.exs") do
-        [{:ash_baml, path: "../ash_baml"}]
+        [{:ash_baml, path: "../ash_baml", in_umbrella: true, env: Mix.env()}]
       else
         [{:ash_baml, github: "bradleygolden/ash_baml"}]
       end

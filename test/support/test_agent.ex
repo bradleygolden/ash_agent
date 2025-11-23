@@ -6,6 +6,10 @@ defmodule AshAgent.Test.TestAgent do
 
   alias AshAgent.Test.Reply
 
+  resource do
+    require_primary_key? false
+  end
+
   agent do
     client("anthropic:claude-3-5-sonnet", temperature: 0.7, max_tokens: 100)
 

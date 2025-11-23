@@ -9,11 +9,17 @@ System.put_env("ANTHROPIC_API_KEY", "test-key-12345")
 
 config :ash_agent, :req_llm_options, req_http_options: [plug: {Req.Test, AshAgent.LLMStub}]
 
+existing_clients = Application.get_env(:ash_baml, :clients, [])
+
 config :ash_baml,
-  clients: [
-    support: {AshAgent.Test.BamlClient, []},
-    ollama: {AshAgent.Test.OllamaClient, baml_src: "test/support/ollama_baml/baml_src"}
-  ]
+  clients:
+    Keyword.merge(
+      existing_clients,
+      [
+        support: {AshAgent.Test.BamlClient, []},
+        ollama: {AshAgent.Test.OllamaClient, baml_src: "test/support/ollama_baml/baml_src"}
+      ]
+    )
 
 config :req_llm, :openai, base_url: "http://localhost:11434/v1"
 

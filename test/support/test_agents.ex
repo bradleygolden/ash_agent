@@ -36,6 +36,10 @@ defmodule AshAgent.Test.TestAgents do
       domain: AshAgent.Test.TestAgents.TestDomain,
       extensions: [AshAgent.Resource]
 
+    resource do
+      require_primary_key? false
+    end
+
     agent do
       client "anthropic:claude-3-5-sonnet"
       output SimpleOutput
@@ -51,6 +55,10 @@ defmodule AshAgent.Test.TestAgents do
     use Ash.Resource,
       domain: AshAgent.Test.TestAgents.TestDomain,
       extensions: [AshAgent.Resource]
+
+    resource do
+      require_primary_key? false
+    end
 
     import AshAgent.Sigils
 
@@ -74,6 +82,10 @@ defmodule AshAgent.Test.TestAgents do
       domain: AshAgent.Test.TestAgents.TestDomain,
       extensions: [AshAgent.Resource]
 
+    resource do
+      require_primary_key? false
+    end
+
     agent do
       client "anthropic:claude-3-5-sonnet"
       output ComplexOutput
@@ -90,6 +102,10 @@ defmodule AshAgent.Test.TestAgents do
       domain: AshAgent.Test.TestAgents.TestDomain,
       extensions: [AshAgent.Resource]
 
+    resource do
+      require_primary_key? false
+    end
+
     agent do
       client("anthropic:claude-3-5-sonnet", temperature: 0.5, max_tokens: 200)
       output SimpleOutput
@@ -105,6 +121,10 @@ defmodule AshAgent.Test.TestAgents do
     use Ash.Resource,
       domain: AshAgent.Test.TestAgents.TestDomain,
       extensions: [AshAgent.Resource]
+
+    resource do
+      require_primary_key? false
+    end
 
     import AshAgent.Sigils
 
