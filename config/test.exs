@@ -15,6 +15,11 @@ config :ash_agent,
     ollama: {AshAgent.Test.OllamaClient, baml_src: "test/support/ollama_baml/baml_src"}
   ]
 
+config :ash_baml,
+  clients: [
+    test: {AshBaml.Test.BamlClient, baml_src: "../ash_baml/test/support/fixtures/baml_src"}
+  ]
+
 config :req_llm, :openai, base_url: "http://localhost:11434/v1"
 
 if Code.ensure_loaded?(ReqLLM) do
