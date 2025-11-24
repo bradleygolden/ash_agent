@@ -179,7 +179,7 @@ defmodule AshAgent.MixProject do
   # otherwise use hex package for publication
   defp ash_baml_dep do
     if local_dep?(:ash_baml) do
-      [in_umbrella: true, env: :prod]
+      [in_umbrella: true]
     else
       [version: "~> 0.1.0", optional: true]
     end
