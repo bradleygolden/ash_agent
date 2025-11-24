@@ -96,7 +96,7 @@ defmodule AshAgent.Resource do
   alias AshAgent.DSL
 
   use Spark.Dsl.Extension,
-    sections: [DSL.agent(), DSL.Tools.tools()],
+    sections: [DSL.agent()],
     transformers: [
       AshAgent.Transformers.ValidateAgent,
       AshAgent.Transformers.AddContextAttribute,

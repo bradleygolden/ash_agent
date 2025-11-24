@@ -4,6 +4,17 @@ defmodule AshAgent.Runtime.PromptRenderer do
 
   Supports both pre-parsed Solid templates and raw string templates,
   converting user arguments into template context variables.
+
+  ## Public Extension API
+
+  This module is part of AshAgent's **public extension API**. It is intended to be
+  used by extension packages like `ash_agent_tools` for prompt rendering.
+
+  **Stability**: This module's public functions have stability guarantees. Breaking
+  changes will follow semantic versioning (major version bump).
+
+  **Public Functions**:
+  - `render/3` - Render a prompt template with arguments
   """
 
   alias AshAgent.Error

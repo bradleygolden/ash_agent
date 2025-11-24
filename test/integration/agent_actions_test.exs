@@ -18,7 +18,11 @@ defmodule AshAgent.Integration.AgentActionsTest do
 
       agent do
         provider :baml
-        client :support, function: :AgentEcho
+        # Use direct module reference to avoid coupling to ash_baml config
+        client AshAgent.Test.OllamaClient,
+          function: :AgentEcho,
+          client_module: AshAgent.Test.OllamaClient
+
         output AgentReply
 
         input do

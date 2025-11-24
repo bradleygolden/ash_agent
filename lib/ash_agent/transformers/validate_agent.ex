@@ -24,8 +24,7 @@ defmodule AshAgent.Transformers.ValidateAgent do
       _client ->
         with :ok <- validate_client(dsl_state),
              :ok <- validate_prompt(dsl_state),
-             :ok <- validate_provider_capabilities(dsl_state),
-             :ok <- ensure_baml_client_module(dsl_state) do
+             :ok <- validate_provider_capabilities(dsl_state) do
           {:ok, dsl_state}
         end
     end
@@ -83,66 +82,7 @@ defmodule AshAgent.Transformers.ValidateAgent do
 
   defp validate_provider_capabilities(dsl_state) do
     provider = Transformer.get_option(dsl_state, [:agent], :provider, :req_llm)
-    features = ProviderRegistry.features(provider)
-
-    tools = Transformer.get_entities(dsl_state, [:tools]) || []
-
-    if tools != [] and :tool_calling not in features do
-      {:error,
-       DslError.exception(
-         module: Transformer.get_persisted(dsl_state, :module),
-         message:
-           "Provider #{inspect(provider)} does not support tool calling. Remove the `tools` section or choose a provider that declares :tool_calling.",
-         path: [:tools]
-       )}
-    else
-      :ok
-    end
-  end
-
-  defp ensure_baml_client_module(dsl_state) do
-    provider = Transformer.get_option(dsl_state, [:agent], :provider, :req_llm)
-
-    if provider == :baml do
-      case Transformer.get_option(dsl_state, [:agent], :client) do
-        {client, _opts} -> ensure_baml_client_module_for_value(client, dsl_state)
-        _ -> :ok
-      end
-    else
-      :ok
-    end
-  end
-
-  defp ensure_baml_client_module_for_value(client, _dsl_state) when is_binary(client), do: :ok
-
-  defp ensure_baml_client_module_for_value(client, dsl_state) when is_atom(client) do
-    if Code.ensure_loaded?(client) do
-      :ok
-    else
-      ensure_baml_client_from_config(client, dsl_state)
-    end
-  end
-
-  defp ensure_baml_client_module_for_value(_client, _dsl_state), do: :ok
-
-  defp ensure_baml_client_from_config(identifier, dsl_state) do
-    case Code.ensure_loaded(AshBaml.ClientBuilder) do
-      {:module, builder} ->
-        case builder.ensure_configured_client_module(identifier) do
-          {:ok, _module} ->
-            :ok
-
-          {:error, reason} ->
-            {:error,
-             DslError.exception(
-               module: Transformer.get_persisted(dsl_state, :module),
-               message: String.trim(reason),
-               path: [:agent, :client]
-             )}
-        end
-
-      {:error, _} ->
-        :ok
-    end
+    _features = ProviderRegistry.features(provider)
+    :ok
   end
 end

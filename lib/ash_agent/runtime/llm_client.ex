@@ -11,6 +11,18 @@ defmodule AshAgent.Runtime.LLMClient do
 
   Providers are resolved from the agent's DSL configuration.
   The provider can be an atom preset (`:req_llm`, `:mock`) or a custom module.
+
+  ## Public Extension API
+
+  This module is part of AshAgent's **public extension API**. It is intended to be
+  used by extension packages like `ash_agent_tools` to execute LLM calls.
+
+  **Stability**: This module's public functions have stability guarantees. Breaking
+  changes will follow semantic versioning (major version bump).
+
+  **Public Functions**:
+  - `generate_object/7` - Execute synchronous LLM call
+  - `stream_object/7` - Execute streaming LLM call
   """
 
   alias AshAgent.Error

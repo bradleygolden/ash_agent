@@ -17,20 +17,23 @@ defmodule AshAgent.Telemetry do
   """
   @spec span(span_event(), map(), (-> any())) :: any()
   def span(event, metadata, fun) when event in [:call, :stream] do
-    :telemetry.span([:ash_agent, event], metadata, fn ->
+    :telemetry.execute([:ash_agent, event, :start], %{}, metadata)
+
+    {result, meta} =
       case fun.() do
-        {result, enriched_metadata}
-        when is_map(enriched_metadata) and not is_map_key(enriched_metadata, :__struct__) ->
-          stop_meta = stop_metadata(result, enriched_metadata)
-          emit_summary(event, stop_meta)
-          {result, stop_meta}
+        {result, enriched_metadata} when is_map(enriched_metadata) ->
+          {result, enriched_metadata}
 
         result ->
-          stop_meta = stop_metadata(result, metadata)
-          emit_summary(event, stop_meta)
-          {result, stop_meta}
+          {result, metadata}
       end
-    end)
+
+    stop_meta = stop_metadata(result, meta)
+
+    emit_summary(event, stop_meta)
+    :telemetry.execute([:ash_agent, event, :stop], %{}, stop_meta)
+
+    {result, stop_meta}
   end
 
   defp stop_metadata({:ok, response}, metadata) do

@@ -27,6 +27,7 @@ defmodule AshAgent.MixProject do
 
   def application do
     [
+      mod: {AshAgent.Application, []},
       extra_applications: [:logger]
     ]
   end
@@ -35,7 +36,7 @@ defmodule AshAgent.MixProject do
   defp elixirc_paths(_), do: ["lib"]
 
   defp deps do
-    base_deps = [
+    [
       # Core dependencies
       {:ash, "~> 3.0"},
       {:spark, "~> 2.2"},
@@ -44,6 +45,7 @@ defmodule AshAgent.MixProject do
 
       # Optional dependencies
       {:igniter, "~> 0.3", optional: true},
+      {:ash_baml, ash_baml_dep()},
 
       # Dev and test dependencies
       {:ex_doc, "~> 0.34", only: [:dev, :test], runtime: false},
@@ -51,23 +53,6 @@ defmodule AshAgent.MixProject do
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:plug, "~> 1.16", only: :test}
     ]
-
-    ash_baml_dep =
-      if File.exists?("../ash_baml/mix.exs") do
-        [
-          {:ash_baml,
-           in_umbrella: true,
-           env:
-             if(System.get_env("IS_UMBRELLA_ROOT") == "true",
-               do: Mix.env(),
-               else: :prod
-             )}
-        ]
-      else
-        [{:ash_baml, github: "bradleygolden/ash_baml"}]
-      end
-
-    base_deps ++ ash_baml_dep
   end
 
   defp description do
@@ -163,8 +148,7 @@ defmodule AshAgent.MixProject do
 
   defp aliases do
     [
-      precommit: ["check"],
-      check: [
+      precommit: [
         "deps.get",
         "deps.compile",
         "deps.unlock --check-unused",
@@ -187,10 +171,24 @@ defmodule AshAgent.MixProject do
 
   defp dialyzer do
     [
-      plt_core_path: "priv/plts",
-      plt_local_path: "priv/plts",
-      plt_file: {:no_warn, "priv/plts/dialyzer.plt"},
       plt_add_apps: [:mix, :ex_unit]
     ]
+  end
+
+  # Use in_umbrella when developing in the umbrella,
+  # otherwise use hex package for publication
+  defp ash_baml_dep do
+    if local_dep?(:ash_baml) do
+      [in_umbrella: true, env: :prod]
+    else
+      [version: "~> 0.1.0", optional: true]
+    end
+  end
+
+  defp local_dep?(app) do
+    app
+    |> to_string()
+    |> then(&Path.expand("../#{&1}/mix.exs", __DIR__))
+    |> File.exists?()
   end
 end

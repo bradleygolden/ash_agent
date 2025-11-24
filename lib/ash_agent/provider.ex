@@ -148,5 +148,90 @@ defmodule AshAgent.Provider do
       end
   """
   @callback introspect() :: map()
-  @optional_callbacks [introspect: 0]
+
+  @doc """
+  Optional: Extract text content from a provider response.
+
+  Allows providers to customize how text content is extracted from their responses.
+  This is useful when provider responses have non-standard structure or when content
+  extraction requires provider-specific logic.
+
+  If not implemented, the default extraction logic will be used (checking common
+  fields like `content`, `text`, etc.).
+
+  ## Parameters
+
+  - `response` - The provider-specific response object
+
+  ## Returns
+
+  - `{:ok, content}` - Successfully extracted content as a string
+  - `{:error, reason}` - Failed to extract content
+  - `:default` - Use default extraction logic
+
+  ## Example
+
+      @impl true
+      def extract_content(%MyProviderResponse{text: text}) do
+        {:ok, text}
+      end
+
+      def extract_content(_response) do
+        :default
+      end
+  """
+  @callback extract_content(response :: term()) :: {:ok, String.t()} | {:error, term()} | :default
+
+  @doc """
+  Optional: Extract tool calls from a provider response.
+
+  Allows providers to customize how tool calls are extracted and normalized from
+  their responses. This is essential for providers with non-standard tool call
+  formats or custom tool calling implementations.
+
+  If not implemented, the default extraction logic will be used (checking common
+  fields and formats like ReqLLM's tool_calls structure).
+
+  ## Parameters
+
+  - `response` - The provider-specific response object
+
+  ## Returns
+
+  - `{:ok, tool_calls}` - List of normalized tool calls
+  - `{:error, reason}` - Failed to extract tool calls
+  - `:default` - Use default extraction logic
+
+  Tool calls should be normalized to this format:
+
+      [
+        %{
+          "id" => "call_123",
+          "name" => "search",
+          "arguments" => %{"query" => "elixir"}
+        }
+      ]
+
+  ## Example
+
+      @impl true
+      def extract_tool_calls(%MyProviderResponse{tools: tools}) do
+        normalized = Enum.map(tools, fn tool ->
+          %{
+            "id" => tool.tool_id,
+            "name" => tool.function_name,
+            "arguments" => tool.params
+          }
+        end)
+        {:ok, normalized}
+      end
+
+      def extract_tool_calls(_response) do
+        :default
+      end
+  """
+  @callback extract_tool_calls(response :: term()) ::
+              {:ok, [map()]} | {:error, term()} | :default
+
+  @optional_callbacks [introspect: 0, extract_content: 1, extract_tool_calls: 1]
 end

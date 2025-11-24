@@ -89,6 +89,47 @@ defmodule AshAgent.Providers.ReqLLM do
     }
   end
 
+  @impl true
+  def extract_content(%ReqLLM.Response{} = response) do
+    case ReqLLM.Response.unwrap_object(response) do
+      {:ok, object} when is_map(object) ->
+        case Map.get(object, "content") || Map.get(object, :content) do
+          nil -> {:ok, ""}
+          content when is_binary(content) -> {:ok, content}
+          content when is_list(content) -> {:ok, extract_text_from_content_blocks(content)}
+          _ -> {:ok, ""}
+        end
+
+      _ ->
+        {:ok, ""}
+    end
+  end
+
+  def extract_content(_response), do: :default
+
+  @impl true
+  def extract_tool_calls(%ReqLLM.Response{} = response) do
+    tool_calls = ReqLLM.Response.tool_calls(response)
+
+    if is_list(tool_calls) do
+      {:ok, tool_calls}
+    else
+      {:ok, []}
+    end
+  end
+
+  def extract_tool_calls(_response), do: :default
+
+  defp extract_text_from_content_blocks([%{"type" => "text", "text" => text} | _])
+       when is_binary(text),
+       do: text
+
+  defp extract_text_from_content_blocks([%{type: "text", text: text} | _]) when is_binary(text),
+    do: text
+
+  defp extract_text_from_content_blocks([_ | rest]), do: extract_text_from_content_blocks(rest)
+  defp extract_text_from_content_blocks([]), do: ""
+
   defp with_retry(func, attempts_left, base_delay_ms, attempt_num \\ 1)
 
   defp with_retry(_func, 0, _base_delay_ms, attempt_num) do
@@ -96,30 +137,25 @@ defmodule AshAgent.Providers.ReqLLM do
     {:error, :max_retries_exceeded}
   end
 
-  defp with_retry(func, attempts_left, base_delay_ms, attempt_num) do
+  defp with_retry(func, 1, _base_delay_ms, _attempt_num) do
+    func.()
+  end
+
+  defp with_retry(func, attempts_left, base_delay_ms, attempt_num) when attempts_left > 1 do
     case func.() do
       {:ok, result} ->
         {:ok, result}
 
-      {:error, reason} = error ->
-        if retryable?(reason) and attempts_left > 1 do
-          delay = calculate_delay(base_delay_ms, attempt_num)
+      {:error, reason} ->
+        delay = calculate_delay(base_delay_ms, attempt_num)
 
-          Logger.warning(
-            "ReqLLM provider: Retryable error on attempt #{attempt_num}, " <>
-              "retrying in #{delay}ms. Reason: #{inspect(reason)}"
-          )
+        Logger.warning(
+          "ReqLLM provider: Retryable error on attempt #{attempt_num}, " <>
+            "retrying in #{delay}ms. Reason: #{inspect(reason)}"
+        )
 
-          Process.sleep(delay)
-          with_retry(func, attempts_left - 1, base_delay_ms, attempt_num + 1)
-        else
-          Logger.error(
-            "ReqLLM provider: Non-retryable error or max attempts reached. " <>
-              "Reason: #{inspect(reason)}"
-          )
-
-          error
-        end
+        Process.sleep(delay)
+        with_retry(func, attempts_left - 1, base_delay_ms, attempt_num + 1)
     end
   end
 
@@ -127,15 +163,6 @@ defmodule AshAgent.Providers.ReqLLM do
     exponential_delay = base_delay_ms * :math.pow(2, attempt_num - 1)
     jitter = :rand.uniform(round(exponential_delay * 0.1))
     round(exponential_delay + jitter)
-  end
-
-  defp retryable?(reason) do
-    case reason do
-      %{status: status} when status in [429, 500, 502, 503, 504] -> true
-      :timeout -> true
-      :econnrefused -> true
-      _ -> false
-    end
   end
 
   defp available_models do

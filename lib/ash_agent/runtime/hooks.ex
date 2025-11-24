@@ -182,20 +182,20 @@ defmodule AshAgent.Runtime.Hooks do
           iteration: integer(),
           tool_calls: [map()],
           results: [{String.t(), {:ok, term()} | {:error, term()}}],
-          context: AshAgent.Context.t(),
+          context: map(),
           token_usage: map() | nil
         }
 
   @type context_preparation_context :: %{
           agent: module(),
-          context: AshAgent.Context.t(),
+          context: map(),
           token_usage: map() | nil,
           iteration: integer()
         }
 
   @type message_context :: %{
           agent: module(),
-          context: AshAgent.Context.t(),
+          context: map(),
           messages: [map()],
           tools: [map()],
           iteration: integer()
@@ -204,7 +204,7 @@ defmodule AshAgent.Runtime.Hooks do
   @type iteration_context :: %{
           agent: module(),
           iteration_number: integer(),
-          context: AshAgent.Context.t(),
+          context: map(),
           result: term() | nil,
           token_usage: map() | nil,
           max_iterations: integer(),
@@ -218,7 +218,7 @@ defmodule AshAgent.Runtime.Hooks do
 
   @callback prepare_tool_results(tool_result_context()) :: {:ok, [term()]} | {:error, term()}
   @callback prepare_context(context_preparation_context()) ::
-              {:ok, AshAgent.Context.t()} | {:error, term()}
+              {:ok, map()} | {:error, term()}
   @callback prepare_messages(message_context()) :: {:ok, [map()]} | {:error, term()}
   @callback on_iteration_start(iteration_context()) ::
               {:ok, iteration_context()} | {:error, term()}
@@ -243,7 +243,8 @@ defmodule AshAgent.Runtime.Hooks do
   Returns `{:ok, context}` if successful, or `{:error, reason}` if the hook fails.
   If no hooks are configured or the callback is not implemented, returns `{:ok, context}` unchanged.
   """
-  def execute(nil, _callback, context), do: {:ok, context}
+  def execute(hooks_module, _callback, context) when hooks_module in [nil, []],
+    do: {:ok, context}
 
   def execute(hooks_module, callback, context) do
     if function_exported?(hooks_module, callback, 1) do

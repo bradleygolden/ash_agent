@@ -5,18 +5,6 @@ defmodule AshAgent.Providers.BamlProviderTest do
   alias AshAgent.Runtime
   alias AshAgent.Test.BamlClient.Reply
 
-  setup do
-    original_clients = Application.get_env(:ash_baml, :clients)
-
-    Application.put_env(:ash_baml, :clients, support: {AshAgent.Test.BamlClient, []})
-
-    on_exit(fn ->
-      Application.put_env(:ash_baml, :clients, original_clients)
-    end)
-
-    :ok
-  end
-
   defmodule TestDomain do
     @moduledoc false
     use Ash.Domain, validate_config_inclusion?: false
@@ -38,7 +26,12 @@ defmodule AshAgent.Providers.BamlProviderTest do
 
     agent do
       provider(:baml)
-      client :support, function: :ChatAgent
+      # Use direct module reference instead of configured client identifier
+      # This avoids coupling to ash_baml's application configuration
+      client AshAgent.Test.BamlClient,
+        function: :ChatAgent,
+        client_module: AshAgent.Test.BamlClient
+
       output Reply
 
       input do

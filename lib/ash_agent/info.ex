@@ -33,36 +33,6 @@ defmodule AshAgent.Info do
   end
 
   @doc """
-  Returns all tool definitions for an agent.
-
-  ## Examples
-
-      iex> AshAgent.Info.tools(MyAgent)
-      [%{name: :get_customer, ...}]
-  """
-  @spec tools(Ash.Resource.t()) :: [map()]
-  def tools(resource) do
-    Extension.get_entities(resource, [:tools])
-  end
-
-  @doc """
-  Returns the tools section configuration for an agent.
-
-  ## Examples
-
-      iex> AshAgent.Info.tool_config(MyAgent)
-      %{max_iterations: 5, timeout: 60_000, on_error: :continue}
-  """
-  @spec tool_config(Ash.Resource.t()) :: map()
-  def tool_config(resource) do
-    %{
-      max_iterations: Extension.get_opt(resource, [:tools], :max_iterations, 5),
-      timeout: Extension.get_opt(resource, [:tools], :timeout, 60_000),
-      on_error: Extension.get_opt(resource, [:tools], :on_error, :continue)
-    }
-  end
-
-  @doc """
   Get the configured token budget for an agent resource.
 
   Returns the maximum number of tokens allowed for agent execution,
@@ -99,5 +69,66 @@ defmodule AshAgent.Info do
   @spec budget_strategy(Ash.Resource.t()) :: :halt | :warn
   def budget_strategy(resource) do
     Extension.get_opt(resource, [:agent], :budget_strategy, :warn)
+  end
+
+  @doc """
+  Get the complete agent configuration for a resource.
+
+  Returns a map containing all agent configuration options. This is a convenience
+  function for extensions that need to read multiple configuration values.
+
+  ## Public Extension API
+
+  This function is part of the stable public API for extensions like `ash_agent_tools`.
+  Breaking changes will follow semantic versioning.
+
+  ## Returns
+
+  A map with the following keys:
+  - `:client` - The client specification (string or tuple)
+  - `:client_opts` - Additional client options
+  - `:provider` - The provider module or preset
+  - `:prompt` - The prompt template
+  - `:output_type` - The output schema/type
+  - `:hooks` - List of hooks configured for the agent
+  - `:profile` - The active profile, or nil if not set
+  - `:input_args` - List of input argument definitions
+  - `:token_budget` - Token budget limit (if configured)
+  - `:budget_strategy` - Budget enforcement strategy
+  - `:context_module` - The context module from application config
+
+  ## Examples
+
+      iex> AshAgent.Info.agent_config(MyAgent)
+      %{
+        client: "anthropic:claude-3-5-sonnet",
+        client_opts: [],
+        provider: :req_llm,
+        prompt: "You are a helpful assistant",
+        output_type: [response: [type: :string]],
+        hooks: [],
+        input_args: [],
+        token_budget: nil,
+        budget_strategy: :warn,
+        context_module: AshAgent.Context
+      }
+  """
+  @spec agent_config(Ash.Resource.t()) :: map()
+  def agent_config(resource) do
+    {client_string, client_opts} = Extension.get_opt(resource, [:agent], :client, nil, true)
+
+    %{
+      client: client_string,
+      client_opts: client_opts,
+      provider: Extension.get_opt(resource, [:agent], :provider, :req_llm),
+      prompt: Extension.get_opt(resource, [:agent], :prompt, nil, true),
+      output_type: Extension.get_opt(resource, [:agent], :output, nil, true),
+      hooks: Extension.get_opt(resource, [:agent], :hooks, nil, true) || [],
+      profile: nil,
+      input_args: Extension.get_entities(resource, [:agent, :input]),
+      token_budget: Extension.get_opt(resource, [:agent], :token_budget, nil),
+      budget_strategy: Extension.get_opt(resource, [:agent], :budget_strategy, :warn),
+      context_module: AshAgent.Config.context_module()
+    }
   end
 end

@@ -33,6 +33,17 @@ defmodule AshAgent.SchemaConverter do
       config :ash_agent, :custom_type_mapper, MyApp.CustomTypeMapper
 
   The callback should accept a type and return a req_llm schema type atom or tuple.
+
+  ## Public Extension API
+
+  This module is part of AshAgent's **public extension API**. It is intended to be
+  used by extension packages like `ash_agent_tools` for schema conversion.
+
+  **Stability**: This module's public functions have stability guarantees. Breaking
+  changes will follow semantic versioning (major version bump).
+
+  **Public Functions**:
+  - `to_req_llm_schema/1` - Convert TypedStruct to req_llm schema
   """
 
   alias Ash.TypedStruct.Info, as: TypedStructInfo

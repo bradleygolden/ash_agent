@@ -21,6 +21,9 @@
   ~r/lib\/ash_agent\/providers\/baml\.ex.* The guard clause can never succeed/,
   ~r/lib\/ash_agent\/providers\/baml\.ex.* The pattern .* can never match/,
 
+  # ReqLLM provider false positives on retry logic pattern matching
+  ~r|lib/ash_agent/providers/req_llm\.ex:.*pattern_match|,
+
   # Test support false positives from Ollama client stub
   # Client.message_from always returns binary, making some defensive clauses unreachable
   ~r/test\/support\/ollama_client_stub\.ex.* The pattern variable .* can never match/,

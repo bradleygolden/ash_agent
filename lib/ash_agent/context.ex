@@ -1,7 +1,33 @@
 defmodule AshAgent.Context do
   @moduledoc """
-  A minimal embedded resource that stores conversation history using nested iterations.
+  Base context implementation for AshAgent runtime.
+
+  This module provides the standard context structure for tracking conversation state,
+  iterations, messages, and token usage across agent calls.
+
+  Extension packages can provide their own context implementations by registering
+  them with `AshAgent.RuntimeRegistry.register_context_module/1`. The context module
+  should implement the same function signatures as this module (duck typing).
+
+  ## Required Functions
+
+  Context modules should implement:
+  - `new(input, opts)` - Create new context
+  - `to_messages(context)` - Convert to message format
+  - `add_assistant_message(context, content, tool_calls)` - Add assistant message
+  - `add_llm_call_timing(context)` - Track timing
+  - `add_token_usage(context, usage)` - Track token usage
+  - `get_cumulative_tokens(context)` - Get cumulative tokens
+  - `exceeded_max_iterations?(context, max)` - Check iteration limit
+  - `persist(context, attrs)` - Update context state
+
+  ## Example
+
+      # Base context for agents without tools
+      ctx = AshAgent.Context.new(input, system_prompt: prompt)
+      messages = AshAgent.Context.to_messages(ctx)
   """
+
   defmodule Domain do
     @moduledoc false
     use Ash.Domain, validate_config_inclusion?: false
@@ -47,7 +73,17 @@ defmodule AshAgent.Context do
   end
 
   @doc """
-  Creates a new context with initial user message.
+  Creates a new context with the given input.
+
+  ## Options
+
+  - `:system_prompt` - Optional system prompt to prepend to messages
+
+  ## Examples
+
+      iex> ctx = AshAgent.Context.new(%{question: "What is Elixir?"})
+      iex> ctx.current_iteration
+      1
   """
   def new(input, opts \\ []) do
     messages = []
@@ -75,6 +111,12 @@ defmodule AshAgent.Context do
 
   @doc """
   Adds an assistant message to the current iteration.
+
+  ## Parameters
+
+  - `context` - The context to update
+  - `content` - The message content
+  - `tool_calls` - Optional list of tool calls made by the assistant
   """
   def add_assistant_message(context, content, tool_calls \\ []) do
     message = %{
@@ -103,60 +145,7 @@ defmodule AshAgent.Context do
   end
 
   @doc """
-  Adds tool results to the conversation.
-  """
-  def add_tool_results(context, results) do
-    tool_result_messages =
-      Enum.map(results, fn {tool_call_id, result} ->
-        content = format_tool_result(result)
-
-        %{
-          role: :user,
-          content: [%{type: :tool_result, tool_use_id: tool_call_id, content: content}]
-        }
-      end)
-
-    current_iter = get_current_iteration(context)
-    updated_iter = %{current_iter | messages: current_iter.messages ++ tool_result_messages}
-
-    iterations =
-      List.replace_at(context.iterations, context.current_iteration - 1, updated_iter)
-
-    update!(context, %{iterations: iterations})
-  end
-
-  @doc """
-  Extracts tool calls from the last assistant message in current iteration.
-  """
-  def extract_tool_calls(context) do
-    current_iter = get_current_iteration(context)
-
-    case List.last(current_iter.messages) do
-      %{role: :assistant, tool_calls: tool_calls} when is_list(tool_calls) ->
-        tool_calls
-
-      _ ->
-        []
-    end
-  end
-
-  @doc """
-  Updates tool calls in the current iteration with timing and execution metadata.
-  """
-  def update_tool_calls_timing(context, tool_calls_with_timing) do
-    current_iter = get_current_iteration(context)
-
-    updated_iter = %{current_iter | tool_calls: tool_calls_with_timing}
-
-    iterations =
-      List.replace_at(context.iterations, context.current_iteration - 1, updated_iter)
-
-    update!(context, %{iterations: iterations})
-  end
-
-  @doc """
-  Adds LLM call timing information to the current iteration metadata.
-  Records when the LLM response was received relative to iteration start.
+  Records timing information for the LLM call in the current iteration.
   """
   def add_llm_call_timing(context) do
     current_iter = get_current_iteration(context)
@@ -187,7 +176,7 @@ defmodule AshAgent.Context do
   end
 
   @doc """
-  Converts all iteration messages to provider-specific message format.
+  Converts the context to a list of messages suitable for LLM providers.
   """
   def to_messages(context) do
     messages =
@@ -199,21 +188,18 @@ defmodule AshAgent.Context do
   end
 
   @doc """
-  Checks if the context has exceeded max iterations.
+  Checks if the context has exceeded the maximum iteration count.
   """
   def exceeded_max_iterations?(context, max_iterations) do
     context.current_iteration >= max_iterations
   end
 
-  @doc """
-  Gets a specific iteration by number.
-  """
   def get_iteration(context, number) do
     Enum.find(context.iterations, fn iter -> iter.number == number end)
   end
 
   @doc """
-  Adds token usage to the current iteration's metadata.
+  Adds token usage information to the current iteration and updates cumulative totals.
   """
   def add_token_usage(context, usage) when is_map(usage) do
     current_iter = get_current_iteration(context)
@@ -246,7 +232,7 @@ defmodule AshAgent.Context do
   end
 
   @doc """
-  Gets cumulative token usage across all iterations.
+  Gets the cumulative token usage across all iterations.
   """
   def get_cumulative_tokens(context) do
     current_iter = get_current_iteration(context)
@@ -260,41 +246,19 @@ defmodule AshAgent.Context do
   end
 
   @doc """
-  Keeps only the last N iterations in the context.
-
-  Useful for sliding window compaction where older iterations are discarded.
-
-  ## Examples
-
-      iex> context = %AshAgent.Context{iterations: [%{number: 1}, %{number: 2}, %{number: 3}, %{number: 4}, %{number: 5}], current_iteration: 5}
-      iex> compacted = AshAgent.Context.keep_last_iterations(context, 2)
-      iex> length(compacted.iterations)
-      2
-      iex> Enum.map(compacted.iterations, & &1.number)
-      [4, 5]
+  Persists updates to the context.
   """
+  def persist(context, attrs) do
+    context
+    |> Ash.Changeset.for_update(:update, attrs)
+    |> Ash.update!()
+  end
+
   def keep_last_iterations(context, count) when is_integer(count) and count > 0 do
     recent_iterations = Enum.take(context.iterations, -count)
     %{context | iterations: recent_iterations}
   end
 
-  @doc """
-  Removes iterations older than the specified duration (in seconds).
-
-  ## Examples
-
-      iex> old_time = DateTime.add(DateTime.utc_now(), -7200, :second)
-      iex> context = %AshAgent.Context{
-      ...>   iterations: [
-      ...>     %{number: 1, started_at: old_time, metadata: %{}},
-      ...>     %{number: 2, started_at: DateTime.utc_now(), metadata: %{}}
-      ...>   ],
-      ...>   current_iteration: 2
-      ...> }
-      iex> recent = AshAgent.Context.remove_old_iterations(context, 3600)
-      iex> length(recent.iterations)
-      1
-  """
   def remove_old_iterations(context, max_age_seconds)
       when is_integer(max_age_seconds) and max_age_seconds >= 0 do
     cutoff = DateTime.add(DateTime.utc_now(), -max_age_seconds, :second)
@@ -310,29 +274,8 @@ defmodule AshAgent.Context do
     %{context | iterations: recent_iterations}
   end
 
-  @doc """
-  Returns the number of iterations in the context.
-
-  ## Examples
-
-      iex> context = %AshAgent.Context{iterations: [%{number: 1}, %{number: 2}, %{number: 3}], current_iteration: 3}
-      iex> AshAgent.Context.count_iterations(context)
-      3
-  """
   def count_iterations(context), do: length(context.iterations)
 
-  @doc """
-  Gets a slice of iterations by index range.
-
-  ## Examples
-
-      iex> context = %AshAgent.Context{iterations: [%{n: 1}, %{n: 2}, %{n: 3}, %{n: 4}, %{n: 5}], current_iteration: 5}
-      iex> sliced = AshAgent.Context.get_iteration_range(context, 1, 3)
-      iex> length(sliced.iterations)
-      3
-      iex> Enum.map(sliced.iterations, & &1.n)
-      [2, 3, 4]
-  """
   def get_iteration_range(context, start_idx, end_idx)
       when is_integer(start_idx) and is_integer(end_idx) and start_idx >= 0 and
              end_idx >= start_idx do
@@ -346,18 +289,6 @@ defmodule AshAgent.Context do
     %{context | iterations: sliced_iterations}
   end
 
-  @doc """
-  Marks an iteration as summarized and stores the summary.
-
-  ## Examples
-
-      iex> iteration = %{number: 1, messages: [], metadata: %{}}
-      iex> summarized = AshAgent.Context.mark_as_summarized(iteration, "User asked about weather")
-      iex> summarized.metadata.summarized
-      true
-      iex> summarized.metadata.summary
-      "User asked about weather"
-  """
   def mark_as_summarized(iteration, summary) when is_map(iteration) and is_binary(summary) do
     updated_metadata =
       Map.get(iteration, :metadata, %{})
@@ -368,52 +299,14 @@ defmodule AshAgent.Context do
     Map.put(iteration, :metadata, updated_metadata)
   end
 
-  @doc """
-  Checks if an iteration has been summarized.
-
-  ## Examples
-
-      iex> iteration = %{metadata: %{summarized: true}}
-      iex> AshAgent.Context.is_summarized?(iteration)
-      true
-
-      iex> iteration = %{metadata: %{}}
-      iex> AshAgent.Context.is_summarized?(iteration)
-      false
-  """
   def is_summarized?(iteration) when is_map(iteration) do
     get_in(iteration, [:metadata, :summarized]) == true
   end
 
-  @doc """
-  Gets the summary from a summarized iteration.
-
-  Returns nil if iteration is not summarized.
-
-  ## Examples
-
-      iex> iteration = %{metadata: %{summarized: true, summary: "Weather query"}}
-      iex> AshAgent.Context.get_summary(iteration)
-      "Weather query"
-
-      iex> iteration = %{metadata: %{}}
-      iex> AshAgent.Context.get_summary(iteration)
-      nil
-  """
   def get_summary(iteration) when is_map(iteration) do
     get_in(iteration, [:metadata, :summary])
   end
 
-  @doc """
-  Updates iteration metadata with custom key-value pairs.
-
-  ## Examples
-
-      iex> iteration = %{metadata: %{}}
-      iex> updated = AshAgent.Context.update_iteration_metadata(iteration, :custom_key, "value")
-      iex> updated.metadata.custom_key
-      "value"
-  """
   def update_iteration_metadata(iteration, key, value)
       when is_map(iteration) and is_atom(key) do
     updated_metadata =
@@ -423,50 +316,11 @@ defmodule AshAgent.Context do
     Map.put(iteration, :metadata, updated_metadata)
   end
 
-  @doc """
-  Checks if the context exceeds the specified token budget.
-
-  This is a convenience function for Progressive Disclosure hooks.
-  Uses `estimate_token_count/1` internally for fast local checking.
-
-  **Note:** This uses token estimation and may be inaccurate. For precise
-  tracking, use the provider's actual token counting.
-
-  ## Examples
-
-      iex> small_context = %AshAgent.Context{iterations: []}
-      iex> AshAgent.Context.exceeds_token_budget?(small_context, 100_000)
-      false
-  """
   def exceeds_token_budget?(context, budget)
       when is_integer(budget) and budget > 0 do
     estimate_token_count(context) > budget
   end
 
-  @doc """
-  Estimates the token count for the context using a rough heuristic.
-
-  **WARNING:** This is an APPROXIMATION. Assumes ~4 characters per token.
-  For accurate counts, use the provider's actual token counting.
-
-  Useful for quick budget checks in hooks without calling external services.
-
-  ## Examples
-
-      iex> context = %AshAgent.Context{iterations: []}
-      iex> estimate = AshAgent.Context.estimate_token_count(context)
-      iex> is_integer(estimate)
-      true
-      iex> estimate >= 0
-      true
-
-      iex> context = %AshAgent.Context{iterations: [
-      ...>   %{messages: [%{role: :user, content: "Hello"}]}
-      ...> ]}
-      iex> estimate = AshAgent.Context.estimate_token_count(context)
-      iex> estimate > 0
-      true
-  """
   def estimate_token_count(context) do
     messages = to_messages(context)
 
@@ -481,34 +335,11 @@ defmodule AshAgent.Context do
     end)
   end
 
-  @doc """
-  Calculates remaining tokens before hitting budget.
-
-  Returns 0 if already over budget.
-
-  ## Examples
-
-      iex> context = %AshAgent.Context{iterations: []}
-      iex> AshAgent.Context.tokens_remaining(context, 50_000)
-      50_000
-  """
   def tokens_remaining(context, budget)
       when is_integer(budget) and budget > 0 do
     max(0, budget - estimate_token_count(context))
   end
 
-  @doc """
-  Calculates budget utilization as a percentage.
-
-  Returns value between 0.0 and 1.0 (or > 1.0 if over budget).
-
-  ## Examples
-
-      iex> context = %AshAgent.Context{iterations: []}
-      iex> utilization = AshAgent.Context.budget_utilization(context, 100_000)
-      iex> utilization >= 0.0 and utilization < 0.1
-      true
-  """
   def budget_utilization(context, budget)
       when is_integer(budget) and budget > 0 do
     estimate_token_count(context) / budget
@@ -569,22 +400,5 @@ defmodule AshAgent.Context do
         arguments: Jason.encode!(args)
       }
     }
-  end
-
-  defp format_tool_result({:ok, {:halt, result}}) when is_map(result) do
-    Jason.encode!(result)
-  end
-
-  defp format_tool_result({:ok, result}) when is_map(result) do
-    Jason.encode!(result)
-  end
-
-  defp format_tool_result({:ok, result}) do
-    Jason.encode!(%{result: result})
-  end
-
-  defp format_tool_result({:error, reason}) do
-    error_msg = if is_binary(reason), do: reason, else: inspect(reason)
-    Jason.encode!(%{error: error_msg})
   end
 end

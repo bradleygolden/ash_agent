@@ -158,33 +158,6 @@ defmodule AshAgent.RuntimeTest do
     end
   end
 
-  defmodule AgentWithTool do
-    @moduledoc false
-    use Ash.Resource,
-      domain: AshAgent.RuntimeTest.TestDomain,
-      extensions: [AshAgent.Resource]
-
-    resource do
-      require_primary_key? false
-    end
-
-    agent do
-      client "anthropic:claude-3-5-sonnet"
-      output TestOutput
-      prompt "Tool prompt"
-    end
-
-    tools do
-      tool :do_thing do
-        description "test"
-        function({__MODULE__, :do_thing, []})
-        parameters(input: [type: :string, required: false])
-      end
-    end
-
-    def do_thing(_args), do: {:ok, %{result: "done"}}
-  end
-
   defmodule StreamTelemetryAgent do
     @moduledoc false
     use Ash.Resource,
@@ -408,11 +381,6 @@ defmodule AshAgent.RuntimeTest do
                Runtime.stream(MinimalAgent, %{}, provider: NoStreamProvider)
     end
 
-    test "rejects tool calling when provider lacks tool_calling support" do
-      assert {:error, %Error{type: :validation_error}} =
-               Runtime.call(AgentWithTool, %{}, provider: NoStreamProvider)
-    end
-
     test "drops provider-specific client opts when provider changes" do
       assert {:ok, %TestOutput{result: "ok"}} =
                Runtime.call(AgentWithClientOpts, %{}, provider: NoFunctionProvider)
@@ -461,7 +429,9 @@ defmodule AshAgent.RuntimeTest do
         handler_id,
         [:ash_agent, :call, :stop],
         fn event, measurements, metadata, _ ->
-          send(parent, {:telemetry_event, event, measurements, metadata})
+          if metadata.agent == MinimalAgent do
+            send(parent, {:telemetry_event, event, measurements, metadata})
+          end
         end,
         nil
       )
