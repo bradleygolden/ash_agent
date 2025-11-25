@@ -1,5 +1,6 @@
 defmodule AshAgent.TokenTrackingTest do
   use ExUnit.Case, async: true
+  @moduletag :integration
 
   alias AshAgent.Context
   alias AshAgent.Runtime

@@ -6,6 +6,7 @@ defmodule AshAgent.IntegrationTest do
   without requiring actual API calls.
   """
   use ExUnit.Case, async: true
+  @moduletag :integration
 
   alias AshAgent.Test.LLMStub
 

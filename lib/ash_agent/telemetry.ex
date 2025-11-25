@@ -17,7 +17,13 @@ defmodule AshAgent.Telemetry do
   """
   @spec span(span_event(), map(), (-> any())) :: any()
   def span(event, metadata, fun) when event in [:call, :stream] do
-    :telemetry.execute([:ash_agent, event, :start], %{}, metadata)
+    start_time = System.monotonic_time()
+
+    :telemetry.execute(
+      [:ash_agent, event, :start],
+      %{system_time: System.system_time()},
+      metadata
+    )
 
     {result, meta} =
       case fun.() do
@@ -28,10 +34,13 @@ defmodule AshAgent.Telemetry do
           {result, metadata}
       end
 
+    duration = System.monotonic_time() - start_time
+    measurements = %{duration: duration}
+
     stop_meta = stop_metadata(result, meta)
 
-    emit_summary(event, stop_meta)
-    :telemetry.execute([:ash_agent, event, :stop], %{}, stop_meta)
+    emit_summary(event, stop_meta, measurements)
+    :telemetry.execute([:ash_agent, event, :stop], measurements, stop_meta)
 
     {result, stop_meta}
   end
@@ -63,14 +72,14 @@ defmodule AshAgent.Telemetry do
     end
   end
 
-  defp emit_summary(event, metadata) when event in [:call, :stream] do
+  defp emit_summary(event, metadata, measurements) when event in [:call, :stream] do
     summary_meta =
       metadata
       |> Map.put(:kind, event)
       |> Map.put_new(:timestamp, DateTime.utc_now())
 
-    :telemetry.execute([:ash_agent, event, :summary], %{}, summary_meta)
+    :telemetry.execute([:ash_agent, event, :summary], measurements, summary_meta)
   end
 
-  defp emit_summary(_event, _metadata), do: :ok
+  defp emit_summary(_event, _metadata, _measurements), do: :ok
 end

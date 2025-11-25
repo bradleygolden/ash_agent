@@ -1,5 +1,6 @@
 defmodule AshAgent.BudgetEnforcementTest do
   use ExUnit.Case, async: true
+  @moduletag :integration
 
   alias AshAgent.{Error, Info}
   alias AshAgent.Test.TestDomain

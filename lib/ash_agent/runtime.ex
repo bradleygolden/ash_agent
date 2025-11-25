@@ -521,6 +521,10 @@ defmodule AshAgent.Runtime do
 
   defp maybe_put_usage(metadata, _provider, %ReqLLM.StreamResponse{}), do: metadata
 
+  defp maybe_put_usage(metadata, _provider, %Stream{}), do: metadata
+
+  defp maybe_put_usage(metadata, _provider, response) when is_function(response), do: metadata
+
   defp maybe_put_usage(metadata, provider, response) do
     case LLMClient.response_usage(provider, response) do
       nil -> metadata

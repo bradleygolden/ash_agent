@@ -146,21 +146,21 @@ defmodule AshAgent.Providers.Baml do
   end
 
   defp lookup_configured_client(identifier) do
-    # Use soft dependency on AshBaml.Info - only available if ash_baml is installed
-    if Code.ensure_loaded?(AshBaml.Info) do
-      case AshBaml.Info.resolve_client_module(identifier) do
-        nil ->
+    # Use soft dependency on AshBaml.ClientBuilder - only available if ash_baml is installed
+    if Code.ensure_loaded?(AshBaml.ClientBuilder) do
+      case AshBaml.ClientBuilder.ensure_configured_client_module(identifier) do
+        {:ok, module} ->
+          {:ok, module}
+
+        {:error, reason} when is_binary(reason) ->
+          {:error, Error.config_error(reason, %{client: identifier})}
+
+        {:error, reason} ->
           {:error,
            Error.config_error(
-             "No BAML client configured for #{inspect(identifier)}. " <>
-               "Configure clients in :ash_baml application config under :clients.",
-             %{
-               client: identifier
-             }
+             "Failed to resolve BAML client #{inspect(identifier)}: #{inspect(reason)}",
+             %{client: identifier}
            )}
-
-        module ->
-          {:ok, module}
       end
     else
       {:error,

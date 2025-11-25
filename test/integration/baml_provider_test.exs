@@ -1,6 +1,7 @@
 defmodule AshAgent.Providers.BamlProviderTest do
   @moduledoc false
   use ExUnit.Case, async: true
+  @moduletag :integration
 
   alias AshAgent.Runtime
   alias AshAgent.Test.BamlClient.Reply

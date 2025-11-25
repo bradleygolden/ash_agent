@@ -100,6 +100,36 @@ defmodule AshAgent.Runtime.LLMClient do
   Converts a ReqLLM response to an instance of the output TypedStruct.
 
   Returns `{:ok, struct}` with the built TypedStruct, or `{:error, reason}`.
+
+  ## String Key Conversion
+
+  When the response contains string keys, they are converted to atoms using
+  `String.to_existing_atom/1`. This has important implications:
+
+  - **If the atom exists**: The key is converted and included. If it's not a
+    field in the struct, `Kernel.struct/2` silently ignores it.
+  - **If the atom doesn't exist**: An `ArgumentError` is raised, caught, and
+    returned as `{:error, %Error{type: :parse_error}}`.
+
+  This means parsing behavior depends on which atoms exist in the VM at runtime.
+  In tests, atoms defined in test modules may cause different behavior than in
+  production. For deterministic testing of unknown key handling, use unique
+  strings that are guaranteed not to exist as atoms (e.g., UUID-based keys).
+
+  ## Examples
+
+      # Successful parsing with known fields
+      iex> parse_response(MyOutput, %{"name" => "test", "value" => 42})
+      {:ok, %MyOutput{name: "test", value: 42}}
+
+      # Extra fields are ignored when their atoms exist
+      iex> parse_response(MyOutput, %{name: "test", extra: "ignored"})
+      {:ok, %MyOutput{name: "test"}}
+
+      # Unknown string keys cause errors if atom doesn't exist
+      iex> parse_response(MyOutput, %{"nonexistent_key_abc123" => "value"})
+      {:error, %Error{type: :parse_error}}
+
   """
   def parse_response(output_module, %_{} = response) do
     cond do
@@ -136,9 +166,21 @@ defmodule AshAgent.Runtime.LLMClient do
     build_typed_struct(output_module, response)
   end
 
-  def parse_response(output_module, response) do
+  def parse_response(_output_module, nil) do
+    {:error, Error.parse_error("Cannot parse nil response", %{response: nil})}
+  end
+
+  def parse_response(_output_module, response) when is_binary(response) do
+    {:error, Error.parse_error("Cannot parse string response directly", %{response: response})}
+  end
+
+  def parse_response(output_module, %ReqLLM.Response{} = response) do
     object_data = ReqLLM.Response.object(response)
     build_typed_struct(output_module, object_data)
+  end
+
+  def parse_response(_output_module, response) do
+    {:error, Error.parse_error("Unsupported response type", %{response: response})}
   end
 
   @doc """
