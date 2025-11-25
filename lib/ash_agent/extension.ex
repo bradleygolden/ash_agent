@@ -16,7 +16,7 @@ defmodule AshAgent.Extension do
   The following packages extend AshAgent using this API:
   - `ash_agent_tools` - Tool-calling runtime for multi-turn agent loops
   - `ash_baml` - BAML function integration as a provider
-  - `ash_agent_ui` - Phoenix LiveView observability dashboard
+  - `ash_agent_studio` - Phoenix LiveView observability dashboard and agent playground
 
   ## Usage
 
