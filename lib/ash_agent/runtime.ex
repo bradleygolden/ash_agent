@@ -517,6 +517,13 @@ defmodule AshAgent.Runtime do
     end
   end
 
+  defp add_usage_metadata(metadata, %AshBaml.Response{} = response) do
+    case response.usage do
+      %{} = usage -> Map.put(metadata, :usage, usage)
+      _ -> metadata
+    end
+  end
+
   defp add_usage_metadata(metadata, _response), do: metadata
 
   defp maybe_put_usage(metadata, _provider, %ReqLLM.StreamResponse{}), do: metadata

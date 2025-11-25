@@ -217,30 +217,50 @@ defmodule AshAgent.Providers.Baml do
   defp maybe_add_messages(opts, _messages), do: opts
 
   defp invoke_function(function_module, args, opts) do
-    cond do
-      function_exported?(function_module, :call, 2) ->
-        function_module.call(args, opts)
+    collector = create_collector(function_module)
+    opts_with_collector = Map.put(opts, :collectors, [collector])
 
-      function_exported?(function_module, :call, 1) ->
-        function_module.call(args)
+    result =
+      cond do
+        function_exported?(function_module, :call, 2) ->
+          function_module.call(args, opts_with_collector)
 
-      true ->
-        {:error,
-         Error.config_error(
-           "BAML function #{inspect(function_module)} does not define call/1 or call/2"
-         )}
-    end
+        function_exported?(function_module, :call, 1) ->
+          function_module.call(args)
+
+        true ->
+          {:error,
+           Error.config_error(
+             "BAML function #{inspect(function_module)} does not define call/1 or call/2"
+           )}
+      end
+
+    wrap_with_response(result, collector)
   end
 
+  defp create_collector(function_module) do
+    name = "#{inspect(function_module)}-#{System.unique_integer([:positive])}"
+    BamlElixir.Collector.new(name)
+  end
+
+  defp wrap_with_response({:ok, data}, collector) do
+    {:ok, AshBaml.Response.new(data, collector)}
+  end
+
+  defp wrap_with_response({:error, _} = error, _collector), do: error
+
   defp create_stream(function_module, arguments, opts) do
+    collector = create_collector(function_module)
+    opts_with_collector = Map.put(opts, :collectors, [collector])
+
     Stream.resource(
-      fn -> start_streaming(function_module, arguments, opts) end,
+      fn -> start_streaming(function_module, arguments, opts_with_collector, collector) end,
       &stream_next/1,
       &cleanup_stream/1
     )
   end
 
-  defp start_streaming(function_module, arguments, opts) do
+  defp start_streaming(function_module, arguments, opts, collector) do
     parent = self()
     ref = make_ref()
     stream_fn = build_stream_callback(parent, ref)
@@ -256,7 +276,7 @@ defmodule AshAgent.Providers.Baml do
         function_module.stream(arguments, stream_fn)
       end
 
-    handle_stream_result(result, ref)
+    handle_stream_result(result, ref, collector)
   end
 
   defp build_stream_callback(parent, ref) do
@@ -272,54 +292,58 @@ defmodule AshAgent.Providers.Baml do
     end
   end
 
-  defp handle_stream_result(result, ref) do
+  defp handle_stream_result(result, ref, collector) do
     case result do
       {:ok, stream_pid} when is_pid(stream_pid) ->
-        {ref, stream_pid, :streaming}
+        {ref, stream_pid, :streaming, collector}
 
       pid when is_pid(pid) ->
-        {ref, pid, :streaming}
+        {ref, pid, :streaming, collector}
 
       {:error, reason} ->
-        {ref, nil, {:error, reason}}
+        {ref, nil, {:error, reason}, collector}
 
       other when is_function(other) ->
-        {ref, nil, {:error, "BAML stream function returned a function instead of a stream"}}
+        {ref, nil, {:error, "BAML stream function returned a function instead of a stream"},
+         collector}
 
       other ->
-        {ref, nil, {:error, "Unexpected stream result: #{inspect(other)}"}}
+        {ref, nil, {:error, "Unexpected stream result: #{inspect(other)}"}, collector}
     end
   end
 
-  defp stream_next({ref, stream_pid, :streaming}) do
+  defp stream_next({ref, stream_pid, :streaming, collector}) do
     receive do
       {^ref, :chunk, chunk} ->
         if valid_chunk?(chunk) do
-          {[chunk], {ref, stream_pid, :streaming}}
+          {[chunk], {ref, stream_pid, :streaming, collector}}
         else
-          {[], {ref, stream_pid, :streaming}}
+          {[], {ref, stream_pid, :streaming, collector}}
         end
 
       {^ref, :done, {:ok, final_result}} ->
-        {[final_result], {ref, stream_pid, :done}}
+        wrapped = AshBaml.Response.new(final_result, collector)
+        {[wrapped], {ref, stream_pid, :done, collector}}
 
       {^ref, :done, {:error, reason}} ->
-        {:halt, {ref, stream_pid, {:error, reason}}}
+        {:halt, {ref, stream_pid, {:error, reason}, collector}}
     after
       @default_stream_timeout ->
         {:halt,
          {ref, stream_pid,
           {:error,
-           "Stream timeout after #{@default_stream_timeout}ms - BAML process may have crashed"}}}
+           "Stream timeout after #{@default_stream_timeout}ms - BAML process may have crashed"},
+          collector}}
     end
   end
 
-  defp stream_next({ref, stream_pid, :done}), do: {:halt, {ref, stream_pid, :done}}
+  defp stream_next({ref, stream_pid, :done, collector}),
+    do: {:halt, {ref, stream_pid, :done, collector}}
 
-  defp stream_next({ref, stream_pid, {:error, reason}}),
-    do: {:halt, {ref, stream_pid, {:error, reason}}}
+  defp stream_next({ref, stream_pid, {:error, reason}, collector}),
+    do: {:halt, {ref, stream_pid, {:error, reason}, collector}}
 
-  defp cleanup_stream({ref, _stream_pid, _status}) do
+  defp cleanup_stream({ref, _stream_pid, _status, _collector}) do
     flush_stream_messages(ref)
     :ok
   end

@@ -23,7 +23,9 @@ defmodule AshAgent.Providers.BamlProviderCallbackOrderTest do
     assert {:ok, stream} =
              Baml.stream(:client, nil, nil, opts, context, nil, nil)
 
-    assert [%{message: {:partial, "hi"}}, %{message: {:done, "hi"}}] == Enum.to_list(stream)
-    assert_received {:opts_seen, %{}}
+    [partial, final] = Enum.to_list(stream)
+    assert %{message: {:partial, "hi"}} = partial
+    assert %AshBaml.Response{data: %{message: {:done, "hi"}}} = final
+    assert_received {:opts_seen, %{collectors: [%BamlElixir.Collector{}]}}
   end
 end

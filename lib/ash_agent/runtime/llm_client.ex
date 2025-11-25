@@ -148,6 +148,9 @@ defmodule AshAgent.Runtime.LLMClient do
              })}
         end
 
+      match?(%AshBaml.Response{}, response) ->
+        parse_response(output_module, AshBaml.Response.unwrap(response))
+
       true ->
         struct_map = Map.from_struct(response)
         build_typed_struct(output_module, struct_map)
