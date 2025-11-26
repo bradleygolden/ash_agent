@@ -141,15 +141,19 @@ defmodule AshAgent.MixProject do
     ]
   end
 
-  # Use in_umbrella when developing in the umbrella,
-  # otherwise use hex package for publication
   defp ash_baml_dep do
-    if local_dep?(:ash_baml) do
-      [in_umbrella: true]
-    else
+    if hex_build?() do
       [version: "~> 0.1.0", optional: true]
+    else
+      if local_dep?(:ash_baml) do
+        [in_umbrella: true]
+      else
+        [version: "~> 0.1.0", optional: true]
+      end
     end
   end
+
+  defp hex_build?, do: System.get_env("HEX_BUILD") == "true"
 
   defp local_dep?(app) do
     app
