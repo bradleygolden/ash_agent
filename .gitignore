@@ -43,3 +43,4 @@ ash_agent-*.tar
 
 .springfield
 .hex-docs
+.hex-packages
