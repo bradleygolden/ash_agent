@@ -19,14 +19,10 @@ defmodule AshAgent do
   end
   ```
 
-  ## Getting Started
-
-  AshAgent provides two main extensions:
+  ## Extensions
 
   - `AshAgent.Resource` - Add agent capabilities to your Ash resources
-  - `AshAgent.Domain` - Configure agent behavior at the domain level
-
-  See the [Getting Started guide](documentation/tutorials/getting-started.md) for more information.
+  - `AshAgent.Domain` - Auto-generate code interfaces for agent resources
 
   ## Features
 
@@ -35,21 +31,18 @@ defmodule AshAgent do
   - Type-safe configuration
   - Extensible architecture
   - Hook system for customizing agent behavior
-  - Progressive Disclosure patterns for managing context and token usage
 
   ## Customizing Agent Behavior
 
-  AshAgent provides a comprehensive hook system for extending and customizing
-  agent behavior at runtime. Hooks allow you to:
+  AshAgent provides a hook system for extending and customizing agent behavior
+  at runtime. Hooks allow you to intercept the agent execution lifecycle:
 
-  - Transform tool results before adding to context
-  - Compact or summarize context to manage token usage
-  - Filter or augment messages sent to the LLM
-  - Implement custom stopping conditions
-  - Track iterations and emit custom telemetry
+  - `before_call` - Called before rendering the prompt
+  - `after_render` - Called after prompt rendering, before LLM call
+  - `after_call` - Called after successful LLM response
+  - `on_error` - Called when any error occurs
 
-  See `AshAgent.Runtime.Hooks` for complete documentation and examples of
-  implementing Progressive Disclosure patterns.
+  See `AshAgent.Runtime.Hooks` for complete documentation.
 
   ## Links
 

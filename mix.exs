@@ -69,7 +69,7 @@ defmodule AshAgent.MixProject do
         "GitHub" => @source_url
       },
       maintainers: ["Bradley Golden"],
-      files: ~w(lib .formatter.exs mix.exs README.md LICENSE documentation)
+      files: ~w(lib .formatter.exs mix.exs README.md LICENSE CHANGELOG.md)
     ]
   end
 
@@ -117,17 +117,13 @@ defmodule AshAgent.MixProject do
   defp extras do
     [
       "README.md",
-      "documentation/tutorials/getting-started.md": [title: "Getting Started"],
-      "documentation/topics/overview.md": [title: "Overview"]
+      "CHANGELOG.md",
+      "LICENSE"
     ]
   end
 
   defp groups_for_extras do
-    [
-      Tutorials: ~r'documentation/tutorials',
-      Topics: ~r'documentation/topics',
-      "DSL Reference": ~r'documentation/dsls'
-    ]
+    []
   end
 
   defp groups_for_modules do

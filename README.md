@@ -1,71 +1,76 @@
 # AshAgent
 
-![Elixir CI](https://github.com/bradleygolden/ash_agent/workflows/Elixir%20CI/badge.svg)
+[![Hex.pm](https://img.shields.io/hexpm/v/ash_agent.svg)](https://hex.pm/packages/ash_agent)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> ⚠️ This project is experimental and not yet published to Hex; expect rapid changes and install directly from Git.
+> **Pre-1.0 Release** - API may change between minor versions. Pin to specific versions in production.
 
-An Ash Framework extension for building AI agent applications with LLM integration.
-
-AshAgent provides a declarative DSL for defining AI agents as Ash resources, enabling seamless integration of LLM capabilities into your Ash applications.
-
-## Features
-
-- 🎯 **Declarative Agent Definition** - Define agents using Spark DSL
-- 🔧 **Resource & Domain Extensions** - Integrate at both resource and domain levels
-- 🛡️ **Type-Safe Configuration** - Compile-time validation of all configuration
-- 🚀 **Built on Ash** - Leverage all Ash features (actions, policies, pubsub, etc.)
-- 📚 **Well Documented** - Comprehensive guides and API documentation
-- ⚡ **Extensible** - Add custom transformers and verifiers
-- 🔌 **Provider-Agnostic** - Works with ReqLLM, ash_baml, or custom providers
+**Production AI agents for Elixir.** AshAgent builds on Ash Framework to give you durable state, authorization, and declarative agent definitions—without locking you into any specific LLM provider.
 
 ## Installation
-
-Add `ash_agent` to your list of dependencies in `mix.exs` (Git dependency until the Hex release lands):
 
 ```elixir
 def deps do
   [
-    {:ash_agent, github: "bradleygolden/ash_agent", branch: "main"}
+    {:ash_agent, "~> 0.1.0"}
   ]
 end
 ```
 
-Then run:
-
-```bash
-mix deps.get
-```
-
 ## Quick Start
 
-### 1. Define an Agent Resource
+### 1. Define an Output Type
 
 ```elixir
-defmodule MyApp.Agents.Assistant do
+defmodule MyApp.Reply do
+  use Ash.TypedStruct
+
+  typed_struct do
+    field :content, :string, allow_nil?: false
+  end
+end
+```
+
+### 2. Define an Agent Resource
+
+```elixir
+defmodule MyApp.Assistant do
   use Ash.Resource,
     domain: MyApp.Agents,
     extensions: [AshAgent.Resource]
 
   agent do
-    client "anthropic:claude-3-5-sonnet"
-
+    client "anthropic:claude-sonnet-4-20250514"
     output MyApp.Reply
 
     prompt ~p"""
     You are a helpful assistant.
-    {{ output_format }}
-    """
-  end
 
-  attributes do
-    uuid_primary_key :id
-    attribute :name, :string, allow_nil?: false
+    {{ output_format }}
+
+    User: {{ message }}
+    """
+
+    input do
+      argument :message, :string, allow_nil?: false
+    end
   end
 end
 ```
 
-### 2. Configure Your Domain
+### 3. Configure Your Domain
+
+```elixir
+defmodule MyApp.Agents do
+  use Ash.Domain
+
+  resources do
+    resource MyApp.Assistant
+  end
+end
+```
+
+Optionally add `AshAgent.Domain` extension for auto-generated code interfaces:
 
 ```elixir
 defmodule MyApp.Agents do
@@ -73,144 +78,141 @@ defmodule MyApp.Agents do
     extensions: [AshAgent.Domain]
 
   resources do
-    resource MyApp.Agents.Assistant
+    resource MyApp.Assistant
+  end
+end
+
+# Generates: MyApp.Agents.call_assistant("Hello!")
+# Generates: MyApp.Agents.stream_assistant("Hello!")
+```
+
+### 4. Call Your Agent
+
+```elixir
+# Via Ash action
+{:ok, reply} = MyApp.Assistant
+|> Ash.ActionInput.for_action(:call, %{message: "Hello!"})
+|> Ash.run_action()
+
+reply.content
+#=> "Hello! How can I help you today?"
+
+# Or stream responses
+{:ok, stream} = MyApp.Assistant
+|> Ash.ActionInput.for_action(:stream, %{message: "Hello!"})
+|> Ash.run_action()
+
+Enum.each(stream, &IO.inspect/1)
+```
+
+## DSL Reference
+
+### `agent` Section
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `client` | string/atom | Yes | LLM provider and model (e.g., `"anthropic:claude-sonnet-4-20250514"`) |
+| `output` | module | Yes | `Ash.TypedStruct` module for response type |
+| `prompt` | string/template | Depends | Liquid template for system prompt. Use `~p` sigil for compile-time validation. Required unless provider declares `:prompt_optional`. |
+| `provider` | atom | No | LLM provider (`:req_llm` default, `:baml`, or custom module) |
+| `hooks` | module | No | Module implementing `AshAgent.Runtime.Hooks` behaviour |
+| `token_budget` | integer | No | Maximum tokens for agent execution |
+| `budget_strategy` | `:halt` or `:warn` | No | How to handle budget limits (default: `:warn`) |
+
+### `input` Section (Optional)
+
+Define input arguments that get passed to the prompt template:
+
+```elixir
+agent do
+  # ...
+  input do
+    argument :message, :string, allow_nil?: false
+    argument :context, :map, default: %{}
   end
 end
 ```
 
-### 3. Use Your Agent
-
-When you declare an agent, AshAgent injects `:call` and `:stream` actions so you can invoke it like any other Ash resource action (or expose them via a `code_interface`).
-
-```elixir
-# Synchronous call with keyword args
-{:ok, reply} = MyApp.Agents.Assistant.call(message: "Hello!")
-
-# Stream partial responses
-MyApp.Agents.Assistant.stream(message: "Hello!")
-|> Enum.to_list()
-```
-
-## Documentation
-
-- API Reference: `mix docs && open doc/index.html`
-
-## Roadmap
-
-- [x] Tool calling support
-- [x] Iteration-based context tracking
-- [x] Structured message history
-- [x] Token budget management
-- [x] Context compaction/summarization
-- [x] Progressive disclosure for large tool results
-- [ ] External memory persistence
-
-### Needs Research
-
-- [ ] Tool result caching and lookup
-- [ ] Guardrails & safety hooks
-- [ ] Evaluation harness
-- [ ] Observability dashboards
-- [ ] MCP server support
-- [ ] A2A support
+If you don't define an `input` section, the agent accepts a single `input` map argument.
 
 ## Provider Options
 
-AshAgent ships with a provider abstraction so the orchestration layer is decoupled
-from any specific LLM stack.
+AshAgent supports multiple LLM providers through an abstraction layer.
 
-### ReqLLM (default)
-
-The default `:req_llm` provider requires only a `provider:model` string:
+### ReqLLM (Default)
 
 ```elixir
 agent do
   provider :req_llm
-  client "anthropic:claude-3-5-sonnet", temperature: 0.5
+  client "anthropic:claude-sonnet-4-20250514", temperature: 0.7, max_tokens: 1000
+  # ...
 end
 ```
 
-### ash_baml
+### BAML (Optional)
 
-AshAgent can delegate execution to [ash_baml](https://github.com/bradleygolden/ash_baml)
-by switching to the `:baml` provider. Configure your BAML clients once:
-
-```elixir
-# config/config.exs
-config :ash_baml,
-  clients: [
-    support: {MyApp.BamlClients.Support, baml_src: "baml_src/support"}
-  ]
-```
-
-Then reference the client identifier inside your agent:
+For structured outputs via [ash_baml](https://github.com/bradleygolden/ash_baml):
 
 ```elixir
 agent do
   provider :baml
-  client :support, function: :ChatAgent
-  output MyApp.BamlClients.Support.Types.ChatAgent
+  client :my_client, function: :ChatAgent
+  output MyApp.BamlClient.Types.Response
+  # prompt is optional with BAML provider
 end
 ```
 
-You can also set `client_module: MyApp.BamlClients.Support` if you prefer to reference
-the compiled module directly. Streaming is supported when your BAML function implements
-`stream/2`.
+### Custom Providers
 
-Because BAML functions already carry their own prompts, the `:baml` provider declares
-`:prompt_optional`, allowing you to omit the `prompt` DSL entirely. Providers that do not
-declare this capability (e.g., `:req_llm`) will still require a prompt at compile time.
+Register custom providers in config:
 
-### Telemetry
+```elixir
+config :ash_agent,
+  providers: [
+    custom: MyApp.CustomProvider
+  ]
+```
 
-AshAgent emits Telemetry spans for every provider interaction:
+## Generated Actions
 
-- `[:ash_agent, :call]` – fires around synchronous calls
-- `[:ash_agent, :stream]` – fires when streaming sessions are opened
+AshAgent automatically generates two actions on your resource:
 
-Metadata includes `:agent`, `:provider`, `:client`, `:status`, and (when available) token usage.
-Attach handlers with `:telemetry.attach/4` to feed dashboards or observability pipelines.
+- `:call` - Synchronous LLM call returning structured response
+- `:stream` - Streaming LLM call returning enumerable of partial responses
+
+These integrate with Ash's action system, enabling authorization policies, preparations, and all standard Ash action features.
+
+## Telemetry
+
+AshAgent emits telemetry events for observability:
+
+- `[:ash_agent, :call, :start | :stop | :exception | :summary]`
+- `[:ash_agent, :stream, :start | :chunk | :summary | :stop]`
+- `[:ash_agent, :prompt, :rendered]`
+- `[:ash_agent, :llm, :request | :response | :error]`
 
 ## Development
 
-### Running Tests
-
 ```bash
 mix test
-```
-
-### Code Quality
-
-```bash
-# Format code
 mix format
-
-# Run Credo
 mix credo --strict
-
-# Run Dialyzer (first time will be slow)
 mix dialyzer
 ```
 
-### Generate Documentation
-
-```bash
-mix docs
-```
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
 ## License
 
-This project is licensed under the MIT License.
+MIT License - see [LICENSE](LICENSE) for details.
 
-## Acknowledgments
+## Related Packages
 
-- Built with [Ash Framework](https://ash-hq.org/)
-- Powered by [Spark DSL](https://github.com/ash-project/spark)
+AshAgent is part of the [AshAgent Stack](https://github.com/bradleygolden/ash_agent_stack) ecosystem:
+
+- [ash_baml](https://github.com/bradleygolden/ash_baml) - BAML integration for structured outputs
+- [ash_agent_tools](https://github.com/bradleygolden/ash_agent_tools) - Tool calling support
 
 ## Links
 
-- [Source Code](https://github.com/bradleygolden/ash_agent)
+- [GitHub](https://github.com/bradleygolden/ash_agent)
+- [AshAgent Stack](https://github.com/bradleygolden/ash_agent_stack)
+- [Ash Framework](https://ash-hq.org/)
