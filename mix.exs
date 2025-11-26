@@ -80,37 +80,7 @@ defmodule AshAgent.MixProject do
       source_url: @source_url,
       extras: extras(),
       groups_for_extras: groups_for_extras(),
-      groups_for_modules: groups_for_modules(),
-      before_closing_head_tag: fn
-        :html ->
-          """
-          <script src="https://cdn.jsdelivr.net/npm/mermaid@10.2.0/dist/mermaid.min.js"></script>
-          <script>
-            document.addEventListener("DOMContentLoaded", function () {
-              mermaid.initialize({
-                startOnLoad: false,
-                theme: document.body.className.includes("dark") ? "dark" : "default"
-              });
-              let id = 0;
-              for (const codeEl of document.querySelectorAll("pre code.mermaid")) {
-                const preEl = codeEl.parentElement;
-                const graphDefinition = codeEl.textContent;
-                const graphEl = document.createElement("div");
-                const graphId = "mermaid-graph-" + id++;
-                mermaid.render(graphId, graphDefinition).then(({svg, bindFunctions}) => {
-                  graphEl.innerHTML = svg;
-                  bindFunctions?.(graphEl);
-                  preEl.insertAdjacentElement("afterend", graphEl);
-                  preEl.remove();
-                });
-              }
-            });
-          </script>
-          """
-
-        _ ->
-          ""
-      end
+      groups_for_modules: groups_for_modules()
     ]
   end
 
