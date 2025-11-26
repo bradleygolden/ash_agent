@@ -131,6 +131,38 @@ defmodule AshAgent.Runtime.LLMClient do
       {:error, %Error{type: :parse_error}}
 
   """
+  def parse_response(output_type, response)
+      when output_type in [:string, :integer, :float, :boolean] do
+    text = extract_text(response)
+
+    case {output_type, text} do
+      {_, nil} ->
+        {:error, Error.parse_error("No text content in response", %{response: response})}
+
+      {:string, text} ->
+        {:ok, text}
+
+      {:integer, text} ->
+        case Integer.parse(String.trim(text)) do
+          {int, _} -> {:ok, int}
+          :error -> {:error, Error.parse_error("Cannot parse as integer", %{text: text})}
+        end
+
+      {:float, text} ->
+        case Float.parse(String.trim(text)) do
+          {float, _} -> {:ok, float}
+          :error -> {:error, Error.parse_error("Cannot parse as float", %{text: text})}
+        end
+
+      {:boolean, text} ->
+        case String.trim(String.downcase(text)) do
+          t when t in ["true", "yes", "1"] -> {:ok, true}
+          f when f in ["false", "no", "0"] -> {:ok, false}
+          _ -> {:error, Error.parse_error("Cannot parse as boolean", %{text: text})}
+        end
+    end
+  end
+
   def parse_response(output_module, %_{} = response) do
     cond do
       response.__struct__ == output_module ->
@@ -171,6 +203,11 @@ defmodule AshAgent.Runtime.LLMClient do
 
   def parse_response(_output_module, nil) do
     {:error, Error.parse_error("Cannot parse nil response", %{response: nil})}
+  end
+
+  def parse_response(output_type, response)
+      when output_type in [:string, :integer, :float, :boolean] and is_binary(response) do
+    parse_response(output_type, %{text: response})
   end
 
   def parse_response(_output_module, response) when is_binary(response) do
@@ -249,6 +286,16 @@ defmodule AshAgent.Runtime.LLMClient do
          exception: e
        })}
   end
+
+  defp extract_text(%ReqLLM.Response{} = response), do: ReqLLM.Response.text(response)
+
+  defp extract_text(%AshBaml.Response{} = response),
+    do: extract_text(AshBaml.Response.unwrap(response))
+
+  defp extract_text(%{text: text}) when is_binary(text), do: text
+  defp extract_text(%{"text" => text}) when is_binary(text), do: text
+  defp extract_text(text) when is_binary(text), do: text
+  defp extract_text(_), do: nil
 
   defp resolve_provider(resource, override) do
     case override do
