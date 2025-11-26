@@ -98,6 +98,7 @@ defmodule AshAgent.Resource do
   use Spark.Dsl.Extension,
     sections: [DSL.agent()],
     transformers: [
+      AshAgent.Transformers.InjectExtensionConfig,
       AshAgent.Transformers.ValidateAgent,
       AshAgent.Transformers.AddContextAttribute,
       AshAgent.Transformers.AddAgentActions

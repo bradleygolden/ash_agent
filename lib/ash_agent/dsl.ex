@@ -27,7 +27,7 @@ defmodule AshAgent.DSL do
         doc: "The name of the argument"
       ],
       type: [
-        type: {:in, [:string, :integer, :float, :boolean, :map, :list, {:array, :any}]},
+        type: {:custom, __MODULE__, :validate_argument_type, []},
         required: true,
         doc: "The type of the argument"
       ],
@@ -177,6 +177,19 @@ defmodule AshAgent.DSL do
     sections: [@input]
   }
 
+  @simple_types [:string, :integer, :float, :boolean, :map, :list, :any]
+
+  @doc false
+  def validate_argument_type(type) when type in @simple_types, do: {:ok, type}
+
+  def validate_argument_type({:array, inner}) when inner in @simple_types,
+    do: {:ok, {:array, inner}}
+
+  def validate_argument_type(type) do
+    {:error,
+     "expected a valid type (#{inspect(@simple_types)} or {:array, type}), got: #{inspect(type)}"}
+  end
+
   @doc false
   def validate_client_config(client) when is_binary(client), do: {:ok, {client, []}}
   def validate_client_config(client) when is_atom(client), do: {:ok, {client, []}}
@@ -212,4 +225,14 @@ defmodule AshAgent.DSL do
 
   def agent, do: @agent
   def input, do: @input
+
+  def template_agent do
+    %{@agent | schema: template_schema()}
+  end
+
+  defp template_schema do
+    @agent.schema
+    |> Keyword.delete(:client)
+    |> Keyword.delete(:provider)
+  end
 end
