@@ -8,7 +8,7 @@
 
 ## Tooling
 
-- `mix check` runs the same sequence as GitHub CI (deps.get, deps.compile, unused-dependency check, compile with `--warnings-as-errors`, test suite with warnings treated as errors, formatter check, Credo, Dialyzer with GitHub formatting, and docs generation with warnings as errors) so it should be used locally before opening a PR.
+- `mix precommit` runs the same sequence as GitHub CI (deps.get, deps.compile, unused-dependency check, compile with `--warnings-as-errors`, test suite with warnings treated as errors, formatter check, Credo, Dialyzer with GitHub formatting, and docs generation with warnings as errors) so it should be used locally before opening a PR.
 
 ## Testing Practices
 

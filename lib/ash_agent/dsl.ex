@@ -8,7 +8,7 @@ defmodule AshAgent.DSL do
 
   defmodule Argument do
     @moduledoc false
-    defstruct [:name, :type, :allow_nil?, :default, :doc, :__spark_metadata__]
+    defstruct [:name, :type, :allow_nil?, :default, :doc, :sensitive?, :__spark_metadata__]
   end
 
   @argument %Spark.Dsl.Entity{
@@ -43,6 +43,11 @@ defmodule AshAgent.DSL do
       doc: [
         type: :string,
         doc: "Documentation for the argument"
+      ],
+      sensitive?: [
+        type: :boolean,
+        default: false,
+        doc: "Whether this argument contains sensitive data (PII/PHI)."
       ]
     ]
   }

@@ -150,4 +150,12 @@ defmodule AshAgent.Info do
   def auto_define_interfaces?(domain) do
     Extension.get_opt(domain, [:agent], :auto_define_interfaces?, true)
   end
+
+  @spec sensitive_input_fields(Ash.Resource.t()) :: [atom()]
+  def sensitive_input_fields(resource) do
+    resource
+    |> Extension.get_entities([:agent, :input])
+    |> Enum.filter(& &1.sensitive?)
+    |> Enum.map(& &1.name)
+  end
 end
