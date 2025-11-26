@@ -131,4 +131,23 @@ defmodule AshAgent.Info do
       context_module: AshAgent.Config.context_module()
     }
   end
+
+  @doc """
+  Check if automatic interface generation is enabled for a domain.
+
+  Returns true if the domain will automatically generate code interface
+  functions (`call_<resource_name>`, `stream_<resource_name>`) for all
+  agent resources.
+
+  Defaults to true if not explicitly configured.
+
+  ## Examples
+
+      iex> AshAgent.Info.auto_define_interfaces?(MyDomain)
+      true
+  """
+  @spec auto_define_interfaces?(Ash.Domain.t()) :: boolean()
+  def auto_define_interfaces?(domain) do
+    Extension.get_opt(domain, [:agent], :auto_define_interfaces?, true)
+  end
 end

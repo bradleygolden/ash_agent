@@ -40,14 +40,27 @@ defmodule AshAgent.Domain do
     examples: [
       """
       agent do
-        # Domain-level agent configuration
+        auto_define_interfaces? true
       end
       """
     ],
-    schema: []
+    schema: [
+      auto_define_interfaces?: [
+        type: :boolean,
+        default: true,
+        doc: """
+        When true, automatically generates named code interface functions
+        (`call_<resource_name>` and `stream_<resource_name>`) for all agent
+        resources in this domain.
+
+        The generated interfaces use the input arguments defined in each
+        agent's `input` section as function arguments.
+        """
+      ]
+    ]
   }
 
   use Spark.Dsl.Extension,
     sections: [@agent],
-    transformers: []
+    transformers: [AshAgent.Transformers.AddDomainInterfaces]
 end
