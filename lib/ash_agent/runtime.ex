@@ -442,17 +442,22 @@ defmodule AshAgent.Runtime do
   end
 
   defp build_schema(config) do
-    if is_nil(config.output_type) do
-      {:error, Error.schema_error("No output type configured", %{})}
-    else
-      schema = SchemaConverter.to_req_llm_schema(config.output_type)
+    case config.output_type do
+      nil ->
+        {:error, Error.schema_error("No output type configured", %{})}
 
-      if is_list(schema) do
-        {:ok, schema}
-      else
-        {:error,
-         Error.schema_error("Invalid schema format", %{type: config.output_type, result: schema})}
-      end
+      primitive when primitive in [:string, :integer, :float, :boolean] ->
+        {:ok, nil}
+
+      type_module ->
+        schema = SchemaConverter.to_req_llm_schema(type_module)
+
+        if is_list(schema) do
+          {:ok, schema}
+        else
+          {:error,
+           Error.schema_error("Invalid schema format", %{type: type_module, result: schema})}
+        end
     end
   end
 
