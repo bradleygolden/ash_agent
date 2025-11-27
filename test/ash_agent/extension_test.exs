@@ -1,8 +1,8 @@
 defmodule AshAgent.ExtensionTest do
   use ExUnit.Case, async: true
 
-  alias AshAgent.Extension
   alias AshAgent.Error
+  alias AshAgent.Extension
   alias AshAgent.Test.TestAgents
 
   describe "get_config/1" do
@@ -207,10 +207,10 @@ defmodule AshAgent.ExtensionTest do
     end
 
     test "budget_error/2 creates budget error" do
-      error = Extension.budget_error("Over limit", %{used: 10000, limit: 5000})
+      error = Extension.budget_error("Over limit", %{used: 10_000, limit: 5_000})
 
       assert error.type == :budget_error
-      assert error.details.used == 10000
+      assert error.details.used == 10_000
     end
   end
 

@@ -472,9 +472,9 @@ defmodule AshAgent.Test.StreamingTestHelper do
         ]
 
       alias AshAgent.Test.StreamingTestHelper
-      alias AshAgent.Test.StreamingTestHelper.StreamingMockProvider
-      alias AshAgent.Test.StreamingTestHelper.StreamErrorProvider
       alias AshAgent.Test.StreamingTestHelper.NoStreamProvider
+      alias AshAgent.Test.StreamingTestHelper.StreamErrorProvider
+      alias AshAgent.Test.StreamingTestHelper.StreamingMockProvider
     end
   end
 end

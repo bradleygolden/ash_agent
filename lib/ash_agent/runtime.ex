@@ -280,21 +280,7 @@ defmodule AshAgent.Runtime do
 
         emit_llm_response(metadata, response_result, ctx, nil)
 
-        case response_result do
-          {:ok, response} ->
-            case LLMClient.parse_response(config.output_type, response) do
-              {:ok, output} ->
-                result = LLMClient.build_result(output, response, config.provider)
-                enriched_metadata = build_call_metadata(metadata, {:ok, result}, response, ctx)
-                {{:ok, result}, enriched_metadata}
-
-              {:error, _} = error ->
-                {error, Map.put(metadata, :context, ctx)}
-            end
-
-          error ->
-            {error, Map.put(metadata, :context, ctx)}
-        end
+        handle_call_response(response_result, config, metadata, ctx)
       end
     )
     |> unwrap_span_result()
@@ -364,14 +350,7 @@ defmodule AshAgent.Runtime do
           fn tagged_chunk, {index, _last_result} ->
             chunk_metadata = Map.put(base_metadata, :chunk, tagged_chunk)
             :telemetry.execute([:ash_agent, :stream, :chunk], %{index: index}, chunk_metadata)
-
-            case tagged_chunk do
-              {:done, result} ->
-                {[tagged_chunk], {index + 1, result}}
-
-              _ ->
-                {[tagged_chunk], {index + 1, nil}}
-            end
+            track_stream_chunk(tagged_chunk, index)
           end,
           fn {_index, last_result} ->
             summary_metadata =
@@ -539,6 +518,25 @@ defmodule AshAgent.Runtime do
       {:error, error} ->
         :telemetry.execute([:ash_agent, :llm, :error], %{}, Map.put(metadata, :error, error))
     end
+  end
+
+  defp track_stream_chunk({:done, result}, index), do: {[{:done, result}], {index + 1, result}}
+  defp track_stream_chunk(tagged_chunk, index), do: {[tagged_chunk], {index + 1, nil}}
+
+  defp handle_call_response({:ok, response}, config, metadata, ctx) do
+    case LLMClient.parse_response(config.output_type, response) do
+      {:ok, output} ->
+        result = LLMClient.build_result(output, response, config.provider)
+        enriched_metadata = build_call_metadata(metadata, {:ok, result}, response, ctx)
+        {{:ok, result}, enriched_metadata}
+
+      {:error, _} = error ->
+        {error, Map.put(metadata, :context, ctx)}
+    end
+  end
+
+  defp handle_call_response(error, _config, metadata, ctx) do
+    {error, Map.put(metadata, :context, ctx)}
   end
 
   defp build_call_metadata(metadata, result, response, ctx) do

@@ -1,8 +1,8 @@
 defmodule AshAgent.Runtime.PromptRendererTest do
   use ExUnit.Case, async: true
 
-  alias AshAgent.Runtime.PromptRenderer
   alias AshAgent.Error
+  alias AshAgent.Runtime.PromptRenderer
 
   describe "render/3 with string template" do
     test "renders simple template with variables" do

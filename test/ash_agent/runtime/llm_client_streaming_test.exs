@@ -10,8 +10,8 @@ defmodule AshAgent.Runtime.LLMClientStreamingTest do
   """
   use ExUnit.Case, async: true
 
-  alias AshAgent.Runtime.LLMClient
   alias AshAgent.Error
+  alias AshAgent.Runtime.LLMClient
 
   defmodule StreamableOutput do
     @moduledoc false

@@ -54,7 +54,7 @@ defmodule AshAgent.Integration.ThinkingTest do
       provider :req_llm
 
       client "anthropic:claude-haiku-4-5-20251001",
-        max_tokens: 16000,
+        max_tokens: 16_000,
         provider_options: [thinking: %{type: "enabled", budget_tokens: 5000}]
 
       output :string
@@ -81,7 +81,7 @@ defmodule AshAgent.Integration.ThinkingTest do
       provider :req_llm
 
       client "anthropic:claude-haiku-4-5-20251001",
-        max_tokens: 16000,
+        max_tokens: 16_000,
         provider_options: [thinking: %{type: "enabled", budget_tokens: 5000}]
 
       output MathAnswer

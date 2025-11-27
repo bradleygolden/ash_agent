@@ -134,33 +134,9 @@ defmodule AshAgent.Runtime.LLMClient do
   """
   def parse_response(output_type, response)
       when output_type in [:string, :integer, :float, :boolean] do
-    text = extract_text(response)
-
-    case {output_type, text} do
-      {_, nil} ->
-        {:error, Error.parse_error("No text content in response", %{response: response})}
-
-      {:string, text} ->
-        {:ok, text}
-
-      {:integer, text} ->
-        case Integer.parse(String.trim(text)) do
-          {int, _} -> {:ok, int}
-          :error -> {:error, Error.parse_error("Cannot parse as integer", %{text: text})}
-        end
-
-      {:float, text} ->
-        case Float.parse(String.trim(text)) do
-          {float, _} -> {:ok, float}
-          :error -> {:error, Error.parse_error("Cannot parse as float", %{text: text})}
-        end
-
-      {:boolean, text} ->
-        case String.trim(String.downcase(text)) do
-          t when t in ["true", "yes", "1"] -> {:ok, true}
-          f when f in ["false", "no", "0"] -> {:ok, false}
-          _ -> {:error, Error.parse_error("Cannot parse as boolean", %{text: text})}
-        end
+    case extract_text(response) do
+      nil -> {:error, Error.parse_error("No text content in response", %{response: response})}
+      text -> parse_primitive(output_type, text)
     end
   end
 
@@ -271,19 +247,7 @@ defmodule AshAgent.Runtime.LLMClient do
         |> Stream.flat_map(&tag_chunk(&1, output_module))
         |> Stream.map(fn chunk ->
           {last_content, accumulated_thinking} = Process.get({__MODULE__, state_ref}, {nil, nil})
-
-          case chunk do
-            {:thinking, text} ->
-              new_thinking = (accumulated_thinking || "") <> text
-              Process.put({__MODULE__, state_ref}, {last_content, new_thinking})
-
-            {:content, struct} ->
-              Process.put({__MODULE__, state_ref}, {struct, accumulated_thinking})
-
-            _ ->
-              :ok
-          end
-
+          accumulate_chunk(state_ref, chunk, last_content, accumulated_thinking)
           chunk
         end)
 
@@ -296,21 +260,7 @@ defmodule AshAgent.Runtime.LLMClient do
                 Process.get({__MODULE__, state_ref}, {nil, nil})
 
               Process.delete({__MODULE__, state_ref})
-
-              if last_content do
-                result = %Result{
-                  output: last_content,
-                  thinking: accumulated_thinking,
-                  usage: nil,
-                  model: nil,
-                  finish_reason: nil,
-                  raw_response: stream_response
-                }
-
-                {[{:done, result}], :done}
-              else
-                {:halt, :done}
-              end
+              finalize_tagged_stream_result(last_content, accumulated_thinking, stream_response)
 
             :done ->
               {:halt, :done}
@@ -338,13 +288,7 @@ defmodule AshAgent.Runtime.LLMClient do
             nil ->
               {last_content, _thinking} = Process.get({__MODULE__, state_ref}, {nil, nil})
               Process.delete({__MODULE__, state_ref})
-
-              if last_content do
-                result = build_result(last_content, stream_response, provider)
-                {[{:done, result}], :done}
-              else
-                {:halt, :done}
-              end
+              finalize_stream_result(last_content, stream_response, provider)
 
             :done ->
               {:halt, :done}
@@ -354,6 +298,63 @@ defmodule AshAgent.Runtime.LLMClient do
 
       Stream.concat(content_stream, done_stream)
     end
+  end
+
+  defp parse_primitive(:string, text), do: {:ok, text}
+
+  defp parse_primitive(:integer, text) do
+    case Integer.parse(String.trim(text)) do
+      {int, _} -> {:ok, int}
+      :error -> {:error, Error.parse_error("Cannot parse as integer", %{text: text})}
+    end
+  end
+
+  defp parse_primitive(:float, text) do
+    case Float.parse(String.trim(text)) do
+      {float, _} -> {:ok, float}
+      :error -> {:error, Error.parse_error("Cannot parse as float", %{text: text})}
+    end
+  end
+
+  defp parse_primitive(:boolean, text) do
+    case String.trim(String.downcase(text)) do
+      t when t in ["true", "yes", "1"] -> {:ok, true}
+      f when f in ["false", "no", "0"] -> {:ok, false}
+      _ -> {:error, Error.parse_error("Cannot parse as boolean", %{text: text})}
+    end
+  end
+
+  defp accumulate_chunk(state_ref, {:thinking, text}, last_content, accumulated_thinking) do
+    new_thinking = (accumulated_thinking || "") <> text
+    Process.put({__MODULE__, state_ref}, {last_content, new_thinking})
+  end
+
+  defp accumulate_chunk(state_ref, {:content, struct}, _last_content, accumulated_thinking) do
+    Process.put({__MODULE__, state_ref}, {struct, accumulated_thinking})
+  end
+
+  defp accumulate_chunk(_state_ref, _chunk, _last_content, _accumulated_thinking), do: :ok
+
+  defp finalize_tagged_stream_result(nil, _thinking, _stream_response), do: {:halt, :done}
+
+  defp finalize_tagged_stream_result(last_content, accumulated_thinking, stream_response) do
+    result = %Result{
+      output: last_content,
+      thinking: accumulated_thinking,
+      usage: nil,
+      model: nil,
+      finish_reason: nil,
+      raw_response: stream_response
+    }
+
+    {[{:done, result}], :done}
+  end
+
+  defp finalize_stream_result(nil, _stream_response, _provider), do: {:halt, :done}
+
+  defp finalize_stream_result(last_content, stream_response, provider) do
+    result = build_result(last_content, stream_response, provider)
+    {[{:done, result}], :done}
   end
 
   defp tag_chunk(%ReqLLM.StreamChunk{type: :thinking} = chunk, _output_module) do
