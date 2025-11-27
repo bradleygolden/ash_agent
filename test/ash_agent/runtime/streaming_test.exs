@@ -248,40 +248,46 @@ defmodule AshAgent.Runtime.StreamingTest do
       assert is_function(stream) or is_struct(stream, Stream)
     end
 
-    test "stream yields chunks when consumed" do
+    test "stream yields tagged chunks when consumed" do
       {:ok, stream} = Runtime.stream(StreamAgentWithChunks, %{})
 
       results = Enum.to_list(stream)
+      content_chunks = Enum.filter(results, &match?({:content, _}, &1))
+      done_chunks = Enum.filter(results, &match?({:done, _}, &1))
 
-      assert length(results) == 3
-      assert Enum.at(results, 0).content == "chunk1"
-      assert Enum.at(results, 1).content == "chunk2"
-      assert Enum.at(results, 2).content == "chunk3"
+      assert length(content_chunks) == 3
+      assert {:content, %StreamOutput{content: "chunk1"}} = Enum.at(content_chunks, 0)
+      assert {:content, %StreamOutput{content: "chunk2"}} = Enum.at(content_chunks, 1)
+      assert {:content, %StreamOutput{content: "chunk3"}} = Enum.at(content_chunks, 2)
+      assert length(done_chunks) == 1
     end
 
     test "stream converts chunks to output struct" do
       {:ok, stream} = Runtime.stream(StreamAgentWithChunks, %{})
 
       results = Enum.to_list(stream)
+      content_chunks = Enum.filter(results, &match?({:content, _}, &1))
 
-      assert Enum.all?(results, &match?(%StreamOutput{}, &1))
+      assert Enum.all?(content_chunks, fn {:content, chunk} -> match?(%StreamOutput{}, chunk) end)
     end
 
     test "handles single chunk stream" do
       {:ok, stream} = Runtime.stream(SingleChunkAgent, %{})
 
       results = Enum.to_list(stream)
+      content_chunks = Enum.filter(results, &match?({:content, _}, &1))
 
-      assert length(results) == 1
-      assert %StreamOutput{content: "only", index: 0} = hd(results)
+      assert length(content_chunks) == 1
+      assert {:content, %StreamOutput{content: "only", index: 0}} = hd(content_chunks)
     end
 
     test "handles empty stream" do
       {:ok, stream} = Runtime.stream(EmptyStreamAgent, %{})
 
       results = Enum.to_list(stream)
+      content_chunks = Enum.filter(results, &match?({:content, _}, &1))
 
-      assert results == []
+      assert content_chunks == []
     end
   end
 
@@ -306,14 +312,19 @@ defmodule AshAgent.Runtime.StreamingTest do
       results = Enum.take(stream, 2)
 
       assert length(results) == 2
-      assert Enum.at(results, 0).content == "chunk1"
-      assert Enum.at(results, 1).content == "chunk2"
+      assert {:content, %StreamOutput{content: "chunk1"}} = Enum.at(results, 0)
+      assert {:content, %StreamOutput{content: "chunk2"}} = Enum.at(results, 1)
     end
 
     test "stream supports Enum.take_while" do
       {:ok, stream} = Runtime.stream(StreamAgentWithChunks, %{})
 
-      results = Enum.take_while(stream, fn chunk -> chunk.index < 2 end)
+      # Take while we're getting content chunks (stop at :done)
+      results =
+        Enum.take_while(stream, fn
+          {:content, chunk} -> chunk.index < 2
+          {:done, _} -> false
+        end)
 
       assert length(results) == 2
     end
@@ -362,8 +373,11 @@ defmodule AshAgent.Runtime.StreamingTest do
       stream = Runtime.stream!(StreamAgentWithChunks, %{})
 
       results = Enum.to_list(stream)
+      content_chunks = Enum.filter(results, &match?({:content, _}, &1))
+      done_chunks = Enum.filter(results, &match?({:done, _}, &1))
 
-      assert length(results) == 3
+      assert length(content_chunks) == 3
+      assert length(done_chunks) == 1
     end
 
     test "raises on error" do
@@ -468,7 +482,7 @@ defmodule AshAgent.Runtime.StreamingTest do
 
         assert_receive {:stream_summary, metadata}, 1_000
         assert metadata.status == :ok
-        assert %StreamOutput{} = metadata.result
+        assert %AshAgent.Result{output: %StreamOutput{}} = metadata.result
       after
         :telemetry.detach(handler_id)
       end
@@ -499,7 +513,8 @@ defmodule AshAgent.Runtime.StreamingTest do
           |> Enum.map(fn {:index, i} -> i end)
           |> Enum.sort()
 
-        assert recorded_indices == [0, 1, 2]
+        # 3 content chunks + 1 done chunk = 4 total chunks with indices 0, 1, 2, 3
+        assert recorded_indices == [0, 1, 2, 3]
       after
         :telemetry.detach(handler_id)
         :ets.delete(indices)
@@ -517,9 +532,10 @@ defmodule AshAgent.Runtime.StreamingTest do
         )
 
       results = Enum.to_list(stream)
+      content_chunks = Enum.filter(results, &match?({:content, _}, &1))
 
-      assert length(results) == 1
-      assert hd(results).content == "override"
+      assert length(content_chunks) == 1
+      assert {:content, %StreamOutput{content: "override"}} = hd(content_chunks)
     end
 
     test "stream respects provider override" do
@@ -532,9 +548,10 @@ defmodule AshAgent.Runtime.StreamingTest do
         )
 
       results = Enum.to_list(stream)
+      content_chunks = Enum.filter(results, &match?({:content, _}, &1))
 
-      assert length(results) == 1
-      assert hd(results).content == "from_mock"
+      assert length(content_chunks) == 1
+      assert {:content, %StreamOutput{content: "from_mock"}} = hd(content_chunks)
     end
   end
 end

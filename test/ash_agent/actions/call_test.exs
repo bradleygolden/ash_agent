@@ -66,7 +66,7 @@ defmodule AshAgent.Actions.CallTest do
     test "returns ok tuple with result for valid input" do
       input = %{resource: TestCallAgent, arguments: %{}}
 
-      assert {:ok, %CallOutput{}} = Call.run(input, [], %{})
+      assert {:ok, %AshAgent.Result{output: %CallOutput{}}} = Call.run(input, [], %{})
     end
 
     test "result contains expected content" do
@@ -74,7 +74,7 @@ defmodule AshAgent.Actions.CallTest do
 
       {:ok, result} = Call.run(input, [], %{})
 
-      assert result.message == "default_response"
+      assert result.output.message == "default_response"
     end
 
     test "passes arguments through to runtime" do
@@ -86,7 +86,7 @@ defmodule AshAgent.Actions.CallTest do
     test "handles empty arguments" do
       input = %{resource: TestCallAgent, arguments: %{}}
 
-      assert {:ok, %CallOutput{}} = Call.run(input, [], %{})
+      assert {:ok, %AshAgent.Result{output: %CallOutput{}}} = Call.run(input, [], %{})
     end
 
     test "returns error for invalid resource" do

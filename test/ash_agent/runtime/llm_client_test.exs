@@ -1,8 +1,8 @@
 defmodule AshAgent.Runtime.LLMClientTest do
   use ExUnit.Case, async: true
 
-  alias AshAgent.Runtime.LLMClient
   alias AshAgent.Error
+  alias AshAgent.Runtime.LLMClient
   alias AshAgent.Test.TestAgents
 
   defmodule TempStruct do

@@ -70,15 +70,21 @@ defmodule AshAgent.Actions.StreamTest do
       assert is_function(stream) or is_struct(stream, Elixir.Stream)
     end
 
-    test "stream yields chunks when consumed" do
+    test "stream yields tagged chunks when consumed" do
       input = %{resource: TestStreamAgent, arguments: %{}}
 
       {:ok, stream} = StreamAction.run(input, [], %{})
       results = Enum.to_list(stream)
 
-      assert length(results) == 2
-      assert %StreamOutput{content: "chunk1"} = Enum.at(results, 0)
-      assert %StreamOutput{content: "chunk2"} = Enum.at(results, 1)
+      content_chunks = Enum.filter(results, &match?({:content, _}, &1))
+      done_chunks = Enum.filter(results, &match?({:done, _}, &1))
+
+      assert length(content_chunks) == 2
+      assert {:content, %StreamOutput{content: "chunk1"}} = Enum.at(content_chunks, 0)
+      assert {:content, %StreamOutput{content: "chunk2"}} = Enum.at(content_chunks, 1)
+
+      assert length(done_chunks) == 1
+      assert {:done, %AshAgent.Result{output: %StreamOutput{}}} = Enum.at(done_chunks, 0)
     end
 
     test "passes arguments through to runtime" do

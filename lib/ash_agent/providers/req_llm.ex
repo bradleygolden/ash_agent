@@ -120,6 +120,17 @@ defmodule AshAgent.Providers.ReqLLM do
 
   def extract_tool_calls(_response), do: :default
 
+  @impl true
+  def extract_thinking(%ReqLLM.Response{} = response) do
+    case ReqLLM.Response.thinking(response) do
+      "" -> nil
+      nil -> nil
+      text -> text
+    end
+  end
+
+  def extract_thinking(_response), do: :default
+
   defp extract_text_from_content_blocks([%{"type" => "text", "text" => text} | _])
        when is_binary(text),
        do: text

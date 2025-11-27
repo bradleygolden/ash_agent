@@ -222,7 +222,8 @@ defmodule AshAgent.RuntimeTest do
         LLMStub.object_response(%{"result" => "Success!"})
       )
 
-      assert {:ok, %TestOutput{result: "Success!"}} = Runtime.call(MinimalAgent, %{})
+      assert {:ok, %AshAgent.Result{output: %TestOutput{result: "Success!"}}} =
+               Runtime.call(MinimalAgent, %{})
     end
 
     test "passes arguments to agent" do
@@ -231,7 +232,7 @@ defmodule AshAgent.RuntimeTest do
         LLMStub.object_response(%{"result" => "Processed!"})
       )
 
-      assert {:ok, %TestOutput{result: "Processed!"}} =
+      assert {:ok, %AshAgent.Result{output: %TestOutput{result: "Processed!"}}} =
                Runtime.call(AgentWithArgs, input: "test data")
     end
 
@@ -251,7 +252,7 @@ defmodule AshAgent.RuntimeTest do
 
       assert_received {:before_call, %{}}
       assert_received {:after_render, "Test with hooks"}
-      assert_received {:after_call, %TestOutput{result: "Hooked!"}}
+      assert_received {:after_call, %AshAgent.Result{output: %TestOutput{result: "Hooked!"}}}
     end
 
     test "executes on_error hook when error occurs" do
@@ -270,7 +271,8 @@ defmodule AshAgent.RuntimeTest do
         LLMStub.object_response(%{"result" => "Direct success!"})
       )
 
-      assert %TestOutput{result: "Direct success!"} = Runtime.call!(MinimalAgent, %{})
+      assert %AshAgent.Result{output: %TestOutput{result: "Direct success!"}} =
+               Runtime.call!(MinimalAgent, %{})
     end
 
     test "raises exception on error" do
@@ -345,10 +347,11 @@ defmodule AshAgent.RuntimeTest do
 
         assert_receive {:stream_summary, metadata}, 1_000
         assert metadata.status == :ok
-        assert metadata.result.__struct__ == AshAgent.RuntimeTest.TestOutput
+        assert metadata.result.__struct__ == AshAgent.Result
         assert Map.get(metadata, :usage) == nil
         assert_receive {:stream_chunk, %{index: 0}, _}, 1_000
         assert_receive {:stream_chunk, %{index: 1}, _}, 1_000
+        assert_receive {:stream_chunk, %{index: 2}, _}, 1_000
       after
         :telemetry.detach(handler_id)
         :telemetry.detach(chunk_handler_id)
@@ -372,7 +375,7 @@ defmodule AshAgent.RuntimeTest do
 
   describe "runtime overrides" do
     test "allows overriding provider and client per call" do
-      assert {:ok, %TestOutput{result: "override"}} =
+      assert {:ok, %AshAgent.Result{output: %TestOutput{result: "override"}}} =
                Runtime.call(MinimalAgent, %{}, provider: NoStreamProvider, client: :custom)
     end
 
@@ -382,7 +385,7 @@ defmodule AshAgent.RuntimeTest do
     end
 
     test "drops provider-specific client opts when provider changes" do
-      assert {:ok, %TestOutput{result: "ok"}} =
+      assert {:ok, %AshAgent.Result{output: %TestOutput{result: "ok"}}} =
                Runtime.call(AgentWithClientOpts, %{}, provider: NoFunctionProvider)
     end
   end

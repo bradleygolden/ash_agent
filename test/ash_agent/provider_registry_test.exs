@@ -1,8 +1,8 @@
 defmodule AshAgent.ProviderRegistryTest do
   use ExUnit.Case, async: false
 
-  alias AshAgent.ProviderRegistry
   alias AshAgent.Error
+  alias AshAgent.ProviderRegistry
 
   describe "resolve/1 with built-in provider keys" do
     test "resolves :req_llm to ReqLLM provider" do
