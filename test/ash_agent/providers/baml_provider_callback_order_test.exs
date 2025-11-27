@@ -10,13 +10,13 @@ defmodule AshAgent.Providers.BamlProviderCallbackOrderTest do
       self()
     end
 
-    def stream(args, opts, callback) do
+    def stream(args, callback, opts) do
       send(self(), {:opts_seen, opts})
       stream(args, callback)
     end
   end
 
-  test "streams when callback is second arg and opts are third" do
+  test "streams with BamlElixir.Client signature: stream(args, callback, opts)" do
     context = %{input: %{message: "hi"}}
     opts = [client_module: StreamClient, function: :Stream]
 

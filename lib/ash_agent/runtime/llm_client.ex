@@ -260,12 +260,14 @@ defmodule AshAgent.Runtime.LLMClient do
 
   """
   def stream_to_tagged_chunks(stream_response, output_module, provider) do
-    if enumerable_stream?(stream_response) do
+    actual_stream = extract_enumerable_stream(stream_response)
+
+    if actual_stream do
       state_ref = make_ref()
       Process.put({__MODULE__, state_ref}, {nil, nil})
 
       tagged_stream =
-        stream_response
+        actual_stream
         |> Stream.flat_map(&tag_chunk(&1, output_module))
         |> Stream.map(fn chunk ->
           {last_content, accumulated_thinking} = Process.get({__MODULE__, state_ref}, {nil, nil})
@@ -385,6 +387,8 @@ defmodule AshAgent.Runtime.LLMClient do
     end
   end
 
+  defp stream_next(:done, _output_module), do: {:halt, :done}
+
   defp stream_next(response, output_module) do
     with {:ok, final_response} <- ReqLLM.StreamResponse.to_response(response),
          {:ok, struct} <- parse_response(output_module, final_response) do
@@ -400,6 +404,13 @@ defmodule AshAgent.Runtime.LLMClient do
   defp enumerable_stream?(%Stream{}), do: true
   defp enumerable_stream?(stream) when is_function(stream, 2), do: true
   defp enumerable_stream?(_), do: false
+
+  defp extract_enumerable_stream(%StreamResponse{stream: stream}) when not is_nil(stream),
+    do: stream
+
+  defp extract_enumerable_stream(%Stream{} = stream), do: stream
+  defp extract_enumerable_stream(stream) when is_function(stream, 2), do: stream
+  defp extract_enumerable_stream(_), do: nil
 
   defp merge_client_opts(opts) do
     test_opts = Application.get_env(:ash_agent, :req_llm_options, [])
@@ -463,8 +474,8 @@ defmodule AshAgent.Runtime.LLMClient do
     ReqLLM.Response.usage(response)
   end
 
-  def response_usage(%StreamResponse{} = response) do
-    StreamResponse.usage(response)
+  def response_usage(%StreamResponse{}) do
+    nil
   end
 
   def response_usage(%module{} = response) do

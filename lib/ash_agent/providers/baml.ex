@@ -267,11 +267,7 @@ defmodule AshAgent.Providers.Baml do
 
     result =
       if function_exported?(function_module, :stream, 3) do
-        try do
-          function_module.stream(arguments, opts, stream_fn)
-        rescue
-          FunctionClauseError -> function_module.stream(arguments, stream_fn, opts)
-        end
+        function_module.stream(arguments, stream_fn, opts)
       else
         function_module.stream(arguments, stream_fn)
       end
@@ -418,6 +414,7 @@ defmodule AshAgent.Providers.Baml do
   def extract_tool_calls(_response), do: :default
 
   @impl true
+  def extract_thinking(%AshBaml.Response{} = response), do: AshBaml.Response.thinking(response)
   def extract_thinking(_response), do: nil
 
   # Private helpers for BAML-specific extraction
