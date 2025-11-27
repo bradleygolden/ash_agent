@@ -38,8 +38,8 @@ defmodule AshAgent.Runtime do
   @doc """
   Calls an agent with the given arguments.
 
-  Returns `{:ok, result}` where result is an instance of the agent's output TypedStruct,
-  or `{:error, reason}` on failure.
+  Returns `{:ok, result}` where result is an `AshAgent.Result` struct containing
+  the parsed output and metadata (thinking, usage, model, etc.), or `{:error, reason}` on failure.
 
   ## Examples
 
@@ -69,17 +69,26 @@ defmodule AshAgent.Runtime do
       end
 
       # Call the agent
-      {:ok, reply} = AshAgent.Runtime.call(MyApp.ChatAgent, message: "Hello!")
-      reply.content
+      {:ok, result} = AshAgent.Runtime.call(MyApp.ChatAgent, message: "Hello!")
+      result.output.content
       #=> "Hello! How can I assist you today?"
 
+      # Access thinking content (if extended thinking is enabled)
+      result.thinking
+      #=> "The user greeted me, I should respond warmly..."
+
+      # Access usage metadata
+      result.usage
+      #=> %{input_tokens: 10, output_tokens: 5, total_tokens: 15}
+
   """
-  @spec call(module(), keyword() | map()) :: {:ok, struct()} | {:error, term()}
+  @spec call(module(), keyword() | map()) :: {:ok, AshAgent.Result.t()} | {:error, term()}
   def call(module, args) do
     call(module, args, [])
   end
 
-  @spec call(module(), keyword() | map(), keyword() | map()) :: {:ok, struct()} | {:error, term()}
+  @spec call(module(), keyword() | map(), keyword() | map()) ::
+          {:ok, AshAgent.Result.t()} | {:error, term()}
   def call(module, args, runtime_opts) do
     case resolve_tool_runtime(module) do
       {:delegate, tool_runtime} ->
@@ -111,12 +120,12 @@ defmodule AshAgent.Runtime do
 
   See `call/2` for usage examples.
   """
-  @spec call!(module(), keyword() | map()) :: struct() | no_return()
+  @spec call!(module(), keyword() | map()) :: AshAgent.Result.t() | no_return()
   def call!(module, args) do
     call!(module, args, [])
   end
 
-  @spec call!(module(), keyword() | map(), keyword() | map()) :: struct() | no_return()
+  @spec call!(module(), keyword() | map(), keyword() | map()) :: AshAgent.Result.t() | no_return()
   def call!(module, args, runtime_opts) do
     case call(module, args, runtime_opts) do
       {:ok, result} -> result
@@ -127,17 +136,30 @@ defmodule AshAgent.Runtime do
   @doc """
   Streams an agent response with the given arguments.
 
-  Returns `{:ok, stream}` where stream yields partial results as they arrive,
+  Returns `{:ok, stream}` where stream yields tagged chunks as they arrive,
   or `{:error, reason}` on failure.
+
+  ## Tagged Chunk Types
+
+  - `{:thinking, text}` - thinking/reasoning content (if extended thinking is enabled)
+  - `{:content, struct}` - partial content struct as it's being generated
+  - `{:tool_call, chunk}` - tool call request from the model
+  - `{:done, result}` - final `AshAgent.Result` struct with full metadata
 
   ## Examples
 
-      # Stream responses
+      # Stream responses with tagged chunks
       {:ok, stream} = AshAgent.Runtime.stream(MyApp.ChatAgent, message: "Hello!")
 
       stream
-      |> Stream.each(fn partial_reply ->
-        IO.puts(partial_reply.content)
+      |> Stream.each(fn
+        {:thinking, text} ->
+          IO.puts("Thinking: \#{text}")
+        {:content, partial} ->
+          IO.puts("Content: \#{partial.content}")
+        {:done, result} ->
+          IO.puts("Final: \#{result.output.content}")
+          IO.puts("Thinking: \#{result.thinking}")
       end)
       |> Stream.run()
 
@@ -260,9 +282,15 @@ defmodule AshAgent.Runtime do
 
         case response_result do
           {:ok, response} ->
-            result = LLMClient.parse_response(config.output_type, response)
-            enriched_metadata = build_call_metadata(metadata, result, response, ctx)
-            {result, enriched_metadata}
+            case LLMClient.parse_response(config.output_type, response) do
+              {:ok, output} ->
+                result = LLMClient.build_result(output, response, config.provider)
+                enriched_metadata = build_call_metadata(metadata, {:ok, result}, response, ctx)
+                {{:ok, result}, enriched_metadata}
+
+              {:error, _} = error ->
+                {error, Map.put(metadata, :context, ctx)}
+            end
 
           error ->
             {error, Map.put(metadata, :context, ctx)}
@@ -330,20 +358,26 @@ defmodule AshAgent.Runtime do
         :telemetry.execute([:ash_agent, :stream, :start], %{}, base_metadata)
 
         stream_response
-        |> LLMClient.stream_to_structs(config.output_type)
+        |> LLMClient.stream_to_tagged_chunks(config.output_type, config.provider)
         |> Stream.transform(
           fn -> {0, nil} end,
-          fn chunk, {index, _last_chunk} ->
-            chunk_metadata = Map.put(base_metadata, :chunk, chunk)
-
+          fn tagged_chunk, {index, _last_result} ->
+            chunk_metadata = Map.put(base_metadata, :chunk, tagged_chunk)
             :telemetry.execute([:ash_agent, :stream, :chunk], %{index: index}, chunk_metadata)
-            {[chunk], {index + 1, chunk}}
+
+            case tagged_chunk do
+              {:done, result} ->
+                {[tagged_chunk], {index + 1, result}}
+
+              _ ->
+                {[tagged_chunk], {index + 1, nil}}
+            end
           end,
-          fn {_index, last_chunk} ->
+          fn {_index, last_result} ->
             summary_metadata =
               base_metadata
               |> Map.put(:status, :ok)
-              |> Map.put(:result, last_chunk)
+              |> Map.put(:result, last_result)
               |> maybe_put_usage(config.provider, stream_response)
 
             :telemetry.execute([:ash_agent, :stream, :summary], %{}, summary_metadata)

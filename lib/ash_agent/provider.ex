@@ -233,5 +233,47 @@ defmodule AshAgent.Provider do
   @callback extract_tool_calls(response :: term()) ::
               {:ok, [map()]} | {:error, term()} | :default
 
-  @optional_callbacks [introspect: 0, extract_content: 1, extract_tool_calls: 1]
+  @doc """
+  Optional: Extract thinking/reasoning content from a provider response.
+
+  Allows providers to customize how thinking content is extracted from their responses.
+  This is useful for providers that support extended thinking features, such as
+  Claude with reasoning_effort or OpenAI o1/o3 models.
+
+  If not implemented, the default extraction logic will be used (checking known
+  response types like ReqLLM.Response for thinking content).
+
+  ## Parameters
+
+  - `response` - The provider-specific response object
+
+  ## Returns
+
+  - `String.t()` - The thinking/reasoning content
+  - `nil` - No thinking content available
+  - `:default` - Use default extraction logic
+
+  ## Example
+
+      @impl true
+      def extract_thinking(%ReqLLM.Response{} = response) do
+        case ReqLLM.Response.thinking(response) do
+          "" -> nil
+          nil -> nil
+          text -> text
+        end
+      end
+
+      def extract_thinking(_response) do
+        :default
+      end
+  """
+  @callback extract_thinking(response :: term()) :: String.t() | nil | :default
+
+  @optional_callbacks [
+    introspect: 0,
+    extract_content: 1,
+    extract_tool_calls: 1,
+    extract_thinking: 1
+  ]
 end

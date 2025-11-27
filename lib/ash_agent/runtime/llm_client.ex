@@ -27,6 +27,7 @@ defmodule AshAgent.Runtime.LLMClient do
 
   alias AshAgent.Error
   alias AshAgent.ProviderRegistry
+  alias AshAgent.Result
   alias ReqLLM.StreamResponse
   require Logger
 
@@ -240,6 +241,143 @@ defmodule AshAgent.Runtime.LLMClient do
     end
   end
 
+  @doc """
+  Converts a stream response to tagged chunks for rich streaming.
+
+  Returns an Enumerable that yields tagged tuples:
+  - `{:thinking, text}` - thinking/reasoning content chunks
+  - `{:content, struct}` - parsed content struct chunks
+  - `{:done, result}` - final Result struct with full metadata
+
+  ## Example
+
+      {:ok, stream} = AshAgent.Runtime.stream(MyAgent, input: "Hello")
+      Enum.each(stream, fn
+        {:thinking, text} -> IO.puts("Thinking: \#{text}")
+        {:content, struct} -> IO.puts("Content: \#{inspect(struct)}")
+        {:done, result} -> IO.puts("Done! Final: \#{inspect(result.output)}")
+      end)
+
+  """
+  def stream_to_tagged_chunks(stream_response, output_module, provider) do
+    if enumerable_stream?(stream_response) do
+      state_ref = make_ref()
+      Process.put({__MODULE__, state_ref}, {nil, nil})
+
+      tagged_stream =
+        stream_response
+        |> Stream.flat_map(&tag_chunk(&1, output_module))
+        |> Stream.map(fn chunk ->
+          {last_content, accumulated_thinking} = Process.get({__MODULE__, state_ref}, {nil, nil})
+
+          case chunk do
+            {:thinking, text} ->
+              new_thinking = (accumulated_thinking || "") <> text
+              Process.put({__MODULE__, state_ref}, {last_content, new_thinking})
+
+            {:content, struct} ->
+              Process.put({__MODULE__, state_ref}, {struct, accumulated_thinking})
+
+            _ ->
+              :ok
+          end
+
+          chunk
+        end)
+
+      done_stream =
+        Stream.resource(
+          fn -> nil end,
+          fn
+            nil ->
+              {last_content, accumulated_thinking} =
+                Process.get({__MODULE__, state_ref}, {nil, nil})
+
+              Process.delete({__MODULE__, state_ref})
+
+              if last_content do
+                result = %Result{
+                  output: last_content,
+                  thinking: accumulated_thinking,
+                  usage: nil,
+                  model: nil,
+                  finish_reason: nil,
+                  raw_response: stream_response
+                }
+
+                {[{:done, result}], :done}
+              else
+                {:halt, :done}
+              end
+
+            :done ->
+              {:halt, :done}
+          end,
+          fn _ -> :ok end
+        )
+
+      Stream.concat(tagged_stream, done_stream)
+    else
+      state_ref = make_ref()
+      Process.put({__MODULE__, state_ref}, {nil, nil})
+
+      content_stream =
+        stream_response
+        |> stream_to_structs(output_module)
+        |> Stream.map(fn chunk ->
+          Process.put({__MODULE__, state_ref}, {chunk, nil})
+          {:content, chunk}
+        end)
+
+      done_stream =
+        Stream.resource(
+          fn -> nil end,
+          fn
+            nil ->
+              {last_content, _thinking} = Process.get({__MODULE__, state_ref}, {nil, nil})
+              Process.delete({__MODULE__, state_ref})
+
+              if last_content do
+                result = build_result(last_content, stream_response, provider)
+                {[{:done, result}], :done}
+              else
+                {:halt, :done}
+              end
+
+            :done ->
+              {:halt, :done}
+          end,
+          fn _ -> :ok end
+        )
+
+      Stream.concat(content_stream, done_stream)
+    end
+  end
+
+  defp tag_chunk(%ReqLLM.StreamChunk{type: :thinking} = chunk, _output_module) do
+    thinking_text = Map.get(chunk, :text) || Map.get(chunk, :thinking, "")
+    [{:thinking, thinking_text}]
+  end
+
+  defp tag_chunk(%ReqLLM.StreamChunk{type: :content} = chunk, output_module) do
+    case parse_response(output_module, chunk) do
+      {:ok, struct} -> [{:content, struct}]
+      {:error, _} -> [{:content, chunk}]
+    end
+  end
+
+  defp tag_chunk(%ReqLLM.StreamChunk{type: :meta}, _output_module), do: []
+
+  defp tag_chunk(%ReqLLM.StreamChunk{type: :tool_call} = chunk, _output_module),
+    do: [{:tool_call, chunk}]
+
+  defp tag_chunk(chunk, output_module) do
+    case parse_response(output_module, chunk) do
+      {:ok, struct} -> [{:content, struct}]
+      {:error, _} -> [{:content, chunk}]
+    end
+  end
+
   defp parse_stream_chunk(chunk, output_module) do
     case parse_response(output_module, chunk) do
       {:ok, struct} -> struct
@@ -348,4 +486,90 @@ defmodule AshAgent.Runtime.LLMClient do
   defp map_usage(%{usage: usage}) when is_map(usage), do: usage
   defp map_usage(%{"usage" => usage}) when is_map(usage), do: usage
   defp map_usage(_), do: nil
+
+  @doc """
+  Builds an AshAgent.Result from a parsed output and provider response.
+
+  Extracts thinking, usage, model, and finish_reason from the provider response
+  and wraps everything in a Result struct.
+
+  ## Parameters
+
+  - `output` - The parsed output struct
+  - `provider_response` - The raw response from the provider
+  - `provider` - The provider module or atom
+
+  ## Returns
+
+  An `%AshAgent.Result{}` struct with the output and extracted metadata.
+  """
+  def build_result(output, provider_response, provider) do
+    %Result{
+      output: output,
+      thinking: extract_thinking_from_provider(provider, provider_response),
+      usage: response_usage(provider, provider_response),
+      model: extract_model(provider_response),
+      finish_reason: extract_finish_reason(provider_response),
+      raw_response: provider_response
+    }
+  end
+
+  @doc """
+  Extracts thinking content from a provider response using the provider's callback.
+
+  Falls back to default extraction logic if the provider returns `:default`.
+  """
+  def extract_thinking_from_provider(provider, response) do
+    provider_module = resolve_provider_module(provider)
+
+    if provider_module && function_exported?(provider_module, :extract_thinking, 1) do
+      case provider_module.extract_thinking(response) do
+        :default -> default_extract_thinking(response)
+        thinking -> thinking
+      end
+    else
+      default_extract_thinking(response)
+    end
+  end
+
+  defp default_extract_thinking(%ReqLLM.Response{} = response) do
+    case ReqLLM.Response.thinking(response) do
+      "" -> nil
+      nil -> nil
+      text -> text
+    end
+  end
+
+  defp default_extract_thinking(%{thinking: thinking}) when is_binary(thinking), do: thinking
+  defp default_extract_thinking(%{"thinking" => thinking}) when is_binary(thinking), do: thinking
+  defp default_extract_thinking(_), do: nil
+
+  defp extract_model(%ReqLLM.Response{model: model}) when is_binary(model), do: model
+  defp extract_model(%ReqLLM.Response{}), do: nil
+  defp extract_model(%{model: model}) when is_binary(model), do: model
+  defp extract_model(%{"model" => model}) when is_binary(model), do: model
+  defp extract_model(_), do: nil
+
+  defp extract_finish_reason(%ReqLLM.Response{} = response) do
+    ReqLLM.Response.finish_reason(response)
+  end
+
+  defp extract_finish_reason(%{finish_reason: reason}) when is_atom(reason), do: reason
+
+  defp extract_finish_reason(%{finish_reason: reason}) when is_binary(reason),
+    do: String.to_atom(reason)
+
+  defp extract_finish_reason(%{"finish_reason" => reason}) when is_binary(reason),
+    do: String.to_atom(reason)
+
+  defp extract_finish_reason(_), do: nil
+
+  defp resolve_provider_module(provider) when is_atom(provider) do
+    case ProviderRegistry.resolve(provider) do
+      {:ok, module} -> module
+      _ -> nil
+    end
+  end
+
+  defp resolve_provider_module(_), do: nil
 end

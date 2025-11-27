@@ -417,6 +417,9 @@ defmodule AshAgent.Providers.Baml do
 
   def extract_tool_calls(_response), do: :default
 
+  @impl true
+  def extract_thinking(_response), do: nil
+
   # Private helpers for BAML-specific extraction
 
   defp tool_call_struct?(struct_name, struct_map) do

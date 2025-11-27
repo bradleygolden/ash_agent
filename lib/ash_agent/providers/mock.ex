@@ -57,6 +57,10 @@ defmodule AshAgent.Providers.Mock do
     }
   end
 
+  @impl true
+  def extract_thinking(%{thinking: thinking}) when is_binary(thinking), do: thinking
+  def extract_thinking(_response), do: nil
+
   defp default_response do
     %{"message" => "This is a mock response"}
   end
