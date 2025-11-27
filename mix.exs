@@ -143,12 +143,12 @@ defmodule AshAgent.MixProject do
 
   defp ash_baml_dep do
     if hex_build?() do
-      [version: "~> 0.1.0", optional: true]
+      [version: "~> 0.2.0", optional: true]
     else
       if local_dep?(:ash_baml) do
         [in_umbrella: true]
       else
-        [version: "~> 0.1.0", optional: true]
+        [version: "~> 0.2.0", optional: true]
       end
     end
   end
