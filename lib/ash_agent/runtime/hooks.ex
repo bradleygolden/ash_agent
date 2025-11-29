@@ -43,7 +43,7 @@ defmodule AshAgent.Runtime.Hooks do
 
       agent do
         client "anthropic:claude-sonnet-4-20250514"
-        output MyOutput
+        output_schema Zoi.object(%{content: Zoi.string()}, coerce: true)
         prompt "..."
         hooks MyApp.AgentHooks
       end

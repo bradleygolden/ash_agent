@@ -5,9 +5,9 @@ defmodule AshAgent.Runtime do
   This module handles the execution of agent calls by:
   1. Reading agent configuration from the DSL
   2. Rendering prompt templates with provided arguments
-  3. Converting TypedStruct definitions to LLM schemas
+  3. Using Zoi schemas for LLM structured output
   4. Calling the configured LLM provider to generate or stream responses
-  5. Parsing and returning structured results
+  5. Parsing and validating responses with Zoi
   6. Automatically delegating to extended runtimes (like `ash_agent_tools`) when needed
 
   ## Extension Architecture
@@ -30,7 +30,6 @@ defmodule AshAgent.Runtime do
 
   alias AshAgent.{Error, Info, ProviderRegistry}
   alias AshAgent.Runtime.{Hooks, LLMClient, PromptRenderer}
-  alias AshAgent.SchemaConverter
   alias AshAgent.Telemetry
   alias ReqLLM.Response
   alias Spark.Dsl.Extension
@@ -49,22 +48,14 @@ defmodule AshAgent.Runtime do
           domain: MyApp.Domain,
           extensions: [AshAgent.Resource]
 
-        defmodule Reply do
-          use Ash.TypedStruct
-
-          typed_struct do
-            field :content, :string, enforce: true
-          end
-        end
-
         agent do
           client "anthropic:claude-3-5-sonnet"
-          output Reply
-          prompt "You are a helpful assistant. Reply to: {{ message }}"
-        end
 
-        input do
-          argument :message, :string
+          output_schema Zoi.object(%{
+            content: Zoi.string()
+          }, coerce: true)
+
+          prompt "You are a helpful assistant. Reply to: {{ message }}"
         end
       end
 
@@ -344,7 +335,7 @@ defmodule AshAgent.Runtime do
         :telemetry.execute([:ash_agent, :stream, :start], %{}, base_metadata)
 
         stream_response
-        |> LLMClient.stream_to_tagged_chunks(config.output_type, config.provider)
+        |> LLMClient.stream_to_tagged_chunks(config.output_schema, config.provider)
         |> Stream.transform(
           fn -> {0, nil} end,
           fn tagged_chunk, {index, _last_result} ->
@@ -455,22 +446,12 @@ defmodule AshAgent.Runtime do
   end
 
   defp build_schema(config) do
-    case config.output_type do
+    case config.output_schema do
       nil ->
-        {:error, Error.schema_error("No output type configured", %{})}
+        {:error, Error.schema_error("No output schema configured", %{})}
 
-      primitive when primitive in [:string, :integer, :float, :boolean] ->
-        {:ok, nil}
-
-      type_module ->
-        schema = SchemaConverter.to_req_llm_schema(type_module)
-
-        if is_list(schema) do
-          {:ok, schema}
-        else
-          {:error,
-           Error.schema_error("Invalid schema format", %{type: type_module, result: schema})}
-        end
+      schema ->
+        {:ok, schema}
     end
   end
 
@@ -480,7 +461,7 @@ defmodule AshAgent.Runtime do
       client: config.client,
       provider: config.provider,
       type: type,
-      output_type: config.output_type
+      output_schema: config.output_schema
     }
   end
 
@@ -524,7 +505,7 @@ defmodule AshAgent.Runtime do
   defp track_stream_chunk(tagged_chunk, index), do: {[tagged_chunk], {index + 1, nil}}
 
   defp handle_call_response({:ok, response}, config, metadata, ctx) do
-    case LLMClient.parse_response(config.output_type, response) do
+    case LLMClient.parse_response(config.output_schema, response) do
       {:ok, output} ->
         result = LLMClient.build_result(output, response, config.provider)
         enriched_metadata = build_call_metadata(metadata, {:ok, result}, response, ctx)

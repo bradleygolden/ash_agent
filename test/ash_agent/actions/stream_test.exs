@@ -8,15 +8,6 @@ defmodule AshAgent.Actions.StreamTest do
 
   alias AshAgent.Actions.Stream, as: StreamAction
 
-  defmodule StreamOutput do
-    @moduledoc false
-    use Ash.TypedStruct
-
-    typed_struct do
-      field :content, :string, allow_nil?: false
-    end
-  end
-
   defmodule StreamMockProvider do
     @behaviour AshAgent.Provider
 
@@ -47,7 +38,7 @@ defmodule AshAgent.Actions.StreamTest do
     agent do
       provider StreamMockProvider
       client :mock
-      output StreamOutput
+      output_schema(Zoi.object(%{content: Zoi.string()}, coerce: true))
       prompt "Test stream prompt"
     end
   end
@@ -80,11 +71,11 @@ defmodule AshAgent.Actions.StreamTest do
       done_chunks = Enum.filter(results, &match?({:done, _}, &1))
 
       assert length(content_chunks) == 2
-      assert {:content, %StreamOutput{content: "chunk1"}} = Enum.at(content_chunks, 0)
-      assert {:content, %StreamOutput{content: "chunk2"}} = Enum.at(content_chunks, 1)
+      assert {:content, %{content: "chunk1"}} = Enum.at(content_chunks, 0)
+      assert {:content, %{content: "chunk2"}} = Enum.at(content_chunks, 1)
 
       assert length(done_chunks) == 1
-      assert {:done, %AshAgent.Result{output: %StreamOutput{}}} = Enum.at(done_chunks, 0)
+      assert {:done, %AshAgent.Result{output: %{content: _}}} = Enum.at(done_chunks, 0)
     end
 
     test "passes arguments through to runtime" do

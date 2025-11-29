@@ -5,7 +5,6 @@ defmodule AshAgent.ResourceTest do
   alias Ash.Resource.Info, as: ResourceInfo
   alias Spark.Dsl.Extension
 
-  # Define test resources upfront so they can be registered in TestDomain
   defmodule TestChatAgent do
     use Ash.Resource, domain: __MODULE__.TestDomain, extensions: [AshAgent.Resource]
 
@@ -13,17 +12,9 @@ defmodule AshAgent.ResourceTest do
       require_primary_key? false
     end
 
-    defmodule Reply do
-      use Ash.TypedStruct
-
-      typed_struct do
-        field :content, :string, allow_nil?: false
-      end
-    end
-
     agent do
       client("anthropic:claude-3-5-sonnet", temperature: 0.5, max_tokens: 50)
-      output(Reply)
+      output_schema(Zoi.object(%{content: Zoi.string()}, coerce: true))
       prompt("Test prompt")
     end
   end
@@ -35,17 +26,9 @@ defmodule AshAgent.ResourceTest do
       require_primary_key? false
     end
 
-    defmodule Reply do
-      use Ash.TypedStruct
-
-      typed_struct do
-        field :content, :string
-      end
-    end
-
     agent do
       client("anthropic:claude-3-5-sonnet")
-      output(Reply)
+      output_schema(Zoi.object(%{content: Zoi.string()}, coerce: true))
       prompt("Test")
     end
   end
@@ -58,17 +41,9 @@ defmodule AshAgent.ResourceTest do
       require_primary_key? false
     end
 
-    defmodule Reply do
-      use Ash.TypedStruct
-
-      typed_struct do
-        field :message, :string
-      end
-    end
-
     agent do
       client("anthropic:claude-3-5-sonnet")
-      output(Reply)
+      output_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       prompt(~p"Hello {{ name }}")
     end
   end

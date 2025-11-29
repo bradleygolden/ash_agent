@@ -3,29 +3,36 @@ defmodule AshAgent.Runtime.LLMClientTest do
 
   alias AshAgent.Error
   alias AshAgent.Runtime.LLMClient
-  alias AshAgent.Test.TestAgents
 
-  defmodule TempStruct do
-    defstruct [:message]
-  end
-
-  describe "parse_response/2 with map response" do
-    test "parses map with string keys to struct" do
+  describe "parse_response/2 with Zoi schemas" do
+    test "parses map with string keys using Zoi schema" do
+      schema = Zoi.object(%{message: Zoi.string()}, coerce: true)
       response = %{"message" => "Hello"}
 
-      assert {:ok, struct} = LLMClient.parse_response(TestAgents.SimpleOutput, response)
-      assert %TestAgents.SimpleOutput{} = struct
-      assert struct.message == "Hello"
+      assert {:ok, result} = LLMClient.parse_response(schema, response)
+      assert result.message == "Hello"
     end
 
-    test "parses map with atom keys to struct" do
+    test "parses map with atom keys using Zoi schema" do
+      schema = Zoi.object(%{message: Zoi.string()}, coerce: true)
       response = %{message: "Hello"}
 
-      assert {:ok, struct} = LLMClient.parse_response(TestAgents.SimpleOutput, response)
-      assert struct.message == "Hello"
+      assert {:ok, result} = LLMClient.parse_response(schema, response)
+      assert result.message == "Hello"
     end
 
-    test "parses complex response to struct" do
+    test "parses complex response with Zoi schema" do
+      schema =
+        Zoi.object(
+          %{
+            title: Zoi.string(),
+            description: Zoi.string() |> Zoi.optional(),
+            score: Zoi.float() |> Zoi.optional(),
+            tags: Zoi.list(Zoi.string()) |> Zoi.optional()
+          },
+          coerce: true
+        )
+
       response = %{
         "title" => "Test Title",
         "description" => "Test description",
@@ -33,42 +40,71 @@ defmodule AshAgent.Runtime.LLMClientTest do
         "tags" => ["elixir", "test"]
       }
 
-      assert {:ok, struct} = LLMClient.parse_response(TestAgents.ComplexOutput, response)
-      assert %TestAgents.ComplexOutput{} = struct
-      assert struct.title == "Test Title"
-      assert struct.description == "Test description"
-      assert struct.score == 0.95
-      assert struct.tags == ["elixir", "test"]
+      assert {:ok, result} = LLMClient.parse_response(schema, response)
+      assert result.title == "Test Title"
+      assert result.description == "Test description"
+      assert result.score == 0.95
+      assert result.tags == ["elixir", "test"]
     end
 
-    test "returns error for non-existent atom keys" do
-      unique_key = "nonexistent_key_#{System.unique_integer([:positive])}"
-      response = %{unique_key => "value"}
+    test "returns error for invalid data" do
+      schema = Zoi.object(%{message: Zoi.string()}, coerce: true)
+      response = %{"message" => 123}
 
-      assert {:error, %Error{type: :parse_error}} =
-               LLMClient.parse_response(TestAgents.SimpleOutput, response)
+      assert {:error, %Error{type: :parse_error}} = LLMClient.parse_response(schema, response)
     end
 
-    test "ignores extra atom keys and creates struct with provided values" do
-      response = %{message: "hello", extra_atom_key: "ignored"}
+    test "handles optional fields" do
+      schema =
+        Zoi.object(
+          %{
+            required_field: Zoi.string(),
+            optional_field: Zoi.string() |> Zoi.optional()
+          },
+          coerce: true
+        )
 
-      assert {:ok, struct} = LLMClient.parse_response(TestAgents.SimpleOutput, response)
-      assert %TestAgents.SimpleOutput{message: "hello"} = struct
+      response = %{"required_field" => "hello"}
+
+      assert {:ok, result} = LLMClient.parse_response(schema, response)
+      assert result.required_field == "hello"
+      assert Map.get(result, :optional_field) == nil
     end
   end
 
-  describe "parse_response/2 with struct response" do
-    test "returns struct directly if already the output type" do
-      struct = %TestAgents.SimpleOutput{message: "Already a struct"}
-
-      assert {:ok, ^struct} = LLMClient.parse_response(TestAgents.SimpleOutput, struct)
+  describe "parse_response/2 with primitive types" do
+    test "parses string primitive" do
+      response = %{text: "Hello world"}
+      assert {:ok, "Hello world"} = LLMClient.parse_response(:string, response)
     end
 
-    test "converts different struct to output type" do
-      response = %TempStruct{message: "From different struct"}
+    test "parses integer primitive" do
+      response = %{text: "42"}
+      assert {:ok, 42} = LLMClient.parse_response(:integer, response)
+    end
 
-      assert {:ok, struct} = LLMClient.parse_response(TestAgents.SimpleOutput, response)
-      assert struct.message == "From different struct"
+    test "parses float primitive" do
+      response = %{text: "3.14"}
+      assert {:ok, 3.14} = LLMClient.parse_response(:float, response)
+    end
+
+    test "parses boolean primitive" do
+      assert {:ok, true} = LLMClient.parse_response(:boolean, %{text: "true"})
+      assert {:ok, false} = LLMClient.parse_response(:boolean, %{text: "false"})
+    end
+  end
+
+  describe "parse_response/2 error handling" do
+    test "returns error for nil response" do
+      schema = Zoi.object(%{message: Zoi.string()}, coerce: true)
+      assert {:error, %Error{type: :parse_error}} = LLMClient.parse_response(schema, nil)
+    end
+
+    test "returns error for string response with object schema" do
+      schema = Zoi.object(%{message: Zoi.string()}, coerce: true)
+
+      assert {:error, %Error{type: :parse_error}} =
+               LLMClient.parse_response(schema, "plain string")
     end
   end
 
@@ -116,32 +152,34 @@ defmodule AshAgent.Runtime.LLMClientTest do
 
   describe "stream_to_structs/2" do
     test "returns a stream" do
-      # Create a simple stream
+      schema = Zoi.object(%{message: Zoi.string()}, coerce: true)
       input_stream = Stream.map([%{message: "a"}, %{message: "b"}], & &1)
 
-      result = LLMClient.stream_to_structs(input_stream, TestAgents.SimpleOutput)
+      result = LLMClient.stream_to_structs(input_stream, schema)
       assert %Stream{} = result
     end
 
-    test "converts stream elements to structs" do
+    test "converts stream elements using Zoi schema" do
+      schema = Zoi.object(%{message: Zoi.string()}, coerce: true)
       input_stream = Stream.map([%{"message" => "a"}, %{"message" => "b"}], & &1)
 
       result =
         input_stream
-        |> LLMClient.stream_to_structs(TestAgents.SimpleOutput)
+        |> LLMClient.stream_to_structs(schema)
         |> Enum.to_list()
 
       assert length(result) == 2
-      assert Enum.all?(result, &match?(%TestAgents.SimpleOutput{}, &1))
+      assert Enum.all?(result, &match?(%{message: _}, &1))
     end
 
     test "handles function stream" do
-      # Function-based stream
+      schema = Zoi.object(%{message: Zoi.string()}, coerce: true)
+
       stream_fn = fn acc, _fun ->
         {:suspended, acc, fn _ -> {:done, []} end}
       end
 
-      result = LLMClient.stream_to_structs(stream_fn, TestAgents.SimpleOutput)
+      result = LLMClient.stream_to_structs(stream_fn, schema)
       assert is_struct(result, Stream) or is_function(result, 2)
     end
   end

@@ -98,38 +98,27 @@ defmodule AshAgent.Runtime.LLMClient do
   end
 
   @doc """
-  Converts a ReqLLM response to an instance of the output TypedStruct.
+  Validates and parses an LLM response using a Zoi schema.
 
-  Returns `{:ok, struct}` with the built TypedStruct, or `{:error, reason}`.
+  Returns `{:ok, validated_data}` with the parsed result, or `{:error, reason}`.
 
-  ## String Key Conversion
+  ## Zoi Schema Validation
 
-  When the response contains string keys, they are converted to atoms using
-  `String.to_existing_atom/1`. This has important implications:
-
-  - **If the atom exists**: The key is converted and included. If it's not a
-    field in the struct, `Kernel.struct/2` silently ignores it.
-  - **If the atom doesn't exist**: An `ArgumentError` is raised, caught, and
-    returned as `{:error, %Error{type: :parse_error}}`.
-
-  This means parsing behavior depends on which atoms exist in the VM at runtime.
-  In tests, atoms defined in test modules may cause different behavior than in
-  production. For deterministic testing of unknown key handling, use unique
-  strings that are guaranteed not to exist as atoms (e.g., UUID-based keys).
+  Responses are validated and coerced using Zoi schemas. When using schemas
+  with `coerce: true`, string keys from LLM responses are automatically
+  converted to atoms and validated against the schema.
 
   ## Examples
 
-      # Successful parsing with known fields
-      iex> parse_response(MyOutput, %{"name" => "test", "value" => 42})
-      {:ok, %MyOutput{name: "test", value: 42}}
+      # Successful parsing with Zoi schema
+      schema = Zoi.object(%{name: Zoi.string(), value: Zoi.integer()}, coerce: true)
+      iex> parse_response(schema, %{"name" => "test", "value" => 42})
+      {:ok, %{name: "test", value: 42}}
 
-      # Extra fields are ignored when their atoms exist
-      iex> parse_response(MyOutput, %{name: "test", extra: "ignored"})
-      {:ok, %MyOutput{name: "test"}}
-
-      # Unknown string keys cause errors if atom doesn't exist
-      iex> parse_response(MyOutput, %{"nonexistent_key_abc123" => "value"})
-      {:error, %Error{type: :parse_error}}
+      # Schema with struct conversion
+      schema = Zoi.object(%{content: Zoi.string()}, coerce: true) |> Zoi.to_struct(Reply)
+      iex> parse_response(schema, %{"content" => "Hello"})
+      {:ok, %Reply{content: "Hello"}}
 
   """
   def parse_response(output_type, response)
@@ -140,15 +129,12 @@ defmodule AshAgent.Runtime.LLMClient do
     end
   end
 
-  def parse_response(output_module, %_{} = response) do
+  def parse_response(output_schema, %_{} = response) do
     cond do
-      response.__struct__ == output_module ->
-        {:ok, response}
-
       match?(%ReqLLM.Response{}, response) ->
         case ReqLLM.Response.unwrap_object(response) do
           {:ok, object} when is_map(object) ->
-            build_typed_struct(output_module, object)
+            parse_with_zoi(output_schema, object)
 
           {:error, reason} ->
             {:error,
@@ -158,27 +144,27 @@ defmodule AshAgent.Runtime.LLMClient do
         end
 
       match?(%AshBaml.Response{}, response) ->
-        parse_response(output_module, AshBaml.Response.unwrap(response))
+        parse_response(output_schema, AshBaml.Response.unwrap(response))
 
       true ->
         struct_map = Map.from_struct(response)
-        build_typed_struct(output_module, struct_map)
+        parse_with_zoi(output_schema, struct_map)
     end
   rescue
     e ->
       {:error,
        Error.parse_error("Failed to parse provider response", %{
-         expected: output_module,
+         expected: output_schema,
          response: response,
          exception: e
        })}
   end
 
-  def parse_response(output_module, %{} = response) do
-    build_typed_struct(output_module, response)
+  def parse_response(output_schema, %{} = response) do
+    parse_with_zoi(output_schema, response)
   end
 
-  def parse_response(_output_module, nil) do
+  def parse_response(_output_schema, nil) do
     {:error, Error.parse_error("Cannot parse nil response", %{response: nil})}
   end
 
@@ -187,31 +173,31 @@ defmodule AshAgent.Runtime.LLMClient do
     parse_response(output_type, %{text: response})
   end
 
-  def parse_response(_output_module, response) when is_binary(response) do
+  def parse_response(_output_schema, response) when is_binary(response) do
     {:error, Error.parse_error("Cannot parse string response directly", %{response: response})}
   end
 
-  def parse_response(output_module, %ReqLLM.Response{} = response) do
+  def parse_response(output_schema, %ReqLLM.Response{} = response) do
     object_data = ReqLLM.Response.object(response)
-    build_typed_struct(output_module, object_data)
+    parse_with_zoi(output_schema, object_data)
   end
 
-  def parse_response(_output_module, response) do
+  def parse_response(_output_schema, response) do
     {:error, Error.parse_error("Unsupported response type", %{response: response})}
   end
 
   @doc """
   Converts a ReqLLM stream response to a stream of parsed objects.
 
-  Returns an Enumerable that yields parsed TypedStruct instances.
+  Returns an Enumerable that yields validated data using the Zoi schema.
   """
-  def stream_to_structs(stream_response, output_module) do
+  def stream_to_structs(stream_response, output_schema) do
     if enumerable_stream?(stream_response) do
-      Stream.map(stream_response, &parse_stream_chunk(&1, output_module))
+      Stream.map(stream_response, &parse_stream_chunk(&1, output_schema))
     else
       Stream.resource(
         fn -> stream_response end,
-        &stream_next(&1, output_module),
+        &stream_next(&1, output_schema),
         &stream_cleanup/1
       )
     end
@@ -222,7 +208,7 @@ defmodule AshAgent.Runtime.LLMClient do
 
   Returns an Enumerable that yields tagged tuples:
   - `{:thinking, text}` - thinking/reasoning content chunks
-  - `{:content, struct}` - parsed content struct chunks
+  - `{:content, data}` - parsed content chunks validated by Zoi schema
   - `{:done, result}` - final Result struct with full metadata
 
   ## Example
@@ -230,12 +216,12 @@ defmodule AshAgent.Runtime.LLMClient do
       {:ok, stream} = AshAgent.Runtime.stream(MyAgent, input: "Hello")
       Enum.each(stream, fn
         {:thinking, text} -> IO.puts("Thinking: \#{text}")
-        {:content, struct} -> IO.puts("Content: \#{inspect(struct)}")
+        {:content, data} -> IO.puts("Content: \#{inspect(data)}")
         {:done, result} -> IO.puts("Done! Final: \#{inspect(result.output)}")
       end)
 
   """
-  def stream_to_tagged_chunks(stream_response, output_module, provider) do
+  def stream_to_tagged_chunks(stream_response, output_schema, provider) do
     actual_stream = extract_enumerable_stream(stream_response)
 
     if actual_stream do
@@ -244,7 +230,7 @@ defmodule AshAgent.Runtime.LLMClient do
 
       tagged_stream =
         actual_stream
-        |> Stream.flat_map(&tag_chunk(&1, output_module))
+        |> Stream.flat_map(&tag_chunk(&1, output_schema))
         |> Stream.map(fn chunk ->
           {last_content, accumulated_thinking} = Process.get({__MODULE__, state_ref}, {nil, nil})
           accumulate_chunk(state_ref, chunk, last_content, accumulated_thinking)
@@ -275,7 +261,7 @@ defmodule AshAgent.Runtime.LLMClient do
 
       content_stream =
         stream_response
-        |> stream_to_structs(output_module)
+        |> stream_to_structs(output_schema)
         |> Stream.map(fn chunk ->
           Process.put({__MODULE__, state_ref}, {chunk, nil})
           {:content, chunk}
@@ -357,43 +343,43 @@ defmodule AshAgent.Runtime.LLMClient do
     {[{:done, result}], :done}
   end
 
-  defp tag_chunk(%ReqLLM.StreamChunk{type: :thinking} = chunk, _output_module) do
+  defp tag_chunk(%ReqLLM.StreamChunk{type: :thinking} = chunk, _output_schema) do
     thinking_text = Map.get(chunk, :text) || Map.get(chunk, :thinking, "")
     [{:thinking, thinking_text}]
   end
 
-  defp tag_chunk(%ReqLLM.StreamChunk{type: :content} = chunk, output_module) do
-    case parse_response(output_module, chunk) do
-      {:ok, struct} -> [{:content, struct}]
+  defp tag_chunk(%ReqLLM.StreamChunk{type: :content} = chunk, output_schema) do
+    case parse_response(output_schema, chunk) do
+      {:ok, data} -> [{:content, data}]
       {:error, _} -> [{:content, chunk}]
     end
   end
 
-  defp tag_chunk(%ReqLLM.StreamChunk{type: :meta}, _output_module), do: []
+  defp tag_chunk(%ReqLLM.StreamChunk{type: :meta}, _output_schema), do: []
 
-  defp tag_chunk(%ReqLLM.StreamChunk{type: :tool_call} = chunk, _output_module),
+  defp tag_chunk(%ReqLLM.StreamChunk{type: :tool_call} = chunk, _output_schema),
     do: [{:tool_call, chunk}]
 
-  defp tag_chunk(chunk, output_module) do
-    case parse_response(output_module, chunk) do
-      {:ok, struct} -> [{:content, struct}]
+  defp tag_chunk(chunk, output_schema) do
+    case parse_response(output_schema, chunk) do
+      {:ok, data} -> [{:content, data}]
       {:error, _} -> [{:content, chunk}]
     end
   end
 
-  defp parse_stream_chunk(chunk, output_module) do
-    case parse_response(output_module, chunk) do
-      {:ok, struct} -> struct
+  defp parse_stream_chunk(chunk, output_schema) do
+    case parse_response(output_schema, chunk) do
+      {:ok, data} -> data
       {:error, _} -> chunk
     end
   end
 
-  defp stream_next(:done, _output_module), do: {:halt, :done}
+  defp stream_next(:done, _output_schema), do: {:halt, :done}
 
-  defp stream_next(response, output_module) do
+  defp stream_next(response, output_schema) do
     with {:ok, final_response} <- ReqLLM.StreamResponse.to_response(response),
-         {:ok, struct} <- parse_response(output_module, final_response) do
-      {[struct], :done}
+         {:ok, data} <- parse_response(output_schema, final_response) do
+      {[data], :done}
     else
       _ -> {:halt, response}
     end
@@ -418,20 +404,24 @@ defmodule AshAgent.Runtime.LLMClient do
     Keyword.merge(opts, test_opts)
   end
 
-  defp build_typed_struct(module, data) when is_map(data) do
-    atom_data =
-      for {k, v} <- data, into: %{} do
-        key = if is_binary(k), do: String.to_existing_atom(k), else: k
-        {key, v}
-      end
+  defp parse_with_zoi(schema, data) when is_map(data) do
+    case Zoi.parse(schema, data) do
+      {:ok, validated} ->
+        {:ok, validated}
 
-    struct = struct(module, atom_data)
-    {:ok, struct}
+      {:error, errors} ->
+        {:error,
+         Error.parse_error("Zoi validation failed", %{
+           schema: schema,
+           data: data,
+           errors: errors
+         })}
+    end
   rescue
     e ->
       {:error,
-       Error.parse_error("Failed to build struct from LLM response", %{
-         module: module,
+       Error.parse_error("Failed to parse with Zoi schema", %{
+         schema: schema,
          data: data,
          exception: e
        })}

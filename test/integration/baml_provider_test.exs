@@ -4,7 +4,6 @@ defmodule AshAgent.Providers.BamlProviderTest do
   @moduletag :integration
 
   alias AshAgent.Runtime
-  alias AshAgent.Test.BamlClient.Reply
 
   defmodule TestDomain do
     @moduledoc false
@@ -27,23 +26,18 @@ defmodule AshAgent.Providers.BamlProviderTest do
 
     agent do
       provider(:baml)
-      # Use direct module reference instead of configured client identifier
-      # This avoids coupling to ash_baml's application configuration
+
       client AshAgent.Test.BamlClient,
         function: :ChatAgent,
         client_module: AshAgent.Test.BamlClient
 
-      output Reply
-
-      input do
-        argument :message, :string
-      end
+      output_schema(Zoi.object(%{content: Zoi.string()}, coerce: true))
     end
   end
 
   describe "call/2 with :baml provider" do
     test "delegates to configured BAML function" do
-      assert {:ok, %Reply{content: "BAML reply: hello"}} =
+      assert {:ok, %AshAgent.Result{output: %{content: "BAML reply: hello"}}} =
                Runtime.call(Agent, message: "hello")
     end
   end
@@ -53,8 +47,9 @@ defmodule AshAgent.Providers.BamlProviderTest do
       assert {:ok, stream} = Runtime.stream(Agent, message: "one two")
 
       chunks = Enum.to_list(stream)
-      assert Enum.any?(chunks, &match?(%Reply{content: "one"}, &1))
-      assert List.last(chunks) == %Reply{content: "one two"}
+      content_chunks = Enum.filter(chunks, &match?({:content, _}, &1))
+      assert Enum.any?(content_chunks, &match?({:content, %{content: "one"}}, &1))
+      assert {:done, %AshAgent.Result{output: %{content: "one two"}}} = List.last(chunks)
     end
   end
 end

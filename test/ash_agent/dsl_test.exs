@@ -43,32 +43,6 @@ defmodule AshAgent.DSLTest do
     end
   end
 
-  describe "Argument struct" do
-    test "has expected fields" do
-      arg = %DSL.Argument{
-        name: :message,
-        type: :string,
-        allow_nil?: false,
-        default: nil,
-        doc: "The user message"
-      }
-
-      assert arg.name == :message
-      assert arg.type == :string
-      assert arg.allow_nil? == false
-      assert arg.default == nil
-      assert arg.doc == "The user message"
-    end
-
-    test "default values when not specified" do
-      arg = %DSL.Argument{name: :test, type: :string}
-
-      assert arg.allow_nil? == nil
-      assert arg.default == nil
-      assert arg.doc == nil
-    end
-  end
-
   describe "agent/0" do
     test "returns agent section definition" do
       agent_section = DSL.agent()
@@ -83,34 +57,26 @@ defmodule AshAgent.DSLTest do
 
       assert :provider in schema_keys
       assert :client in schema_keys
-      assert :output in schema_keys
+      assert :input_schema in schema_keys
+      assert :output_schema in schema_keys
       assert :prompt in schema_keys
       assert :hooks in schema_keys
       assert :token_budget in schema_keys
       assert :budget_strategy in schema_keys
     end
 
-    test "agent section contains input subsection" do
+    test "input_schema is optional" do
       agent_section = DSL.agent()
-      section_names = Enum.map(agent_section.sections, & &1.name)
+      input_schema_opt = Keyword.get(agent_section.schema, :input_schema)
 
-      assert :input in section_names
-    end
-  end
-
-  describe "input/0" do
-    test "returns input section definition" do
-      input_section = DSL.input()
-
-      assert %Spark.Dsl.Section{} = input_section
-      assert input_section.name == :input
+      assert input_schema_opt[:required] == false
     end
 
-    test "input section has argument entity" do
-      input_section = DSL.input()
-      entity_names = Enum.map(input_section.entities, & &1.name)
+    test "output_schema is required" do
+      agent_section = DSL.agent()
+      output_schema_opt = Keyword.get(agent_section.schema, :output_schema)
 
-      assert :argument in entity_names
+      assert output_schema_opt[:required] == true
     end
   end
 end

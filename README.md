@@ -19,19 +19,7 @@ end
 
 ## Quick Start
 
-### 1. Define an Output Type
-
-```elixir
-defmodule MyApp.Reply do
-  use Ash.TypedStruct
-
-  typed_struct do
-    field :content, :string, allow_nil?: false
-  end
-end
-```
-
-### 2. Define an Agent Resource
+### 1. Define an Agent Resource
 
 ```elixir
 defmodule MyApp.Assistant do
@@ -41,24 +29,21 @@ defmodule MyApp.Assistant do
 
   agent do
     client "anthropic:claude-sonnet-4-20250514"
-    output MyApp.Reply
+
+    input_schema Zoi.object(%{message: Zoi.string()}, coerce: true)
+
+    output_schema Zoi.object(%{content: Zoi.string()}, coerce: true)
 
     prompt ~p"""
     You are a helpful assistant.
 
-    {{ output_format }}
-
     User: {{ message }}
     """
-
-    input do
-      argument :message, :string, allow_nil?: false
-    end
   end
 end
 ```
 
-### 3. Configure Your Domain
+### 2. Configure Your Domain
 
 ```elixir
 defmodule MyApp.Agents do
@@ -86,7 +71,7 @@ end
 # Generates: MyApp.Agents.stream_assistant("Hello!")
 ```
 
-### 4. Call Your Agent
+### 3. Call Your Agent
 
 ```elixir
 # Via Ash action
@@ -112,28 +97,15 @@ Enum.each(stream, &IO.inspect/1)
 | Option | Type | Required | Description |
 |--------|------|----------|-------------|
 | `client` | string/atom | Yes | LLM provider and model (e.g., `"anthropic:claude-sonnet-4-20250514"`) |
-| `output` | module | Yes | `Ash.TypedStruct` module for response type |
+| `input_schema` | Zoi schema | No | Zoi schema for input validation (e.g., `Zoi.object(%{message: Zoi.string()}, coerce: true)`) |
+| `output_schema` | Zoi schema | Yes | Zoi schema for output validation and structured output enforcement |
 | `prompt` | string/template | Depends | Liquid template for system prompt. Use `~p` sigil for compile-time validation. Required unless provider declares `:prompt_optional`. |
 | `provider` | atom | No | LLM provider (`:req_llm` default, `:baml`, or custom module) |
 | `hooks` | module | No | Module implementing `AshAgent.Runtime.Hooks` behaviour |
 | `token_budget` | integer | No | Maximum tokens for agent execution |
 | `budget_strategy` | `:halt` or `:warn` | No | How to handle budget limits (default: `:warn`) |
 
-### `input` Section (Optional)
-
-Define input arguments that get passed to the prompt template:
-
-```elixir
-agent do
-  # ...
-  input do
-    argument :message, :string, allow_nil?: false
-    argument :context, :map, default: %{}
-  end
-end
-```
-
-If you don't define an `input` section, the agent accepts a single `input` map argument.
+Structured output is handled automatically by the provider—Zoi schemas are compiled to JSON Schema and passed to the LLM API.
 
 ## Provider Options
 
@@ -157,7 +129,7 @@ For structured outputs via [ash_baml](https://github.com/bradleygolden/ash_baml)
 agent do
   provider :baml
   client :my_client, function: :ChatAgent
-  output MyApp.BamlClient.Types.Response
+  output_schema Zoi.object(%{message: Zoi.string()}, coerce: true)
   # prompt is optional with BAML provider
 end
 ```

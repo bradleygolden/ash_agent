@@ -13,28 +13,23 @@ defmodule AshAgent.Runtime.LLMClientStreamingTest do
   alias AshAgent.Error
   alias AshAgent.Runtime.LLMClient
 
-  defmodule StreamableOutput do
-    @moduledoc false
-    use Ash.TypedStruct
-
-    typed_struct do
-      field :content, :string, allow_nil?: false
-      field :metadata, :map
-    end
-  end
-
-  defmodule PartialOutput do
-    @moduledoc false
-    use Ash.TypedStruct
-
-    typed_struct do
-      field :text, :string
-      field :complete, :boolean
-    end
-  end
+  @streamable_schema Zoi.object(
+                       %{
+                         content: Zoi.string(),
+                         metadata: Zoi.map() |> Zoi.nullable() |> Zoi.optional()
+                       },
+                       coerce: true
+                     )
+  @partial_schema Zoi.object(
+                    %{
+                      text: Zoi.string() |> Zoi.nullable() |> Zoi.optional(),
+                      complete: Zoi.boolean()
+                    },
+                    coerce: true
+                  )
 
   describe "stream_to_structs/2 with enumerable streams" do
-    test "converts stream of maps to stream of structs" do
+    test "converts stream of maps to validated maps" do
       input_stream =
         Stream.map(
           [
@@ -44,31 +39,29 @@ defmodule AshAgent.Runtime.LLMClientStreamingTest do
           & &1
         )
 
-      result_stream = LLMClient.stream_to_structs(input_stream, StreamableOutput)
+      result_stream = LLMClient.stream_to_structs(input_stream, @streamable_schema)
       results = Enum.to_list(result_stream)
 
       assert length(results) == 2
 
-      assert %StreamableOutput{content: "Hello", metadata: %{"key" => "value"}} =
-               Enum.at(results, 0)
-
-      assert %StreamableOutput{content: "World", metadata: nil} = Enum.at(results, 1)
+      assert %{content: "Hello", metadata: %{"key" => "value"}} = Enum.at(results, 0)
+      assert %{content: "World", metadata: nil} = Enum.at(results, 1)
     end
 
     test "handles stream with atom keys" do
       input_stream = Stream.map([%{content: "test", metadata: nil}], & &1)
 
-      result_stream = LLMClient.stream_to_structs(input_stream, StreamableOutput)
+      result_stream = LLMClient.stream_to_structs(input_stream, @streamable_schema)
       results = Enum.to_list(result_stream)
 
       assert length(results) == 1
-      assert %StreamableOutput{content: "test"} = hd(results)
+      assert %{content: "test"} = hd(results)
     end
 
     test "handles empty stream" do
       input_stream = Stream.map([], & &1)
 
-      result_stream = LLMClient.stream_to_structs(input_stream, StreamableOutput)
+      result_stream = LLMClient.stream_to_structs(input_stream, @streamable_schema)
       results = Enum.to_list(result_stream)
 
       assert results == []
@@ -77,7 +70,7 @@ defmodule AshAgent.Runtime.LLMClientStreamingTest do
     test "handles single element stream" do
       input_stream = Stream.map([%{"content" => "only"}], & &1)
 
-      result_stream = LLMClient.stream_to_structs(input_stream, StreamableOutput)
+      result_stream = LLMClient.stream_to_structs(input_stream, @streamable_schema)
       results = Enum.to_list(result_stream)
 
       assert length(results) == 1
@@ -92,15 +85,12 @@ defmodule AshAgent.Runtime.LLMClientStreamingTest do
           %{"content" => "item_#{i}"}
         end)
 
-      result_stream = LLMClient.stream_to_structs(input_stream, StreamableOutput)
+      result_stream = LLMClient.stream_to_structs(input_stream, @streamable_schema)
 
-      # No elements should be processed yet
       assert :counters.get(call_count, 1) == 0
 
-      # Take only 2 elements
       _results = Enum.take(result_stream, 2)
 
-      # Only 2 elements should have been processed
       assert :counters.get(call_count, 1) == 2
     end
 
@@ -116,15 +106,15 @@ defmodule AshAgent.Runtime.LLMClientStreamingTest do
           & &1
         )
 
-      result_stream = LLMClient.stream_to_structs(input_stream, StreamableOutput)
+      result_stream = LLMClient.stream_to_structs(input_stream, @streamable_schema)
       results = Enum.to_list(result_stream)
 
       assert length(results) == 2
-      assert %StreamableOutput{content: "valid"} = Enum.at(results, 0)
+      assert %{content: "valid"} = Enum.at(results, 0)
       assert %{^unique_key => "invalid"} = Enum.at(results, 1)
     end
 
-    test "creates struct with extra atom keys when all keys exist as atoms" do
+    test "handles extra atom keys in input" do
       input_stream =
         Stream.map(
           [
@@ -134,56 +124,53 @@ defmodule AshAgent.Runtime.LLMClientStreamingTest do
           & &1
         )
 
-      result_stream = LLMClient.stream_to_structs(input_stream, StreamableOutput)
+      result_stream = LLMClient.stream_to_structs(input_stream, @streamable_schema)
       results = Enum.to_list(result_stream)
 
       assert length(results) == 2
-      assert %StreamableOutput{content: "valid", metadata: nil} = Enum.at(results, 0)
-      assert %StreamableOutput{content: "with_extra", metadata: nil} = Enum.at(results, 1)
+      assert %{content: "valid", metadata: nil} = Enum.at(results, 0)
+      assert %{content: "with_extra", metadata: nil} = Enum.at(results, 1)
     end
   end
 
   describe "stream_to_structs/2 with function streams" do
     test "handles function-based stream (arity 2)" do
-      # Create a function that matches enumerable protocol
       stream_fn = fn acc, fun ->
         fun.({:cont, %{"content" => "from_fn"}}, acc)
       end
 
-      result = LLMClient.stream_to_structs(stream_fn, StreamableOutput)
+      result = LLMClient.stream_to_structs(stream_fn, @streamable_schema)
 
-      # Should return a stream
       assert is_struct(result, Stream) or is_function(result, 2)
     end
   end
 
-  describe "stream_to_structs/2 with struct chunks" do
-    test "passes through chunks that are already the correct struct type" do
-      existing_struct = %StreamableOutput{content: "already", metadata: nil}
-      input_stream = Stream.map([existing_struct], & &1)
+  describe "stream_to_structs/2 with map chunks" do
+    test "passes through chunks that are already validated" do
+      existing_map = %{content: "already", metadata: nil}
+      input_stream = Stream.map([existing_map], & &1)
 
-      result_stream = LLMClient.stream_to_structs(input_stream, StreamableOutput)
+      result_stream = LLMClient.stream_to_structs(input_stream, @streamable_schema)
       results = Enum.to_list(result_stream)
 
       assert length(results) == 1
-      assert ^existing_struct = hd(results)
+      assert %{content: "already", metadata: nil} = hd(results)
     end
 
-    test "converts different struct types to output type" do
-      other_struct = %{__struct__: OtherStruct, content: "convert_me", metadata: nil}
-      input_stream = Stream.map([other_struct], & &1)
+    test "converts maps with string keys" do
+      other_map = %{"content" => "convert_me", "metadata" => nil}
+      input_stream = Stream.map([other_map], & &1)
 
-      result_stream = LLMClient.stream_to_structs(input_stream, StreamableOutput)
+      result_stream = LLMClient.stream_to_structs(input_stream, @streamable_schema)
       results = Enum.to_list(result_stream)
 
       assert length(results) == 1
-      assert %StreamableOutput{content: "convert_me"} = hd(results)
+      assert %{content: "convert_me"} = hd(results)
     end
   end
 
   describe "stream_to_structs/2 with partial/progressive chunks" do
     test "handles progressive building of response" do
-      # Simulate progressive chunks like BAML sends
       input_stream =
         Stream.map(
           [
@@ -194,13 +181,13 @@ defmodule AshAgent.Runtime.LLMClientStreamingTest do
           & &1
         )
 
-      result_stream = LLMClient.stream_to_structs(input_stream, PartialOutput)
+      result_stream = LLMClient.stream_to_structs(input_stream, @partial_schema)
       results = Enum.to_list(result_stream)
 
       assert length(results) == 3
-      assert %PartialOutput{text: nil, complete: false} = Enum.at(results, 0)
-      assert %PartialOutput{text: "partial", complete: false} = Enum.at(results, 1)
-      assert %PartialOutput{text: "final result", complete: true} = Enum.at(results, 2)
+      assert %{text: nil, complete: false} = Enum.at(results, 0)
+      assert %{text: "partial", complete: false} = Enum.at(results, 1)
+      assert %{text: "final result", complete: true} = Enum.at(results, 2)
     end
   end
 
@@ -233,7 +220,6 @@ defmodule AshAgent.Runtime.LLMClientStreamingTest do
         def introspect, do: %{provider: :failing_stream, features: [:streaming]}
       end
 
-      # Need to use an agent resource to test this
       defmodule TestStreamResource do
         use Ash.Resource,
           domain: AshAgent.Runtime.LLMClientStreamingTest.TestDomain,
@@ -246,7 +232,7 @@ defmodule AshAgent.Runtime.LLMClientStreamingTest do
         agent do
           provider FailingStreamProvider
           client :test
-          output StreamableOutput
+          output_schema(Zoi.object(%{content: Zoi.string()}, coerce: true))
           prompt "test"
         end
       end
@@ -289,8 +275,8 @@ defmodule AshAgent.Runtime.LLMClientStreamingTest do
 
       result_stream =
         input_stream
-        |> LLMClient.stream_to_structs(StreamableOutput)
-        |> Stream.filter(fn struct -> struct.content != "skip" end)
+        |> LLMClient.stream_to_structs(@streamable_schema)
+        |> Stream.filter(fn map -> map.content != "skip" end)
 
       results = Enum.to_list(result_stream)
 
@@ -303,8 +289,8 @@ defmodule AshAgent.Runtime.LLMClientStreamingTest do
 
       result_stream =
         input_stream
-        |> LLMClient.stream_to_structs(StreamableOutput)
-        |> Stream.map(fn struct -> String.upcase(struct.content) end)
+        |> LLMClient.stream_to_structs(@streamable_schema)
+        |> Stream.map(fn map -> String.upcase(map.content) end)
 
       results = Enum.to_list(result_stream)
 
@@ -325,7 +311,7 @@ defmodule AshAgent.Runtime.LLMClientStreamingTest do
 
       result_stream =
         input_stream
-        |> LLMClient.stream_to_structs(StreamableOutput)
+        |> LLMClient.stream_to_structs(@streamable_schema)
         |> Stream.take(2)
 
       results = Enum.to_list(result_stream)
@@ -346,8 +332,8 @@ defmodule AshAgent.Runtime.LLMClientStreamingTest do
 
       result =
         input_stream
-        |> LLMClient.stream_to_structs(StreamableOutput)
-        |> Enum.reduce("", fn struct, acc -> acc <> struct.content end)
+        |> LLMClient.stream_to_structs(@streamable_schema)
+        |> Enum.reduce("", fn map, acc -> acc <> map.content end)
 
       assert result == "abc"
     end
@@ -362,7 +348,7 @@ defmodule AshAgent.Runtime.LLMClientStreamingTest do
           %{"content" => "item_#{i}"}
         end)
 
-      result_stream = LLMClient.stream_to_structs(input_stream, StreamableOutput)
+      result_stream = LLMClient.stream_to_structs(input_stream, @streamable_schema)
       results = Enum.to_list(result_stream)
 
       assert length(results) == large_count
@@ -381,9 +367,8 @@ defmodule AshAgent.Runtime.LLMClientStreamingTest do
           & &1
         )
 
-      result_stream = LLMClient.stream_to_structs(input_stream, StreamableOutput)
+      result_stream = LLMClient.stream_to_structs(input_stream, @streamable_schema)
 
-      # This should not raise, even with unusual chunk types
       results = Enum.to_list(result_stream)
 
       assert length(results) == 5
@@ -392,7 +377,7 @@ defmodule AshAgent.Runtime.LLMClientStreamingTest do
     test "handles stream with only nil values" do
       input_stream = Stream.map([nil, nil, nil], & &1)
 
-      result_stream = LLMClient.stream_to_structs(input_stream, StreamableOutput)
+      result_stream = LLMClient.stream_to_structs(input_stream, @streamable_schema)
       results = Enum.to_list(result_stream)
 
       assert length(results) == 3
@@ -401,11 +386,10 @@ defmodule AshAgent.Runtime.LLMClientStreamingTest do
     test "handles stream with empty maps" do
       input_stream = Stream.map([%{}, %{}, %{}], & &1)
 
-      result_stream = LLMClient.stream_to_structs(input_stream, StreamableOutput)
+      result_stream = LLMClient.stream_to_structs(input_stream, @streamable_schema)
       results = Enum.to_list(result_stream)
 
       assert length(results) == 3
-      assert Enum.all?(results, &match?(%StreamableOutput{content: nil, metadata: nil}, &1))
     end
 
     test "handles stream with nested map content" do
@@ -417,13 +401,12 @@ defmodule AshAgent.Runtime.LLMClientStreamingTest do
           & &1
         )
 
-      result_stream = LLMClient.stream_to_structs(input_stream, StreamableOutput)
+      result_stream = LLMClient.stream_to_structs(input_stream, @streamable_schema)
       results = Enum.to_list(result_stream)
 
       assert length(results) == 1
 
-      assert %StreamableOutput{content: "test", metadata: %{"nested" => %{"deep" => "value"}}} =
-               hd(results)
+      assert %{content: "test", metadata: %{"nested" => %{"deep" => "value"}}} = hd(results)
     end
 
     test "handles stream with unicode content" do
@@ -437,7 +420,7 @@ defmodule AshAgent.Runtime.LLMClientStreamingTest do
           & &1
         )
 
-      result_stream = LLMClient.stream_to_structs(input_stream, StreamableOutput)
+      result_stream = LLMClient.stream_to_structs(input_stream, @streamable_schema)
       results = Enum.to_list(result_stream)
 
       assert length(results) == 3
@@ -450,7 +433,7 @@ defmodule AshAgent.Runtime.LLMClientStreamingTest do
       long_content = String.duplicate("a", 100_000)
       input_stream = Stream.map([%{"content" => long_content}], & &1)
 
-      result_stream = LLMClient.stream_to_structs(input_stream, StreamableOutput)
+      result_stream = LLMClient.stream_to_structs(input_stream, @streamable_schema)
       results = Enum.to_list(result_stream)
 
       assert length(results) == 1
@@ -463,7 +446,7 @@ defmodule AshAgent.Runtime.LLMClientStreamingTest do
           %{"content" => "item_#{i}"}
         end)
 
-      result_stream = LLMClient.stream_to_structs(input_stream, StreamableOutput)
+      result_stream = LLMClient.stream_to_structs(input_stream, @streamable_schema)
 
       first_50 = Enum.take(result_stream, 50)
       assert length(first_50) == 50
@@ -482,23 +465,22 @@ defmodule AshAgent.Runtime.LLMClientStreamingTest do
           & &1
         )
 
-      result_stream = LLMClient.stream_to_structs(input_stream, StreamableOutput)
+      result_stream = LLMClient.stream_to_structs(input_stream, @streamable_schema)
       results = Enum.to_list(result_stream)
 
       valid_results =
-        Enum.filter(results, &match?(%StreamableOutput{content: c} when c != nil, &1))
+        Enum.filter(results, &match?(%{content: c} when c != nil, &1))
 
       assert length(valid_results) == 2
     end
 
-    test "handles struct with missing required field gracefully" do
+    test "handles map with missing optional field gracefully" do
       input_stream = Stream.map([%{"metadata" => %{"key" => "value"}}], & &1)
 
-      result_stream = LLMClient.stream_to_structs(input_stream, StreamableOutput)
+      result_stream = LLMClient.stream_to_structs(input_stream, @streamable_schema)
       results = Enum.to_list(result_stream)
 
       assert length(results) == 1
-      assert %StreamableOutput{content: nil, metadata: %{"key" => "value"}} = hd(results)
     end
 
     test "handles mixed string and atom keys in same stream" do
@@ -512,7 +494,7 @@ defmodule AshAgent.Runtime.LLMClientStreamingTest do
           & &1
         )
 
-      result_stream = LLMClient.stream_to_structs(input_stream, StreamableOutput)
+      result_stream = LLMClient.stream_to_structs(input_stream, @streamable_schema)
       results = Enum.to_list(result_stream)
 
       assert length(results) == 3
@@ -532,7 +514,7 @@ defmodule AshAgent.Runtime.LLMClientStreamingTest do
           %{"content" => "item_#{i}"}
         end)
 
-      result_stream = LLMClient.stream_to_structs(input_stream, StreamableOutput)
+      result_stream = LLMClient.stream_to_structs(input_stream, @streamable_schema)
 
       assert :counters.get(call_count, 1) == 0
 
@@ -546,7 +528,7 @@ defmodule AshAgent.Runtime.LLMClientStreamingTest do
         Stream.iterate(0, &(&1 + 1))
         |> Stream.map(fn i -> %{"content" => "item_#{i}"} end)
 
-      result_stream = LLMClient.stream_to_structs(infinite_stream, StreamableOutput)
+      result_stream = LLMClient.stream_to_structs(infinite_stream, @streamable_schema)
 
       results = Enum.take(result_stream, 5)
 

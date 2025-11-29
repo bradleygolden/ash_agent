@@ -50,16 +50,6 @@ defmodule AshAgent.RuntimeTest do
     end
   end
 
-  defmodule TestOutput do
-    @moduledoc false
-    use Ash.TypedStruct
-
-    typed_struct do
-      field :result, :string, allow_nil?: false
-      field :usage, :map
-    end
-  end
-
   defmodule MinimalAgent do
     @moduledoc false
     use Ash.Resource,
@@ -72,7 +62,7 @@ defmodule AshAgent.RuntimeTest do
 
     agent do
       client "anthropic:claude-3-5-sonnet"
-      output TestOutput
+      output_schema(Zoi.object(%{result: Zoi.string()}, coerce: true))
       prompt "Test prompt"
     end
   end
@@ -89,12 +79,8 @@ defmodule AshAgent.RuntimeTest do
 
     agent do
       client "anthropic:claude-3-5-sonnet"
-      output TestOutput
+      output_schema(Zoi.object(%{result: Zoi.string()}, coerce: true))
       prompt "Process: {{ input }}"
-
-      input do
-        argument :input, :string
-      end
     end
   end
 
@@ -135,7 +121,7 @@ defmodule AshAgent.RuntimeTest do
 
     agent do
       client "anthropic:claude-3-5-sonnet"
-      output TestOutput
+      output_schema(Zoi.object(%{result: Zoi.string()}, coerce: true))
       prompt "Test with hooks"
       hooks(TestHooks)
     end
@@ -153,7 +139,7 @@ defmodule AshAgent.RuntimeTest do
 
     agent do
       client(:mock_client, function: :streaming_chat_agent)
-      output TestOutput
+      output_schema(Zoi.object(%{result: Zoi.string()}, coerce: true))
       prompt "Uses provider-specific client opts"
     end
   end
@@ -179,7 +165,7 @@ defmodule AshAgent.RuntimeTest do
         ]
       ]
 
-      output TestOutput
+      output_schema(Zoi.object(%{result: Zoi.string()}, coerce: true))
       prompt "Stream telemetry"
     end
   end
@@ -196,7 +182,7 @@ defmodule AshAgent.RuntimeTest do
 
     agent do
       client "anthropic:claude-3-5-sonnet"
-      output nil
+      output_schema(nil)
       prompt "Test"
     end
   end
@@ -222,8 +208,8 @@ defmodule AshAgent.RuntimeTest do
         LLMStub.object_response(%{"result" => "Success!"})
       )
 
-      assert {:ok, %AshAgent.Result{output: %TestOutput{result: "Success!"}}} =
-               Runtime.call(MinimalAgent, %{})
+      assert {:ok, %AshAgent.Result{output: output}} = Runtime.call(MinimalAgent, %{})
+      assert output.result == "Success!"
     end
 
     test "passes arguments to agent" do
@@ -232,8 +218,10 @@ defmodule AshAgent.RuntimeTest do
         LLMStub.object_response(%{"result" => "Processed!"})
       )
 
-      assert {:ok, %AshAgent.Result{output: %TestOutput{result: "Processed!"}}} =
+      assert {:ok, %AshAgent.Result{output: output}} =
                Runtime.call(AgentWithArgs, input: "test data")
+
+      assert output.result == "Processed!"
     end
 
     test "returns error tuple on LLM failure" do
@@ -252,7 +240,8 @@ defmodule AshAgent.RuntimeTest do
 
       assert_received {:before_call, %{}}
       assert_received {:after_render, "Test with hooks"}
-      assert_received {:after_call, %AshAgent.Result{output: %TestOutput{result: "Hooked!"}}}
+      assert_received {:after_call, %AshAgent.Result{output: output}}
+      assert output.result == "Hooked!"
     end
 
     test "executes on_error hook when error occurs" do
@@ -271,8 +260,8 @@ defmodule AshAgent.RuntimeTest do
         LLMStub.object_response(%{"result" => "Direct success!"})
       )
 
-      assert %AshAgent.Result{output: %TestOutput{result: "Direct success!"}} =
-               Runtime.call!(MinimalAgent, %{})
+      assert %AshAgent.Result{output: output} = Runtime.call!(MinimalAgent, %{})
+      assert output.result == "Direct success!"
     end
 
     test "raises exception on error" do
@@ -375,8 +364,10 @@ defmodule AshAgent.RuntimeTest do
 
   describe "runtime overrides" do
     test "allows overriding provider and client per call" do
-      assert {:ok, %AshAgent.Result{output: %TestOutput{result: "override"}}} =
+      assert {:ok, %AshAgent.Result{output: output}} =
                Runtime.call(MinimalAgent, %{}, provider: NoStreamProvider, client: :custom)
+
+      assert output.result == "override"
     end
 
     test "rejects streaming when provider lacks streaming support" do
@@ -385,17 +376,19 @@ defmodule AshAgent.RuntimeTest do
     end
 
     test "drops provider-specific client opts when provider changes" do
-      assert {:ok, %AshAgent.Result{output: %TestOutput{result: "ok"}}} =
+      assert {:ok, %AshAgent.Result{output: output}} =
                Runtime.call(AgentWithClientOpts, %{}, provider: NoFunctionProvider)
+
+      assert output.result == "ok"
     end
   end
 
   describe "error handling" do
-    test "returns schema error when output type is nil" do
+    test "returns schema error when output schema is nil" do
       result = Runtime.call(NilOutputAgent, %{})
 
       assert {:error, %Error{type: :schema_error, message: message}} = result
-      assert message =~ "No output type"
+      assert message =~ "No output schema"
     end
 
     test "returns llm_error on API failures" do

@@ -19,6 +19,6 @@ defmodule AshAgent.Actions.Call do
   """
   @impl true
   def run(input, _opts, _context) do
-    Runtime.call(input.resource, input.arguments)
+    Runtime.call(input.resource, input.arguments[:input] || %{})
   end
 end

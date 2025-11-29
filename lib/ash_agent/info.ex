@@ -72,6 +72,34 @@ defmodule AshAgent.Info do
   end
 
   @doc """
+  Get the input schema for an agent resource.
+
+  Returns the Zoi schema for input validation, or nil if not configured.
+
+  ## Examples
+
+      iex> AshAgent.Info.input_schema(MyAgent)
+      %Zoi.Object{...}
+  """
+  def input_schema(resource) do
+    Extension.get_opt(resource, [:agent], :input_schema, nil, true)
+  end
+
+  @doc """
+  Get the output schema for an agent resource.
+
+  Returns the Zoi schema for output validation.
+
+  ## Examples
+
+      iex> AshAgent.Info.output_schema(MyAgent)
+      %Zoi.Object{...}
+  """
+  def output_schema(resource) do
+    Extension.get_opt(resource, [:agent], :output_schema, nil, true)
+  end
+
+  @doc """
   Get the complete agent configuration for a resource.
 
   Returns a map containing all agent configuration options. This is a convenience
@@ -89,10 +117,9 @@ defmodule AshAgent.Info do
   - `:client_opts` - Additional client options
   - `:provider` - The provider module or preset
   - `:prompt` - The prompt template
-  - `:output_type` - The output schema/type
-  - `:hooks` - List of hooks configured for the agent
-  - `:profile` - The active profile, or nil if not set
-  - `:input_args` - List of input argument definitions
+  - `:input_schema` - The Zoi schema for input validation (optional)
+  - `:output_schema` - The Zoi schema for output validation
+  - `:hooks` - Hooks module configured for the agent
   - `:token_budget` - Token budget limit (if configured)
   - `:budget_strategy` - Budget enforcement strategy
   - `:context_module` - The context module from application config
@@ -105,9 +132,9 @@ defmodule AshAgent.Info do
         client_opts: [],
         provider: :req_llm,
         prompt: "You are a helpful assistant",
-        output_type: [response: [type: :string]],
-        hooks: [],
-        input_args: [],
+        input_schema: %Zoi.Object{...},
+        output_schema: %Zoi.Object{...},
+        hooks: nil,
         token_budget: nil,
         budget_strategy: :warn,
         context_module: AshAgent.Context
@@ -122,13 +149,13 @@ defmodule AshAgent.Info do
       client_opts: client_opts,
       provider: Extension.get_opt(resource, [:agent], :provider, :req_llm),
       prompt: Extension.get_opt(resource, [:agent], :prompt, nil, true),
-      output_type: Extension.get_opt(resource, [:agent], :output, nil, true),
-      hooks: Extension.get_opt(resource, [:agent], :hooks, nil, true) || [],
-      profile: nil,
-      input_args: Extension.get_entities(resource, [:agent, :input]),
+      input_schema: Extension.get_opt(resource, [:agent], :input_schema, nil, true),
+      output_schema: Extension.get_opt(resource, [:agent], :output_schema, nil, true),
+      hooks: Extension.get_opt(resource, [:agent], :hooks, nil, true),
       token_budget: Extension.get_opt(resource, [:agent], :token_budget, nil),
       budget_strategy: Extension.get_opt(resource, [:agent], :budget_strategy, :warn),
-      context_module: AshAgent.Config.context_module()
+      context_module: AshAgent.Config.context_module(),
+      profile: Extension.get_opt(resource, [:agent], :profile, nil)
     }
   end
 
@@ -149,13 +176,5 @@ defmodule AshAgent.Info do
   @spec auto_define_interfaces?(Ash.Domain.t()) :: boolean()
   def auto_define_interfaces?(domain) do
     Extension.get_opt(domain, [:agent], :auto_define_interfaces?, true)
-  end
-
-  @spec sensitive_input_fields(Ash.Resource.t()) :: [atom()]
-  def sensitive_input_fields(resource) do
-    resource
-    |> Extension.get_entities([:agent, :input])
-    |> Enum.filter(& &1.sensitive?)
-    |> Enum.map(& &1.name)
   end
 end

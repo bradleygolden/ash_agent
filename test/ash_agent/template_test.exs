@@ -1,25 +1,11 @@
 defmodule AshAgent.TemplateTest do
   use ExUnit.Case, async: true
 
-  defmodule Output do
-    use Ash.TypedStruct
-
-    typed_struct do
-      field :headline, :string, allow_nil?: false
-    end
-  end
-
   defmodule SimpleTemplate do
     use AshAgent.Template
 
     agent do
-      output AshAgent.TemplateTest.Output
-
-      input do
-        argument :title, :string, allow_nil?: false
-        argument :max_words, :integer, default: 10
-      end
-
+      output_schema(Zoi.object(%{headline: Zoi.string()}, coerce: true))
       prompt ~p"Summarize: {{ title }} (max {{ max_words }} words)"
     end
   end
@@ -28,15 +14,9 @@ defmodule AshAgent.TemplateTest do
     use AshAgent.Template
 
     agent do
-      output AshAgent.TemplateTest.Output
+      output_schema(Zoi.object(%{headline: Zoi.string()}, coerce: true))
       token_budget(10_000)
       budget_strategy(:halt)
-
-      input do
-        argument :text, :string, allow_nil?: false, doc: "The text to process"
-        argument :sensitive_data, :string, sensitive?: true
-      end
-
       prompt ~p"Process: {{ text }}"
     end
   end

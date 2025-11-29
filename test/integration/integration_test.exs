@@ -22,24 +22,17 @@ defmodule AshAgent.IntegrationTest do
       require_primary_key? false
     end
 
-    defmodule Reply do
-      @moduledoc false
-      use Ash.TypedStruct
-
-      typed_struct do
-        field :content, :string, allow_nil?: false
-        field :confidence, :float
-      end
-    end
-
     agent do
       client("anthropic:claude-3-5-sonnet", temperature: 0.1, max_tokens: 50)
-      output(Reply)
-      prompt(~p"Echo: {{ message }}")
 
-      input do
-        argument :message, :string
-      end
+      output_schema(
+        Zoi.object(
+          %{content: Zoi.string(), confidence: Zoi.float() |> Zoi.optional()},
+          coerce: true
+        )
+      )
+
+      prompt(~p"Echo: {{ message }}")
     end
   end
 
@@ -55,18 +48,9 @@ defmodule AshAgent.IntegrationTest do
       require_primary_key? false
     end
 
-    defmodule Response do
-      @moduledoc false
-      use Ash.TypedStruct
-
-      typed_struct do
-        field :greeting, :string, allow_nil?: false
-      end
-    end
-
     agent do
       client("anthropic:claude-3-5-sonnet", temperature: 0.1, max_tokens: 20)
-      output(Response)
+      output_schema(Zoi.object(%{greeting: Zoi.string()}, coerce: true))
       prompt(~p"Say hello!")
     end
   end
@@ -104,9 +88,7 @@ defmodule AshAgent.IntegrationTest do
 
       {:ok, result} = call(EchoAgent, message: "test")
 
-      assert %EchoAgent.Reply{} = result
-      assert result.content == "Hello from test!"
-      assert result.confidence == 0.95
+      assert %{content: "Hello from test!", confidence: 0.95} = result
     end
 
     test "works with minimal fields" do
@@ -119,9 +101,8 @@ defmodule AshAgent.IntegrationTest do
 
       {:ok, result} = call(EchoAgent, message: "test")
 
-      assert %EchoAgent.Reply{} = result
-      assert result.content == "Minimal response"
-      assert result.confidence == nil
+      assert %{content: "Minimal response"} = result
+      assert Map.get(result, :confidence) == nil
     end
 
     test "works with different agents" do
@@ -134,8 +115,7 @@ defmodule AshAgent.IntegrationTest do
 
       {:ok, result} = call(SimpleAgent, %{})
 
-      assert %SimpleAgent.Response{} = result
-      assert result.greeting == "Hello, World!"
+      assert %{greeting: "Hello, World!"} = result
     end
 
     test "handles API errors gracefully" do
@@ -183,9 +163,7 @@ defmodule AshAgent.IntegrationTest do
 
       result = call!(EchoAgent, message: "test")
 
-      assert %EchoAgent.Reply{} = result
-      assert result.content == "Direct result"
-      assert result.confidence == 0.85
+      assert %{content: "Direct result", confidence: 0.85} = result
     end
 
     test "raises on API error" do
@@ -254,16 +232,13 @@ defmodule AshAgent.IntegrationTest do
       )
 
       {:ok, first} = call(EchoAgent, message: "1")
-      assert first.content == "First response"
-      assert first.confidence == 0.95
+      assert %{content: "First response", confidence: 0.95} = first
 
       {:ok, second} = call(EchoAgent, message: "2")
-      assert second.content == "Second response"
-      assert second.confidence == 0.45
+      assert %{content: "Second response", confidence: 0.45} = second
 
       {:ok, third} = call(EchoAgent, message: "3")
-      assert third.content == "Third response"
-      assert third.confidence == 0.70
+      assert %{content: "Third response", confidence: 0.70} = third
     end
 
     test "simulates retry scenario with error then success" do
@@ -311,7 +286,7 @@ defmodule AshAgent.IntegrationTest do
     end
   end
 
-  describe "TypedStruct validation" do
+  describe "Zoi schema validation" do
     test "enforces required fields" do
       Req.Test.stub(
         AshAgent.LLMStub,
@@ -322,10 +297,7 @@ defmodule AshAgent.IntegrationTest do
 
       result = call(EchoAgent, message: "test")
 
-      case result do
-        {:error, _reason} -> assert true
-        {:ok, reply} -> assert reply.content == nil
-      end
+      assert {:error, _reason} = result
     end
 
     test "accepts nil for optional fields" do
@@ -339,7 +311,7 @@ defmodule AshAgent.IntegrationTest do
       {:ok, result} = call(EchoAgent, message: "test")
 
       assert result.content == "Required content here"
-      assert result.confidence == nil
+      assert Map.get(result, :confidence) == nil
     end
 
     test "type-checks field values" do

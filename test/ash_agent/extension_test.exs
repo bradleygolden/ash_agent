@@ -122,41 +122,23 @@ defmodule AshAgent.ExtensionTest do
   end
 
   describe "build_schema/1" do
-    test "returns {:ok, schema} for module with output type" do
+    test "returns {:ok, schema} for module with output_schema" do
       {:ok, config} = Extension.get_config(TestAgents.MinimalAgent)
 
       assert {:ok, schema} = Extension.build_schema(config)
-      assert is_list(schema)
+      assert is_struct(schema, Zoi.Types.Object)
     end
 
-    test "returns {:ok, nil} for :string output type" do
-      config = %{provider: :req_llm, output_type: :string}
+    test "returns {:ok, :string} for :string output_schema" do
+      config = %{provider: :req_llm, output_schema: :string}
 
-      assert {:ok, nil} = Extension.build_schema(config)
+      assert {:ok, :string} = Extension.build_schema(config)
     end
 
-    test "returns error when output type is nil" do
-      config = %{provider: :req_llm, output_type: nil}
+    test "returns error when output_schema is nil" do
+      config = %{provider: :req_llm, output_schema: nil}
 
       assert {:error, %Error{type: :schema_error}} = Extension.build_schema(config)
-    end
-  end
-
-  describe "parse_response/2" do
-    test "parses map response to struct" do
-      response = %{"message" => "Hello"}
-
-      assert {:ok, struct} = Extension.parse_response(TestAgents.SimpleOutput, response)
-      assert struct.message == "Hello"
-    end
-
-    test "handles map response for complex typed struct" do
-      response = %{"title" => "Test", "description" => "Desc", "score" => 0.5, "tags" => ["a"]}
-
-      assert {:ok, struct} = Extension.parse_response(TestAgents.ComplexOutput, response)
-      assert struct.title == "Test"
-      assert struct.description == "Desc"
-      assert struct.score == 0.5
     end
   end
 
@@ -170,7 +152,7 @@ defmodule AshAgent.ExtensionTest do
       assert metadata.client == "anthropic:claude-3-5-sonnet"
       assert metadata.provider == :req_llm
       assert metadata.type == :call
-      assert metadata.output_type == TestAgents.SimpleOutput
+      assert is_struct(metadata.output_schema, Zoi.Types.Object)
     end
 
     test "includes profile when set" do

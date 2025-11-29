@@ -6,27 +6,6 @@ defmodule AshAgent.Test.TestAgents do
   different test files to ensure consistency and reduce duplication.
   """
 
-  defmodule SimpleOutput do
-    @moduledoc false
-    use Ash.TypedStruct
-
-    typed_struct do
-      field :message, :string, allow_nil?: false
-    end
-  end
-
-  defmodule ComplexOutput do
-    @moduledoc false
-    use Ash.TypedStruct
-
-    typed_struct do
-      field :title, :string, allow_nil?: false
-      field :description, :string
-      field :score, :float
-      field :tags, {:array, :string}
-    end
-  end
-
   defmodule MinimalAgent do
     @moduledoc """
     Minimal agent with just required configuration.
@@ -42,7 +21,7 @@ defmodule AshAgent.Test.TestAgents do
 
     agent do
       client "anthropic:claude-3-5-sonnet"
-      output SimpleOutput
+      output_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       prompt "Simple test"
     end
   end
@@ -64,19 +43,15 @@ defmodule AshAgent.Test.TestAgents do
 
     agent do
       client "anthropic:claude-3-5-sonnet"
-      output SimpleOutput
+      output_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       prompt ~p"Process: {{ input }}"
-
-      input do
-        argument :input, :string
-      end
     end
   end
 
   defmodule AgentWithComplexOutput do
     @moduledoc """
     Agent with complex nested output structure.
-    Useful for testing schema conversion with multiple field types.
+    Useful for testing schema validation with multiple field types.
     """
     use Ash.Resource,
       domain: AshAgent.Test.TestAgents.TestDomain,
@@ -88,7 +63,19 @@ defmodule AshAgent.Test.TestAgents do
 
     agent do
       client "anthropic:claude-3-5-sonnet"
-      output ComplexOutput
+
+      output_schema(
+        Zoi.object(
+          %{
+            title: Zoi.string(),
+            description: Zoi.string() |> Zoi.optional(),
+            score: Zoi.float() |> Zoi.optional(),
+            tags: Zoi.list(Zoi.string()) |> Zoi.optional()
+          },
+          coerce: true
+        )
+      )
+
       prompt "Generate complex output"
     end
   end
@@ -108,14 +95,14 @@ defmodule AshAgent.Test.TestAgents do
 
     agent do
       client("anthropic:claude-3-5-sonnet", temperature: 0.5, max_tokens: 200)
-      output SimpleOutput
+      output_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       prompt "Test with options"
     end
   end
 
   defmodule AgentWithMultipleArgs do
     @moduledoc """
-    Agent that accepts multiple arguments.
+    Agent that accepts multiple arguments via template variables.
     Useful for testing complex prompt templating.
     """
     use Ash.Resource,
@@ -130,13 +117,20 @@ defmodule AshAgent.Test.TestAgents do
 
     agent do
       client "anthropic:claude-3-5-sonnet"
-      output ComplexOutput
-      prompt ~p"Task: {{ task }} with priority {{ priority }}"
 
-      input do
-        argument :task, :string
-        argument :priority, :string
-      end
+      output_schema(
+        Zoi.object(
+          %{
+            title: Zoi.string(),
+            description: Zoi.string() |> Zoi.optional(),
+            score: Zoi.float() |> Zoi.optional(),
+            tags: Zoi.list(Zoi.string()) |> Zoi.optional()
+          },
+          coerce: true
+        )
+      )
+
+      prompt ~p"Task: {{ task }} with priority {{ priority }}"
     end
   end
 
@@ -154,14 +148,14 @@ defmodule AshAgent.Test.TestAgents do
   end
 
   @doc """
-  Returns a stub response for SimpleOutput.
+  Returns a stub response for simple output schema.
   """
   def simple_response(message) do
     %{"message" => message}
   end
 
   @doc """
-  Returns a stub response for ComplexOutput.
+  Returns a stub response for complex output schema.
   """
   def complex_response(opts \\ []) do
     %{

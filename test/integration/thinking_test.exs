@@ -28,18 +28,6 @@ defmodule AshAgent.Integration.ThinkingTest do
 
   alias AshAgent.Runtime
 
-  defmodule MathAnswer do
-    @moduledoc false
-    use Ash.Resource,
-      data_layer: :embedded,
-      embed_nil_values?: false
-
-    attributes do
-      attribute :answer, :integer, allow_nil?: false, public?: true
-      attribute :explanation, :string, allow_nil?: false, public?: true
-    end
-  end
-
   defmodule ReqLlmTextThinkingAgent do
     @moduledoc false
     use Ash.Resource,
@@ -57,13 +45,9 @@ defmodule AshAgent.Integration.ThinkingTest do
         max_tokens: 16_000,
         provider_options: [thinking: %{type: "enabled", budget_tokens: 5000}]
 
-      output :string
+      output_schema(:string)
 
       prompt "Answer briefly: {{ question }}"
-
-      input do
-        argument :question, :string
-      end
     end
   end
 
@@ -84,13 +68,9 @@ defmodule AshAgent.Integration.ThinkingTest do
         max_tokens: 16_000,
         provider_options: [thinking: %{type: "enabled", budget_tokens: 5000}]
 
-      output MathAnswer
+      output_schema(Zoi.object(%{answer: Zoi.integer(), explanation: Zoi.string()}, coerce: true))
 
       prompt "Solve the math problem and provide the numeric answer with a brief explanation: {{ question }}"
-
-      input do
-        argument :question, :string
-      end
     end
   end
 
@@ -109,11 +89,7 @@ defmodule AshAgent.Integration.ThinkingTest do
 
       client :thinking, function: :SolveWithThinking
 
-      output AshAgent.Test.ThinkingBamlClient.Types.MathAnswer
-
-      input do
-        argument :question, :string
-      end
+      output_schema(Zoi.object(%{answer: Zoi.integer(), explanation: Zoi.string()}, coerce: true))
     end
   end
 
@@ -132,11 +108,7 @@ defmodule AshAgent.Integration.ThinkingTest do
 
       client :thinking, function: :AnswerWithThinking
 
-      output :string
-
-      input do
-        argument :question, :string
-      end
+      output_schema(:string)
     end
   end
 
@@ -188,7 +160,7 @@ defmodule AshAgent.Integration.ThinkingTest do
         Runtime.call(ReqLlmStructuredThinkingAgent, %{question: "What is 15 + 27?"})
 
       assert %AshAgent.Result{} = result
-      assert %MathAnswer{answer: answer, explanation: explanation} = result.output
+      assert %{answer: answer, explanation: explanation} = result.output
       assert is_integer(answer)
       assert is_binary(explanation)
     end
@@ -233,7 +205,7 @@ defmodule AshAgent.Integration.ThinkingTest do
 
       {:done, result} = List.last(done_chunks)
       assert %AshAgent.Result{} = result
-      assert %MathAnswer{} = result.output
+      assert %{answer: _, explanation: _} = result.output
     end
   end
 

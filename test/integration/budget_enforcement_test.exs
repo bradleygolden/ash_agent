@@ -5,14 +5,6 @@ defmodule AshAgent.BudgetEnforcementTest do
   alias AshAgent.{Error, Info}
   alias AshAgent.Test.TestDomain
 
-  defmodule SimpleReply do
-    use Ash.TypedStruct
-
-    typed_struct do
-      field :message, :string, allow_nil?: false
-    end
-  end
-
   defmodule AgentWithBudgetHalt do
     use Ash.Resource,
       domain: TestDomain,
@@ -23,13 +15,7 @@ defmodule AshAgent.BudgetEnforcementTest do
       client "mock:test"
       token_budget(1000)
       budget_strategy(:halt)
-
-      input do
-        argument :message, :string
-      end
-
-      output SimpleReply
-
+      output_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       prompt "Test: {{ message }}"
     end
 
@@ -48,13 +34,7 @@ defmodule AshAgent.BudgetEnforcementTest do
       client "mock:test"
       token_budget(1000)
       budget_strategy(:warn)
-
-      input do
-        argument :message, :string
-      end
-
-      output SimpleReply
-
+      output_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       prompt "Test: {{ message }}"
     end
 
@@ -71,13 +51,7 @@ defmodule AshAgent.BudgetEnforcementTest do
     agent do
       provider :mock
       client "mock:test"
-
-      input do
-        argument :message, :string
-      end
-
-      output SimpleReply
-
+      output_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       prompt "Test: {{ message }}"
     end
 
@@ -130,17 +104,17 @@ defmodule AshAgent.BudgetEnforcementTest do
   describe "runtime execution with budgets" do
     test "agent with halt strategy executes successfully when under budget" do
       {:ok, result} = AshAgent.Runtime.call(AgentWithBudgetHalt, %{message: "test"})
-      assert %SimpleReply{} = result
+      assert %AshAgent.Result{output: %{message: _}} = result
     end
 
     test "agent with warn strategy executes successfully when under budget" do
       {:ok, result} = AshAgent.Runtime.call(AgentWithBudgetWarn, %{message: "test"})
-      assert %SimpleReply{} = result
+      assert %AshAgent.Result{output: %{message: _}} = result
     end
 
     test "agent without budget executes successfully" do
       {:ok, result} = AshAgent.Runtime.call(AgentWithoutBudget, %{message: "test"})
-      assert %SimpleReply{} = result
+      assert %AshAgent.Result{output: %{message: _}} = result
     end
 
     test "agent with halt strategy has correct configuration" do
