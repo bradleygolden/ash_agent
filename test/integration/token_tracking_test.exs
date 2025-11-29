@@ -6,15 +6,6 @@ defmodule AshAgent.TokenTrackingTest do
   alias AshAgent.Runtime
   alias AshAgent.Test.LLMStub
 
-  defmodule TestOutput do
-    @moduledoc false
-    use Ash.TypedStruct
-
-    typed_struct do
-      field :result, :string, allow_nil?: false
-    end
-  end
-
   defmodule TokenTrackingAgent do
     @moduledoc false
     use Ash.Resource,
@@ -27,7 +18,7 @@ defmodule AshAgent.TokenTrackingTest do
 
     agent do
       client "anthropic:claude-3-5-sonnet"
-      output TestOutput
+      output_schema(Zoi.object(%{result: Zoi.string()}, coerce: true))
       prompt "Test prompt"
     end
   end
@@ -102,7 +93,8 @@ defmodule AshAgent.TokenTrackingTest do
         LLMStub.object_response(%{"result" => "Success"})
       )
 
-      assert {:ok, %TestOutput{result: "Success"}} = Runtime.call(TokenTrackingAgent, %{})
+      assert {:ok, %AshAgent.Result{output: %{result: "Success"}}} =
+               Runtime.call(TokenTrackingAgent, %{})
     end
 
     test "LLM response with usage data gets tracked" do
@@ -125,7 +117,7 @@ defmodule AshAgent.TokenTrackingTest do
       )
 
       try do
-        assert {:ok, %TestOutput{result: "Success with tokens"}} =
+        assert {:ok, %AshAgent.Result{output: %{result: "Success with tokens"}}} =
                  Runtime.call(TokenTrackingAgent, %{})
 
         metadata =
@@ -164,7 +156,8 @@ defmodule AshAgent.TokenTrackingTest do
       )
 
       try do
-        assert {:ok, %TestOutput{result: "Low usage"}} = Runtime.call(TokenTrackingAgent, %{})
+        assert {:ok, %AshAgent.Result{output: %{result: "Low usage"}}} =
+                 Runtime.call(TokenTrackingAgent, %{})
 
         refute_receive {:warning, _, _, _}, 100
       after

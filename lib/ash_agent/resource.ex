@@ -15,27 +15,15 @@ defmodule AshAgent.Resource do
       domain: MyApp.Domain,
       extensions: [AshAgent.Resource]
 
-    defmodule Reply do
-      use Ash.TypedStruct
-
-      typed_struct do
-        field :content, String.t(), enforce: true
-      end
-    end
-
     agent do
-      client "anthropic:claude-3-5-sonnet", temperature: 0.7, max_tokens: 1000
+      client "anthropic:claude-sonnet-4-20250514", temperature: 0.7
 
-      input do
-        argument :message, :string, allow_nil?: false
-      end
+      input_schema Zoi.object(%{message: Zoi.string()}, coerce: true)
 
-      output Reply
+      output_schema Zoi.object(%{content: Zoi.string()}, coerce: true)
 
       prompt ~p\"\"\"
       You are a helpful assistant.
-
-      {{ output_format }}
 
       User: {{ message }}
       \"\"\"

@@ -6,14 +6,6 @@ defmodule AshAgent.Transformers.AddContextAttributeTest do
   alias Ash.Resource.Attribute
   alias Ash.Resource.Info
 
-  defmodule TestOutput do
-    use Ash.TypedStruct
-
-    typed_struct do
-      field :response, :string
-    end
-  end
-
   defmodule MinimalAgent do
     use Ash.Resource,
       domain: AshAgent.TestDomain,
@@ -25,11 +17,7 @@ defmodule AshAgent.Transformers.AddContextAttributeTest do
 
     agent do
       client "anthropic:claude-3-5-sonnet"
-      output TestOutput
-
-      input do
-        argument :message, :string
-      end
+      output_schema(Zoi.object(%{response: Zoi.string()}, coerce: true))
 
       prompt ~p"""
       Test prompt
@@ -63,11 +51,7 @@ defmodule AshAgent.Transformers.AddContextAttributeTest do
 
     agent do
       client "anthropic:claude-3-5-sonnet"
-      output TestOutput
-
-      input do
-        argument :message, :string
-      end
+      output_schema(Zoi.object(%{response: Zoi.string()}, coerce: true))
 
       prompt ~p"""
       Test prompt

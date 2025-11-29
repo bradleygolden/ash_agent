@@ -8,15 +8,6 @@ defmodule AshAgent.Actions.CallTest do
 
   alias AshAgent.Actions.Call
 
-  defmodule CallOutput do
-    @moduledoc false
-    use Ash.TypedStruct
-
-    typed_struct do
-      field :message, :string, allow_nil?: false
-    end
-  end
-
   defmodule CallMockProvider do
     @behaviour AshAgent.Provider
 
@@ -47,7 +38,7 @@ defmodule AshAgent.Actions.CallTest do
     agent do
       provider CallMockProvider
       client :mock
-      output CallOutput
+      output_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       prompt "Test call prompt"
     end
   end
@@ -66,7 +57,7 @@ defmodule AshAgent.Actions.CallTest do
     test "returns ok tuple with result for valid input" do
       input = %{resource: TestCallAgent, arguments: %{}}
 
-      assert {:ok, %AshAgent.Result{output: %CallOutput{}}} = Call.run(input, [], %{})
+      assert {:ok, %AshAgent.Result{output: %{message: _}}} = Call.run(input, [], %{})
     end
 
     test "result contains expected content" do
@@ -86,7 +77,7 @@ defmodule AshAgent.Actions.CallTest do
     test "handles empty arguments" do
       input = %{resource: TestCallAgent, arguments: %{}}
 
-      assert {:ok, %AshAgent.Result{output: %CallOutput{}}} = Call.run(input, [], %{})
+      assert {:ok, %AshAgent.Result{output: %{message: _}}} = Call.run(input, [], %{})
     end
 
     test "returns error for invalid resource" do

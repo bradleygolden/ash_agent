@@ -30,15 +30,6 @@ defmodule AshAgent.Integration.ReqLLMIntegrationTest do
       require_primary_key? false
     end
 
-    defmodule Reply do
-      use Ash.TypedStruct
-
-      typed_struct do
-        field :content, :string, allow_nil?: false
-        field :confidence, :float
-      end
-    end
-
     agent do
       client("openai:qwen3:1.7b",
         base_url: "http://localhost:11434/v1",
@@ -46,11 +37,15 @@ defmodule AshAgent.Integration.ReqLLMIntegrationTest do
         temperature: 0.0
       )
 
-      output(Reply)
-
-      input do
-        argument :message, :string, allow_nil?: false
-      end
+      output_schema(
+        Zoi.object(
+          %{
+            content: Zoi.string(),
+            confidence: Zoi.float()
+          },
+          coerce: true
+        )
+      )
 
       prompt(~p"""
       Reply with JSON matching ctx.output_format exactly.
@@ -62,14 +57,15 @@ defmodule AshAgent.Integration.ReqLLMIntegrationTest do
     end
 
     code_interface do
-      define :call, args: [:message]
+      define :call, args: [:input]
     end
   end
 
   describe "req_llm provider against Ollama" do
     test "code interface reaches local LLM" do
-      assert {:ok, %ReqLLMAgent.Reply{} = reply} = ReqLLMAgent.call("ping")
+      assert {:ok, reply} = ReqLLMAgent.call(%{message: "ping"})
 
+      assert is_map(reply)
       assert String.starts_with?(reply.content, "req integration")
       assert reply.confidence == 0.99
     end
@@ -77,9 +73,10 @@ defmodule AshAgent.Integration.ReqLLMIntegrationTest do
     test "Ash.run_action uses same pipeline" do
       input =
         ReqLLMAgent
-        |> Ash.ActionInput.for_action(:call, %{message: "from action"})
+        |> Ash.ActionInput.for_action(:call, %{input: %{message: "from action"}})
 
-      assert {:ok, %ReqLLMAgent.Reply{} = reply} = Ash.run_action(input)
+      assert {:ok, reply} = Ash.run_action(input)
+      assert is_map(reply)
       assert String.starts_with?(reply.content, "req integration")
       assert reply.confidence == 0.99
     end

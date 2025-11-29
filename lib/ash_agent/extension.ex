@@ -75,7 +75,7 @@ defmodule AshAgent.Extension do
   - `resolve_provider/1` - Resolve provider identifier to module
   """
 
-  alias AshAgent.{Error, Info, ProviderRegistry, SchemaConverter, Telemetry}
+  alias AshAgent.{Error, Info, ProviderRegistry, Telemetry}
   alias AshAgent.Runtime.{Hooks, LLMClient, PromptRenderer}
 
   # Configuration Functions
@@ -93,9 +93,9 @@ defmodule AshAgent.Extension do
   - `:client_opts` - Additional client options
   - `:provider` - The provider module or preset
   - `:prompt` - The prompt template
-  - `:output_type` - The output schema/type
-  - `:hooks` - List of hooks configured for the agent
-  - `:input_args` - List of input argument definitions
+  - `:input_schema` - The Zoi schema for input validation (optional)
+  - `:output_schema` - The Zoi schema for output validation
+  - `:hooks` - Hooks module configured for the agent
   - `:token_budget` - Token budget limit (if configured)
   - `:budget_strategy` - Budget enforcement strategy
   - `:context_module` - The context module from application config
@@ -231,7 +231,7 @@ defmodule AshAgent.Extension do
 
   ## Examples
 
-      iex> config = %{output_type: MyType}
+      iex> config = %{output_schema: Zoi.object(%{content: Zoi.string()}, coerce: true)}
       iex> AshAgent.Extension.render_prompt("Hello {{ name }}", %{name: "World"}, config)
       {:ok, "Hello World"}
   """
@@ -246,26 +246,22 @@ defmodule AshAgent.Extension do
   @doc """
   Build an LLM schema from agent configuration.
 
-  Converts the output type to a schema format required by the provider.
+  Returns the Zoi output_schema from config, which req_llm handles natively.
 
   ## Examples
 
-      iex> config = %{output_type: MyTypedStruct, provider: :req_llm}
+      iex> config = %{output_schema: Zoi.object(%{content: Zoi.string()}, coerce: true), provider: :req_llm}
       iex> AshAgent.Extension.build_schema(config)
-      {:ok, [...schema...]}
+      {:ok, %Zoi.Object{...}}
   """
-  @spec build_schema(map()) :: {:ok, list() | nil} | {:error, term()}
+  @spec build_schema(map()) :: {:ok, term() | nil} | {:error, term()}
   def build_schema(%{provider: provider} = config) do
     if schema_required?(provider) do
-      case config.output_type do
+      case config.output_schema do
         nil ->
-          {:error, Error.schema_error("No output type defined for agent")}
+          {:error, Error.schema_error("No output schema defined for agent")}
 
-        :string ->
-          {:ok, nil}
-
-        type_module ->
-          schema = SchemaConverter.to_req_llm_schema(type_module)
+        schema ->
           {:ok, schema}
       end
     else
@@ -275,7 +271,7 @@ defmodule AshAgent.Extension do
     e ->
       {:error,
        Error.schema_error("Failed to build schema", %{
-         output_type: config.output_type,
+         output_schema: config.output_schema,
          exception: e
        })}
   end
@@ -283,18 +279,19 @@ defmodule AshAgent.Extension do
   # Response Parsing Functions
 
   @doc """
-  Parse an LLM response into the configured output type.
+  Parse an LLM response using the output schema.
 
   Delegates to `AshAgent.Runtime.LLMClient.parse_response/2`.
 
   ## Examples
 
-      iex> AshAgent.Extension.parse_response(MyType, response)
-      {:ok, %MyType{...}}
+      iex> schema = Zoi.object(%{content: Zoi.string()}, coerce: true)
+      iex> AshAgent.Extension.parse_response(schema, response)
+      {:ok, %{content: "Hello"}}
   """
-  @spec parse_response(module() | atom(), term()) :: {:ok, struct()} | {:error, term()}
-  def parse_response(output_type, response) do
-    LLMClient.parse_response(output_type, response)
+  @spec parse_response(term(), term()) :: {:ok, term()} | {:error, term()}
+  def parse_response(output_schema, response) do
+    LLMClient.parse_response(output_schema, response)
   end
 
   @doc """
@@ -449,9 +446,9 @@ defmodule AshAgent.Extension do
 
   ## Examples
 
-      iex> config = %{client: "...", provider: :req_llm, output_type: MyType}
+      iex> config = %{client: "...", provider: :req_llm, output_schema: %Zoi.Object{}}
       iex> AshAgent.Extension.telemetry_metadata(config, MyAgent, :call)
-      %{agent: MyAgent, client: "...", provider: :req_llm, type: :call, output_type: MyType}
+      %{agent: MyAgent, client: "...", provider: :req_llm, type: :call, output_schema: %Zoi.Object{}}
   """
   @spec telemetry_metadata(map(), module(), atom()) :: map()
   def telemetry_metadata(config, module, type) do
@@ -460,7 +457,7 @@ defmodule AshAgent.Extension do
       client: config.client,
       provider: config.provider,
       type: type,
-      output_type: Map.get(config, :output_type),
+      output_schema: Map.get(config, :output_schema),
       profile: Map.get(config, :profile)
     }
   end

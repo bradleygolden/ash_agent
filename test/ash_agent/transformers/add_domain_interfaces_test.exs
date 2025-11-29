@@ -1,14 +1,6 @@
 defmodule AshAgent.Transformers.AddDomainInterfacesTest do
   use ExUnit.Case, async: true
 
-  defmodule TestOutput do
-    use Ash.TypedStruct
-
-    typed_struct do
-      field :response, :string
-    end
-  end
-
   defmodule ChatAgent do
     use Ash.Resource,
       domain: AshAgent.Transformers.AddDomainInterfacesTest.TestDomain,
@@ -22,11 +14,7 @@ defmodule AshAgent.Transformers.AddDomainInterfacesTest do
 
     agent do
       client "anthropic:claude-3-5-sonnet"
-      output TestOutput
-
-      input do
-        argument :message, :string, allow_nil?: false
-      end
+      output_schema(Zoi.object(%{response: Zoi.string()}, coerce: true))
 
       prompt ~p"""
       You are a chat assistant.
@@ -48,12 +36,7 @@ defmodule AshAgent.Transformers.AddDomainInterfacesTest do
 
     agent do
       client "anthropic:claude-3-5-sonnet"
-      output TestOutput
-
-      input do
-        argument :text, :string, allow_nil?: false
-        argument :max_length, :integer, default: 100
-      end
+      output_schema(Zoi.object(%{response: Zoi.string()}, coerce: true))
 
       prompt ~p"""
       Summarize: {{ text }}
@@ -95,12 +78,7 @@ defmodule AshAgent.Transformers.AddDomainInterfacesTest do
 
     agent do
       client "anthropic:claude-3-5-sonnet"
-      output TestOutput
-
-      input do
-        argument :query, :string
-      end
-
+      output_schema(Zoi.object(%{response: Zoi.string()}, coerce: true))
       prompt ~p"Query: {{ query }}"
     end
   end
@@ -132,12 +110,7 @@ defmodule AshAgent.Transformers.AddDomainInterfacesTest do
 
     agent do
       client "anthropic:claude-3-5-sonnet"
-      output TestOutput
-
-      input do
-        argument :input, :string
-      end
-
+      output_schema(Zoi.object(%{response: Zoi.string()}, coerce: true))
       prompt ~p"Input: {{ input }}"
     end
   end
@@ -165,23 +138,13 @@ defmodule AshAgent.Transformers.AddDomainInterfacesTest do
       assert :stream_chat_agent in interface_names
     end
 
-    test "uses correct arguments from agent input section" do
+    test "call interface maps to :call action" do
       references = Ash.Domain.Info.resource_references(TestDomain)
       chat_ref = Enum.find(references, &(&1.resource == ChatAgent))
 
       call_interface = Enum.find(chat_ref.definitions, &(&1.name == :call_chat_agent))
 
-      assert call_interface.args == [:message]
       assert call_interface.action == :call
-    end
-
-    test "handles multiple input arguments" do
-      references = Ash.Domain.Info.resource_references(TestDomain)
-      summary_ref = Enum.find(references, &(&1.resource == SummaryAgent))
-
-      call_interface = Enum.find(summary_ref.definitions, &(&1.name == :call_summary_agent))
-
-      assert call_interface.args == [:text, :max_length]
     end
 
     test "does not add interfaces for non-agent resources" do

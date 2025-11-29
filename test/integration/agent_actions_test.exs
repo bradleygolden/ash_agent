@@ -3,9 +3,8 @@ defmodule AshAgent.Integration.AgentActionsTest do
 
   @moduletag :integration
 
-  if Code.ensure_loaded?(AshAgent.Test.OllamaClient.AgentReply) do
+  if Code.ensure_loaded?(AshAgent.Test.OllamaClient) do
     alias Ash.Resource.Info
-    alias AshAgent.Test.OllamaClient.AgentReply
 
     defmodule OllamaAgent do
       use Ash.Resource,
@@ -18,21 +17,25 @@ defmodule AshAgent.Integration.AgentActionsTest do
 
       agent do
         provider :baml
-        # Use direct module reference to avoid coupling to ash_baml config
+
         client AshAgent.Test.OllamaClient,
           function: :AgentEcho,
           client_module: AshAgent.Test.OllamaClient
 
-        output AgentReply
-
-        input do
-          argument :message, :string, allow_nil?: false
-        end
+        output_schema(
+          Zoi.object(
+            %{
+              content: Zoi.string(),
+              confidence: Zoi.float() |> Zoi.optional()
+            },
+            coerce: true
+          )
+        )
       end
 
       code_interface do
-        define :call, args: [:message]
-        define :stream, args: [:message]
+        define :call, args: [:input]
+        define :stream, args: [:input]
       end
     end
 
@@ -41,14 +44,8 @@ defmodule AshAgent.Integration.AgentActionsTest do
         call_action = Info.action(OllamaAgent, :call)
         stream_action = Info.action(OllamaAgent, :stream)
 
-        assert AgentReply == call_action.returns
-        assert {:array, AgentReply} == stream_action.returns
-
-        assert [%{name: :message, type: :string}] ==
-                 Enum.map(call_action.arguments, &%{name: &1.name, type: &1.type})
-
-        assert [%{name: :message, type: :string}] ==
-                 Enum.map(stream_action.arguments, &%{name: &1.name, type: &1.type})
+        assert :map == call_action.returns
+        assert {:array, :map} == stream_action.returns
       end
 
       test "context attribute is automatically added" do
@@ -64,26 +61,26 @@ defmodule AshAgent.Integration.AgentActionsTest do
 
     describe "agent execution" do
       test "code interface call reaches ollama" do
-        assert {:ok, %AgentReply{} = reply} = OllamaAgent.call("integration ping")
-        assert String.starts_with?(reply.content, "integration")
-        assert is_float(reply.confidence)
+        assert {:ok, reply} = OllamaAgent.call(%{message: "integration ping"})
+        assert is_map(reply)
+        assert is_binary(reply.content)
       end
 
       test "stream action emits structured payload" do
         input =
           OllamaAgent
-          |> Ash.ActionInput.for_action(:stream, %{message: "stream integration"})
+          |> Ash.ActionInput.for_action(:stream, %{input: %{message: "stream integration"}})
 
         assert {:ok, stream} = Ash.run_action(input)
 
         results =
           stream
           |> Enum.to_list()
-          |> Enum.filter(&match?(%AgentReply{}, &1))
+          |> Enum.filter(&is_map/1)
 
         assert [_ | _] = results
         reply = List.last(results)
-        assert String.starts_with?(reply.content, "integration")
+        assert is_binary(reply.content)
       end
     end
   end

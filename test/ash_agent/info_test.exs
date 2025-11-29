@@ -37,9 +37,8 @@ defmodule AshAgent.InfoTest do
       assert config.client_opts == []
       assert config.provider == :req_llm
       assert config.prompt == "Simple test"
-      assert config.output_type == TestAgents.SimpleOutput
-      assert config.hooks == []
-      assert config.input_args == []
+      assert config.output_schema != nil
+      assert config.hooks == nil
       assert config.token_budget == nil
       assert config.budget_strategy == :warn
       assert config.context_module == AshAgent.Context
@@ -52,28 +51,10 @@ defmodule AshAgent.InfoTest do
       assert config.client_opts == [temperature: 0.5, max_tokens: 200]
     end
 
-    test "returns configuration with input arguments" do
-      config = Info.agent_config(TestAgents.AgentWithArguments)
-
-      assert length(config.input_args) == 1
-      [arg] = config.input_args
-      assert arg.name == :input
-      assert arg.type == :string
-    end
-
-    test "returns configuration with multiple input arguments" do
-      config = Info.agent_config(TestAgents.AgentWithMultipleArgs)
-
-      assert length(config.input_args) == 2
-      arg_names = Enum.map(config.input_args, & &1.name)
-      assert :task in arg_names
-      assert :priority in arg_names
-    end
-
-    test "returns complex output type" do
+    test "returns output schema" do
       config = Info.agent_config(TestAgents.AgentWithComplexOutput)
 
-      assert config.output_type == TestAgents.ComplexOutput
+      assert config.output_schema != nil
     end
 
     test "profile is nil by default" do
@@ -84,14 +65,6 @@ defmodule AshAgent.InfoTest do
   end
 
   describe "agent config with custom budget settings" do
-    defmodule BudgetedOutput do
-      use Ash.TypedStruct
-
-      typed_struct do
-        field :result, :string
-      end
-    end
-
     defmodule AgentWithBudget do
       use Ash.Resource,
         domain: AshAgent.TestDomain,
@@ -103,7 +76,7 @@ defmodule AshAgent.InfoTest do
 
       agent do
         client "anthropic:claude-3-5-sonnet"
-        output BudgetedOutput
+        output_schema(Zoi.object(%{result: Zoi.string()}, coerce: true))
         prompt "Test"
         token_budget(10_000)
         budget_strategy(:halt)

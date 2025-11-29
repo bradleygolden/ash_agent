@@ -2,88 +2,31 @@ defmodule AshAgent.DSL do
   @moduledoc """
   DSL definitions for AshAgent extension.
 
-  Provides the `agent` section for defining LLM agents with type-safe inputs/outputs,
-  prompt templates, and automatic function generation.
+  Provides the `agent` section for defining LLM agents with Zoi schema-based
+  inputs/outputs, prompt templates, and automatic function generation.
   """
-
-  defmodule Argument do
-    @moduledoc false
-    defstruct [:name, :type, :allow_nil?, :default, :doc, :sensitive?, :__spark_metadata__]
-  end
-
-  @argument %Spark.Dsl.Entity{
-    name: :argument,
-    describe: "Defines an input argument for the agent",
-    examples: [
-      "argument :message, :string, allow_nil?: false",
-      "argument :context, :map, default: %{}"
-    ],
-    target: AshAgent.DSL.Argument,
-    args: [:name, :type],
-    schema: [
-      name: [
-        type: :atom,
-        required: true,
-        doc: "The name of the argument"
-      ],
-      type: [
-        type: {:custom, __MODULE__, :validate_argument_type, []},
-        required: true,
-        doc: "The type of the argument"
-      ],
-      allow_nil?: [
-        type: :boolean,
-        default: true,
-        doc: "Whether the argument can be nil"
-      ],
-      default: [
-        type: :any,
-        doc: "Default value for the argument"
-      ],
-      doc: [
-        type: :string,
-        doc: "Documentation for the argument"
-      ],
-      sensitive?: [
-        type: :boolean,
-        default: false,
-        doc: "Whether this argument contains sensitive data (PII/PHI)."
-      ]
-    ]
-  }
-
-  @input %Spark.Dsl.Section{
-    name: :input,
-    describe: "Defines the input arguments accepted by the agent",
-    examples: [
-      """
-      input do
-        argument :message, :string, allow_nil?: false
-        argument :context, :map, default: %{}
-      end
-      """
-    ],
-    entities: [@argument]
-  }
 
   @agent %Spark.Dsl.Section{
     name: :agent,
     describe: """
     Configuration for agent behavior and LLM integration.
 
-    Defines the LLM client, prompt template, input arguments, and output types
-    for the agent.
+    Defines the LLM client, prompt template, input schema, and output schema
+    for the agent using Zoi validation schemas.
     """,
     examples: [
       """
       agent do
         client "anthropic:claude-3-5-sonnet", temperature: 0.5, max_tokens: 100
 
-        input do
-          argument :message, :string, allow_nil?: false
-        end
+        input_schema Zoi.object(%{
+          message: Zoi.string(),
+          context: Zoi.map() |> Zoi.optional() |> Zoi.default(%{})
+        }, coerce: true)
 
-        output Reply
+        output_schema Zoi.object(%{
+          content: Zoi.string()
+        }, coerce: true)
 
         prompt ~p\"\"\"
         You are a helpful assistant.
@@ -126,10 +69,38 @@ defmodule AshAgent.DSL do
         Common options: :temperature, :max_tokens
         """
       ],
-      output: [
-        type: :atom,
+      input_schema: [
+        type: :any,
+        required: false,
+        doc: """
+        Zoi schema for input validation and coercion.
+
+        Use Zoi.object/2 with coerce: true for LLM inputs to handle
+        both atom and string keys.
+
+        Examples:
+          input_schema Zoi.object(%{message: Zoi.string()}, coerce: true)
+          input_schema Zoi.object(%{
+            message: Zoi.string(),
+            context: Zoi.map() |> Zoi.optional() |> Zoi.default(%{})
+          }, coerce: true)
+        """
+      ],
+      output_schema: [
+        type: :any,
         required: true,
-        doc: "Ash.TypedStruct module to use as the output type"
+        doc: """
+        Zoi schema for output validation and coercion.
+
+        Use Zoi.object/2 for structured outputs, or primitive schemas like
+        Zoi.string() for simple outputs. Use |> Zoi.to_struct(Module) to
+        convert validated output to a struct.
+
+        Examples:
+          output_schema Zoi.object(%{content: Zoi.string()}, coerce: true)
+          output_schema Zoi.object(%{content: Zoi.string()}, coerce: true) |> Zoi.to_struct(Reply)
+          output_schema Zoi.string()
+        """
       ],
       prompt: [
         type: {:or, [:string, {:struct, Solid.Template}]},
@@ -173,22 +144,8 @@ defmodule AshAgent.DSL do
         Defaults to :warn for backward compatibility.
         """
       ]
-    ],
-    sections: [@input]
+    ]
   }
-
-  @simple_types [:string, :integer, :float, :boolean, :map, :list, :any]
-
-  @doc false
-  def validate_argument_type(type) when type in @simple_types, do: {:ok, type}
-
-  def validate_argument_type({:array, inner}) when inner in @simple_types,
-    do: {:ok, {:array, inner}}
-
-  def validate_argument_type(type) do
-    {:error,
-     "expected a valid type (#{inspect(@simple_types)} or {:array, type}), got: #{inspect(type)}"}
-  end
 
   @doc false
   def validate_client_config(client) when is_binary(client), do: {:ok, {client, []}}
@@ -224,7 +181,6 @@ defmodule AshAgent.DSL do
   end
 
   def agent, do: @agent
-  def input, do: @input
 
   def template_agent do
     %{@agent | schema: template_schema()}

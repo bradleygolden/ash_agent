@@ -4,9 +4,9 @@ defmodule AshAgent.Transformers.ValidateAgent do
 
   Ensures that:
   - The agent section is properly configured
-  - Output types are valid TypedStruct modules
-  - Prompt templates are valid
-  - Input arguments are properly defined
+  - Client configuration follows provider:model format
+  - Prompt templates are valid Solid templates
+  - Provider capabilities are satisfied
   """
 
   use Spark.Dsl.Transformer

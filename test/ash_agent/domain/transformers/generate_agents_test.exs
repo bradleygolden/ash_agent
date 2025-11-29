@@ -4,24 +4,11 @@ defmodule AshAgent.Domain.Transformers.GenerateAgentsTest do
   alias Ash.Resource.Info, as: ResourceInfo
   alias Spark.Dsl.Extension
 
-  defmodule Output do
-    use Ash.TypedStruct
-
-    typed_struct do
-      field :result, :string, allow_nil?: false
-    end
-  end
-
   defmodule SimpleTemplate do
     use AshAgent.Template
 
     agent do
-      output AshAgent.Domain.Transformers.GenerateAgentsTest.Output
-
-      input do
-        argument :message, :string, allow_nil?: false
-      end
-
+      output_schema(Zoi.object(%{result: Zoi.string()}, coerce: true))
       prompt ~p"Echo: {{ message }}"
     end
   end
@@ -30,14 +17,7 @@ defmodule AshAgent.Domain.Transformers.GenerateAgentsTest do
     use AshAgent.Template
 
     agent do
-      output AshAgent.Domain.Transformers.GenerateAgentsTest.Output
-
-      input do
-        argument :text, :string, allow_nil?: false
-        argument :style, :string, default: "formal"
-        argument :max_length, :integer
-      end
-
+      output_schema(Zoi.object(%{result: Zoi.string()}, coerce: true))
       prompt ~p"Rewrite: {{ text }} in {{ style }} style"
     end
   end
@@ -86,13 +66,6 @@ defmodule AshAgent.Domain.Transformers.GenerateAgentsTest do
       assert :stream in action_names
     end
 
-    test "actions have correct arguments from template" do
-      call_action = ResourceInfo.action(TestDomain.SimpleTemplate, :call)
-      arg_names = Enum.map(call_action.arguments, & &1.name)
-
-      assert :message in arg_names
-    end
-
     test "sets client from domain registration" do
       {client, _opts} = Extension.get_opt(TestDomain.SimpleTemplate, [:agent], :client)
       assert client == "anthropic:claude-3-5-haiku"
@@ -114,31 +87,6 @@ defmodule AshAgent.Domain.Transformers.GenerateAgentsTest do
       assert function_exported?(TestDomain, :stream_simple_template, 1)
       assert function_exported?(TestDomain, :stream_simple_template!, 1)
     end
-
-    test "generated module handles multiple input arguments" do
-      call_action = ResourceInfo.action(TestDomain.Rewriter, :call)
-      arg_names = Enum.map(call_action.arguments, & &1.name)
-
-      assert :text in arg_names
-      assert :style in arg_names
-      assert :max_length in arg_names
-    end
-
-    test "preserves argument defaults" do
-      call_action = ResourceInfo.action(TestDomain.Rewriter, :call)
-      style_arg = Enum.find(call_action.arguments, &(&1.name == :style))
-
-      assert style_arg.default == "formal"
-    end
-
-    test "preserves argument allow_nil? setting" do
-      call_action = ResourceInfo.action(TestDomain.Rewriter, :call)
-      text_arg = Enum.find(call_action.arguments, &(&1.name == :text))
-      max_length_arg = Enum.find(call_action.arguments, &(&1.name == :max_length))
-
-      assert text_arg.allow_nil? == false
-      assert max_length_arg.allow_nil? == true
-    end
   end
 
   describe "provider override" do
@@ -146,12 +94,7 @@ defmodule AshAgent.Domain.Transformers.GenerateAgentsTest do
       use AshAgent.Template
 
       agent do
-        output AshAgent.Domain.Transformers.GenerateAgentsTest.Output
-
-        input do
-          argument :query, :string
-        end
-
+        output_schema(Zoi.object(%{result: Zoi.string()}, coerce: true))
         prompt ~p"Query: {{ query }}"
       end
     end
@@ -191,12 +134,7 @@ defmodule AshAgent.Domain.Transformers.GenerateAgentsTest do
 
       agent do
         client "anthropic:claude-3-5-haiku"
-        output AshAgent.Domain.Transformers.GenerateAgentsTest.Output
-
-        input do
-          argument :message, :string, allow_nil?: false
-        end
-
+        output_schema(Zoi.object(%{result: Zoi.string()}, coerce: true))
         prompt ~p"Echo: {{ message }}"
       end
     end
@@ -233,23 +171,6 @@ defmodule AshAgent.Domain.Transformers.GenerateAgentsTest do
       assert function_exported?(ComparisonDomain, :call_generated_agent, 1)
       assert function_exported?(ComparisonDomain, :stream_hand_written_agent, 1)
       assert function_exported?(ComparisonDomain, :stream_generated_agent, 1)
-    end
-
-    test "generated agent has same argument structure in call action" do
-      hand_written_call = ResourceInfo.action(HandWrittenAgent, :call)
-      generated_call = ResourceInfo.action(ComparisonDomain.GeneratedAgent, :call)
-
-      hand_written_arg_info =
-        Enum.map(hand_written_call.arguments, fn arg ->
-          {arg.name, arg.type, arg.allow_nil?}
-        end)
-
-      generated_arg_info =
-        Enum.map(generated_call.arguments, fn arg ->
-          {arg.name, arg.type, arg.allow_nil?}
-        end)
-
-      assert hand_written_arg_info == generated_arg_info
     end
   end
 end
