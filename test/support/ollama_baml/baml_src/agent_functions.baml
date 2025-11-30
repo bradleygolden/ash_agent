@@ -46,3 +46,32 @@ function AgentToolEcho(message: string) -> AgentToolResponse {
     {{ ctx.output_format }}
   "#
 }
+
+class SearchAction {
+  intent "search"
+  query string
+}
+
+class DoneAction {
+  intent "done"
+  answer string
+}
+
+union AgentLoopResponse {
+  SearchAction
+  DoneAction
+}
+
+function AgentLoop(message: string, iteration: int) -> AgentLoopResponse {
+  client OllamaClient
+  prompt #"
+    Help the user. Current iteration: {{ iteration }}.
+    Task: {{ message }}
+
+    Respond with JSON matching one of the output types:
+    - If iteration < 3: {"intent": "search", "query": "<search query>"}
+    - If iteration >= 3: {"intent": "done", "answer": "<final answer>"}
+
+    {{ ctx.output_format }}
+  "#
+}
