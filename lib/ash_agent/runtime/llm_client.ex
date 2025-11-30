@@ -418,8 +418,9 @@ defmodule AshAgent.Runtime.LLMClient do
       output: last_content,
       thinking: accumulated_thinking,
       usage: nil,
-      model: nil,
-      finish_reason: nil,
+      model: extract_model(stream_response),
+      finish_reason: extract_finish_reason(stream_response),
+      metadata: AshAgent.Metadata.new(%{}, %{}),
       raw_response: stream_response
     }
 
@@ -590,20 +591,44 @@ defmodule AshAgent.Runtime.LLMClient do
   - `output` - The parsed output struct
   - `provider_response` - The raw response from the provider
   - `provider` - The provider module or atom
+  - `runtime_timing` - Optional map with `:started_at`, `:completed_at`, `:duration_ms`
 
   ## Returns
 
   An `%AshAgent.Result{}` struct with the output and extracted metadata.
   """
-  def build_result(output, provider_response, provider) do
+  def build_result(output, provider_response, provider, runtime_timing \\ %{}) do
+    provider_metadata = extract_provider_metadata(provider, provider_response)
+
     %Result{
       output: output,
       thinking: extract_thinking_from_provider(provider, provider_response),
       usage: response_usage(provider, provider_response),
       model: extract_model(provider_response),
       finish_reason: extract_finish_reason(provider_response),
+      metadata: AshAgent.Metadata.new(provider_metadata, runtime_timing),
       raw_response: provider_response
     }
+  end
+
+  @doc """
+  Extracts provider-specific metadata from a response using the provider's callback.
+
+  Falls back to an empty map if the provider doesn't implement `extract_metadata/1`
+  or returns `:default`.
+  """
+  def extract_provider_metadata(provider, response) do
+    provider_module = resolve_provider_module(provider)
+
+    if provider_module && function_exported?(provider_module, :extract_metadata, 1) do
+      case provider_module.extract_metadata(response) do
+        :default -> %{}
+        metadata when is_map(metadata) -> metadata
+        _ -> %{}
+      end
+    else
+      %{}
+    end
   end
 
   @doc """

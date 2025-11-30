@@ -52,7 +52,7 @@ defmodule AshAgent.Result do
           usage: usage() | nil,
           model: String.t() | nil,
           finish_reason: finish_reason() | nil,
-          metadata: map(),
+          metadata: AshAgent.Metadata.t() | map(),
           raw_response: term()
         }
 

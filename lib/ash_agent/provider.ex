@@ -270,10 +270,61 @@ defmodule AshAgent.Provider do
   """
   @callback extract_thinking(response :: term()) :: String.t() | nil | :default
 
+  @doc """
+  Optional: Extract provider-specific metadata from a response.
+
+  Allows providers to expose rich metadata for observability, debugging, and
+  session persistence. Metadata is used to populate `AshAgent.Metadata` and
+  is included in telemetry events.
+
+  If not implemented, default extraction logic returns an empty map.
+
+  ## Parameters
+
+  - `response` - The provider-specific response object
+
+  ## Returns
+
+  - `map()` - Provider metadata to merge into AshAgent.Metadata
+  - `:default` - Use default extraction logic (empty map)
+
+  ## Expected Fields by Provider
+
+  ReqLLM should return:
+  - `:provider` - `:req_llm`
+  - `:reasoning_tokens` - Tokens from reasoning models (o1/o3)
+  - `:cached_tokens` - Cached input tokens (Anthropic)
+  - `:input_cost`, `:output_cost`, `:total_cost` - Cost breakdown
+
+  BAML should return:
+  - `:provider` - `:baml`
+  - `:duration_ms` - Call duration (from collector)
+  - `:time_to_first_token_ms` - TTFT for streaming
+  - `:request_id` - Unique request identifier
+  - `:client_name` - BAML client name
+  - `:num_attempts` - Retry count
+  - `:tags` - Custom metadata tags
+
+  ## Example
+
+      @impl true
+      def extract_metadata(%MyProviderResponse{} = response) do
+        %{
+          provider: :my_provider,
+          duration_ms: response.latency_ms,
+          request_id: response.id
+        }
+      end
+
+      def extract_metadata(_response), do: :default
+  """
+  @callback extract_metadata(response :: term()) :: map() | :default
+
   @optional_callbacks [
     introspect: 0,
     extract_content: 1,
     extract_tool_calls: 1,
-    extract_thinking: 1
+    extract_thinking: 1,
+    extract_metadata: 1
   ]
 end
