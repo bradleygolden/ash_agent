@@ -108,6 +108,64 @@ Enum.each(stream, fn chunk ->
 end)
 ```
 
+### Agentic Loops
+
+Build autonomous agents that loop until a task is complete. Use `Zoi.union` with discriminated types to define the possible outputs—each variant has its own required fields:
+
+```elixir
+defmodule MyApp.LoopAgent do
+  use Ash.Resource,
+    domain: MyApp.Agents,
+    extensions: [AshAgent.Resource]
+
+  agent do
+    client "anthropic:claude-sonnet-4-20250514"
+
+    instruction ~p"""
+    Help the user by searching for information when needed.
+    Choose one of the response types based on your next action.
+    """
+
+    input_schema Zoi.object(%{message: Zoi.string()}, coerce: true)
+
+    output_schema Zoi.union([
+      Zoi.object(%{intent: Zoi.literal("search"), query: Zoi.string()}, coerce: true),
+      Zoi.object(%{intent: Zoi.literal("done"), answer: Zoi.string()}, coerce: true)
+    ])
+  end
+end
+
+# The agentic loop
+defmodule MyApp.AgentRunner do
+  def run(question) do
+    context = [MyApp.LoopAgent.user(message: question)] |> MyApp.LoopAgent.context()
+    loop(context)
+  end
+
+  defp loop(context) do
+    {:ok, result} = MyApp.LoopAgent.call(context)
+
+    case result.output do
+      %{intent: "done", answer: answer} ->
+        {:ok, answer}
+
+      %{intent: "search", query: query} ->
+        search_result = perform_search(query)
+        new_context = [result.context, MyApp.LoopAgent.user(message: search_result)]
+                      |> MyApp.LoopAgent.context()
+        loop(new_context)
+    end
+  end
+
+  defp perform_search(query), do: "Results for: #{query}"
+end
+
+# Run it
+{:ok, answer} = MyApp.AgentRunner.run("What's the weather in Tokyo?")
+```
+
+The `Zoi.union` converts to JSON Schema `anyOf`, clearly showing the LLM valid output shapes. Each variant is type-safe—`query` is required for "search", `answer` is required for "done".
+
 ## Generated Functions
 
 AshAgent generates these functions on your agent module:
