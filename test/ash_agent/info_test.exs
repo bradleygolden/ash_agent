@@ -36,12 +36,12 @@ defmodule AshAgent.InfoTest do
       assert config.client == "anthropic:claude-3-5-sonnet"
       assert config.client_opts == []
       assert config.provider == :req_llm
-      assert config.prompt == "Simple test"
+      assert config.instruction == "Simple test"
+      assert config.input_schema != nil
       assert config.output_schema != nil
       assert config.hooks == nil
       assert config.token_budget == nil
       assert config.budget_strategy == :warn
-      assert config.context_module == AshAgent.Context
     end
 
     test "returns configuration with client options" do
@@ -76,8 +76,9 @@ defmodule AshAgent.InfoTest do
 
       agent do
         client "anthropic:claude-3-5-sonnet"
+        input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
         output_schema(Zoi.object(%{result: Zoi.string()}, coerce: true))
-        prompt "Test"
+        instruction("Test")
         token_budget(10_000)
         budget_strategy(:halt)
       end

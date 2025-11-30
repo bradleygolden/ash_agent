@@ -14,8 +14,9 @@ defmodule AshAgent.ResourceTest do
 
     agent do
       client("anthropic:claude-3-5-sonnet", temperature: 0.5, max_tokens: 50)
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       output_schema(Zoi.object(%{content: Zoi.string()}, coerce: true))
-      prompt("Test prompt")
+      instruction("Test prompt")
     end
   end
 
@@ -28,8 +29,9 @@ defmodule AshAgent.ResourceTest do
 
     agent do
       client("anthropic:claude-3-5-sonnet")
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       output_schema(Zoi.object(%{content: Zoi.string()}, coerce: true))
-      prompt("Test")
+      instruction("Test")
     end
   end
 
@@ -43,8 +45,9 @@ defmodule AshAgent.ResourceTest do
 
     agent do
       client("anthropic:claude-3-5-sonnet")
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       output_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
-      prompt(~p"Hello {{ name }}")
+      instruction(~p"Hello {{ name }}")
     end
   end
 

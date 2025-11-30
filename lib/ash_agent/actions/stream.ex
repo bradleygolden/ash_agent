@@ -19,6 +19,6 @@ defmodule AshAgent.Actions.Stream do
   """
   @impl true
   def run(input, _opts, _context) do
-    Runtime.stream(input.resource, input.arguments[:input] || %{})
+    Runtime.stream(input.resource, input.arguments.context)
   end
 end

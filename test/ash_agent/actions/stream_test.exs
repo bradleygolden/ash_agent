@@ -38,8 +38,9 @@ defmodule AshAgent.Actions.StreamTest do
     agent do
       provider StreamMockProvider
       client :mock
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       output_schema(Zoi.object(%{content: Zoi.string()}, coerce: true))
-      prompt "Test stream prompt"
+      instruction("Test stream prompt")
     end
   end
 
@@ -55,14 +56,16 @@ defmodule AshAgent.Actions.StreamTest do
 
   describe "run/3" do
     test "returns ok tuple with stream for valid input" do
-      input = %{resource: TestStreamAgent, arguments: %{}}
+      context = AshAgent.Context.new([AshAgent.Message.user(%{message: "test"})])
+      input = %{resource: TestStreamAgent, arguments: %{context: context}}
 
       assert {:ok, stream} = StreamAction.run(input, [], %{})
       assert is_function(stream) or is_struct(stream, Elixir.Stream)
     end
 
     test "stream yields tagged chunks when consumed" do
-      input = %{resource: TestStreamAgent, arguments: %{}}
+      context = AshAgent.Context.new([AshAgent.Message.user(%{message: "test"})])
+      input = %{resource: TestStreamAgent, arguments: %{context: context}}
 
       {:ok, stream} = StreamAction.run(input, [], %{})
       results = Enum.to_list(stream)
@@ -79,20 +82,23 @@ defmodule AshAgent.Actions.StreamTest do
     end
 
     test "passes arguments through to runtime" do
-      input = %{resource: TestStreamAgent, arguments: %{custom_arg: "value"}}
+      context = AshAgent.Context.new([AshAgent.Message.user(%{message: "test"})])
+      input = %{resource: TestStreamAgent, arguments: %{context: context, custom_arg: "value"}}
 
       assert {:ok, _stream} = StreamAction.run(input, [], %{})
     end
 
-    test "handles empty arguments" do
-      input = %{resource: TestStreamAgent, arguments: %{}}
+    test "handles empty context messages" do
+      context = AshAgent.Context.new([])
+      input = %{resource: TestStreamAgent, arguments: %{context: context}}
 
       assert {:ok, stream} = StreamAction.run(input, [], %{})
       assert Enum.to_list(stream) != []
     end
 
     test "returns error for invalid resource" do
-      input = %{resource: NonExistentModule, arguments: %{}}
+      context = AshAgent.Context.new([])
+      input = %{resource: NonExistentModule, arguments: %{context: context}}
 
       assert {:error, _} = StreamAction.run(input, [], %{})
     end
@@ -100,7 +106,8 @@ defmodule AshAgent.Actions.StreamTest do
 
   describe "run/3 stream behavior" do
     test "stream supports early termination" do
-      input = %{resource: TestStreamAgent, arguments: %{}}
+      context = AshAgent.Context.new([AshAgent.Message.user(%{message: "test"})])
+      input = %{resource: TestStreamAgent, arguments: %{context: context}}
 
       {:ok, stream} = StreamAction.run(input, [], %{})
       results = Enum.take(stream, 1)

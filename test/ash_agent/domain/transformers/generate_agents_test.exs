@@ -8,8 +8,9 @@ defmodule AshAgent.Domain.Transformers.GenerateAgentsTest do
     use AshAgent.Template
 
     agent do
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       output_schema(Zoi.object(%{result: Zoi.string()}, coerce: true))
-      prompt ~p"Echo: {{ message }}"
+      instruction(~p"Echo: {{ message }}")
     end
   end
 
@@ -17,8 +18,9 @@ defmodule AshAgent.Domain.Transformers.GenerateAgentsTest do
     use AshAgent.Template
 
     agent do
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       output_schema(Zoi.object(%{result: Zoi.string()}, coerce: true))
-      prompt ~p"Rewrite: {{ text }} in {{ style }} style"
+      instruction(~p"Rewrite: {{ text }} in {{ style }} style")
     end
   end
 
@@ -94,8 +96,9 @@ defmodule AshAgent.Domain.Transformers.GenerateAgentsTest do
       use AshAgent.Template
 
       agent do
+        input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
         output_schema(Zoi.object(%{result: Zoi.string()}, coerce: true))
-        prompt ~p"Query: {{ query }}"
+        instruction(~p"Query: {{ query }}")
       end
     end
 
@@ -134,8 +137,9 @@ defmodule AshAgent.Domain.Transformers.GenerateAgentsTest do
 
       agent do
         client "anthropic:claude-3-5-haiku"
+        input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
         output_schema(Zoi.object(%{result: Zoi.string()}, coerce: true))
-        prompt ~p"Echo: {{ message }}"
+        instruction(~p"Echo: {{ message }}")
       end
     end
 

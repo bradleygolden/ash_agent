@@ -24,6 +24,7 @@ defmodule AshAgent.IntegrationTest do
 
     agent do
       client("anthropic:claude-3-5-sonnet", temperature: 0.1, max_tokens: 50)
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
 
       output_schema(
         Zoi.object(
@@ -32,7 +33,7 @@ defmodule AshAgent.IntegrationTest do
         )
       )
 
-      prompt(~p"Echo: {{ message }}")
+      instruction(~p"Echo: {{ message }}")
     end
   end
 
@@ -50,8 +51,9 @@ defmodule AshAgent.IntegrationTest do
 
     agent do
       client("anthropic:claude-3-5-sonnet", temperature: 0.1, max_tokens: 20)
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       output_schema(Zoi.object(%{greeting: Zoi.string()}, coerce: true))
-      prompt(~p"Say hello!")
+      instruction(~p"Say hello!")
     end
   end
 

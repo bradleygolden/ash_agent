@@ -18,8 +18,9 @@ defmodule AshAgent.TokenTrackingTest do
 
     agent do
       client "anthropic:claude-3-5-sonnet"
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       output_schema(Zoi.object(%{result: Zoi.string()}, coerce: true))
-      prompt "Test prompt"
+      instruction("Test prompt")
     end
   end
 

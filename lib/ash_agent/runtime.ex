@@ -4,11 +4,25 @@ defmodule AshAgent.Runtime do
 
   This module handles the execution of agent calls by:
   1. Reading agent configuration from the DSL
-  2. Rendering prompt templates with provided arguments
+  2. Extracting system prompt and messages from context
   3. Using Zoi schemas for LLM structured output
   4. Calling the configured LLM provider to generate or stream responses
   5. Parsing and validating responses with Zoi
   6. Automatically delegating to extended runtimes (like `ash_agent_tools`) when needed
+
+  ## Context-Based Execution
+
+  The runtime receives an `AshAgent.Context` containing messages built via generated
+  functions on agent modules:
+
+      context =
+        [
+          ChatAgent.instruction(company_name: "Acme"),
+          ChatAgent.user(message: "Hello!")
+        ]
+        |> ChatAgent.context()
+
+      {:ok, result} = AshAgent.Runtime.call(ChatAgent, context)
 
   ## Extension Architecture
 
@@ -17,73 +31,59 @@ defmodule AshAgent.Runtime do
   - **Without `ash_agent_tools`**: Executes agents with single-turn LLM calls
   - **With `ash_agent_tools`**: Automatically delegates to tool-calling runtime when
     agents have tools configured, enabling multi-turn agentic loops
-
-  Users always call `AshAgent.Runtime.call/2` regardless of which packages are installed.
-  The runtime automatically uses the appropriate execution strategy.
-
-  ## Example
-
-      # Works with or without ash_agent_tools installed
-      {:ok, result} = AshAgent.Runtime.call(MyAgent, args)
-
   """
 
-  alias AshAgent.{Error, Info, ProviderRegistry}
-  alias AshAgent.Runtime.{Hooks, LLMClient, PromptRenderer}
+  alias AshAgent.{Context, Error, Info, ProviderRegistry}
+  alias AshAgent.Runtime.{Hooks, LLMClient}
   alias AshAgent.Telemetry
   alias ReqLLM.Response
   alias Spark.Dsl.Extension
 
   @doc """
-  Calls an agent with the given arguments.
+  Calls an agent with the given context.
 
   Returns `{:ok, result}` where result is an `AshAgent.Result` struct containing
   the parsed output and metadata (thinking, usage, model, etc.), or `{:error, reason}` on failure.
 
   ## Examples
 
-      # Define an agent resource
-      defmodule MyApp.ChatAgent do
-        use Ash.Resource,
-          domain: MyApp.Domain,
-          extensions: [AshAgent.Resource]
+      context =
+        [
+          ChatAgent.instruction(company_name: "Acme"),
+          ChatAgent.user(message: "Hello!")
+        ]
+        |> ChatAgent.context()
 
-        agent do
-          client "anthropic:claude-3-5-sonnet"
-
-          output_schema Zoi.object(%{
-            content: Zoi.string()
-          }, coerce: true)
-
-          prompt "You are a helpful assistant. Reply to: {{ message }}"
-        end
-      end
-
-      # Call the agent
-      {:ok, result} = AshAgent.Runtime.call(MyApp.ChatAgent, message: "Hello!")
+      {:ok, result} = AshAgent.Runtime.call(MyApp.ChatAgent, context)
       result.output.content
       #=> "Hello! How can I assist you today?"
 
-      # Access thinking content (if extended thinking is enabled)
-      result.thinking
-      #=> "The user greeted me, I should respond warmly..."
-
-      # Access usage metadata
-      result.usage
-      #=> %{input_tokens: 10, output_tokens: 5, total_tokens: 15}
-
   """
-  @spec call(module(), keyword() | map()) :: {:ok, AshAgent.Result.t()} | {:error, term()}
-  def call(module, args) do
+  def call(module, %Context{} = context) do
+    call(module, context, [])
+  end
+
+  def call(module, args) when is_map(args) and not is_struct(args) do
     call(module, args, [])
   end
 
-  @spec call(module(), keyword() | map(), keyword() | map()) ::
-          {:ok, AshAgent.Result.t()} | {:error, term()}
-  def call(module, args, runtime_opts) do
+  def call(module, args) when is_list(args) do
+    call(module, Map.new(args), [])
+  end
+
+  def call(module, args, runtime_opts) when is_map(args) and not is_struct(args) do
+    context = build_context_from_args(module, args)
+    call(module, context, runtime_opts)
+  end
+
+  def call(module, args, runtime_opts) when is_list(args) do
+    call(module, Map.new(args), runtime_opts)
+  end
+
+  def call(module, %Context{} = context, runtime_opts) do
     case resolve_tool_runtime(module) do
       {:delegate, tool_runtime} ->
-        tool_runtime.call(module, args, runtime_opts)
+        tool_runtime.call(module, context, runtime_opts)
 
       {:error, :missing_tool_runtime} ->
         {:error,
@@ -96,7 +96,7 @@ defmodule AshAgent.Runtime do
         with {:ok, config} <- get_agent_config(module),
              {:ok, config} <- apply_runtime_overrides(config, runtime_opts),
              :ok <- validate_provider_capabilities(config, :call) do
-          call_with_hooks(config, module, args)
+          call_with_context(config, module, context)
         else
           {:error, _} = error ->
             error
@@ -105,67 +105,69 @@ defmodule AshAgent.Runtime do
   end
 
   @doc """
-  Calls an agent with the given arguments, raising on error.
-
-  Returns the result directly or raises an exception.
-
-  See `call/2` for usage examples.
+  Calls an agent with the given context, raising on error.
   """
-  @spec call!(module(), keyword() | map()) :: AshAgent.Result.t() | no_return()
-  def call!(module, args) do
+  def call!(module, %Context{} = context) do
+    call!(module, context, [])
+  end
+
+  def call!(module, args) when is_map(args) and not is_struct(args) do
     call!(module, args, [])
   end
 
-  @spec call!(module(), keyword() | map(), keyword() | map()) :: AshAgent.Result.t() | no_return()
-  def call!(module, args, runtime_opts) do
+  def call!(module, args) when is_list(args) do
+    call!(module, Map.new(args), [])
+  end
+
+  def call!(module, %Context{} = context, runtime_opts) do
+    case call(module, context, runtime_opts) do
+      {:ok, result} -> result
+      {:error, error} -> raise error
+    end
+  end
+
+  def call!(module, args, runtime_opts) when is_map(args) and not is_struct(args) do
     case call(module, args, runtime_opts) do
       {:ok, result} -> result
       {:error, error} -> raise error
     end
   end
 
+  def call!(module, args, runtime_opts) when is_list(args) do
+    call!(module, Map.new(args), runtime_opts)
+  end
+
   @doc """
-  Streams an agent response with the given arguments.
+  Streams an agent response with the given context.
 
   Returns `{:ok, stream}` where stream yields tagged chunks as they arrive,
   or `{:error, reason}` on failure.
-
-  ## Tagged Chunk Types
-
-  - `{:thinking, text}` - thinking/reasoning content (if extended thinking is enabled)
-  - `{:content, struct}` - partial content struct as it's being generated
-  - `{:tool_call, chunk}` - tool call request from the model
-  - `{:done, result}` - final `AshAgent.Result` struct with full metadata
-
-  ## Examples
-
-      # Stream responses with tagged chunks
-      {:ok, stream} = AshAgent.Runtime.stream(MyApp.ChatAgent, message: "Hello!")
-
-      stream
-      |> Stream.each(fn
-        {:thinking, text} ->
-          IO.puts("Thinking: \#{text}")
-        {:content, partial} ->
-          IO.puts("Content: \#{partial.content}")
-        {:done, result} ->
-          IO.puts("Final: \#{result.output.content}")
-          IO.puts("Thinking: \#{result.thinking}")
-      end)
-      |> Stream.run()
-
   """
-  @spec stream(module(), keyword() | map()) :: {:ok, Enumerable.t()} | {:error, term()}
-  def stream(module, args) do
+  def stream(module, %Context{} = context) do
+    stream(module, context, [])
+  end
+
+  def stream(module, args) when is_map(args) and not is_struct(args) do
     stream(module, args, [])
   end
 
-  @spec stream(module(), keyword() | map(), keyword() | map()) ::
-          {:ok, Enumerable.t()} | {:error, term()}
-  def stream(module, args, runtime_opts) do
+  def stream(module, args) when is_list(args) do
+    stream(module, Map.new(args), [])
+  end
+
+  def stream(module, args, runtime_opts) when is_map(args) and not is_struct(args) do
+    context = build_context_from_args(module, args)
+    stream(module, context, runtime_opts)
+  end
+
+  def stream(module, args, runtime_opts) when is_list(args) do
+    stream(module, Map.new(args), runtime_opts)
+  end
+
+  def stream(module, %Context{} = context, runtime_opts) do
     case resolve_tool_runtime(module) do
       {:delegate, tool_runtime} ->
-        tool_runtime.stream(module, args, runtime_opts)
+        tool_runtime.stream(module, context, runtime_opts)
 
       {:error, :missing_tool_runtime} ->
         {:error,
@@ -178,7 +180,7 @@ defmodule AshAgent.Runtime do
         with {:ok, config} <- get_agent_config(module),
              {:ok, config} <- apply_runtime_overrides(config, runtime_opts),
              :ok <- validate_provider_capabilities(config, :stream) do
-          stream_with_hooks(config, module, args)
+          stream_with_context(config, module, context)
         else
           {:error, _} = error ->
             error
@@ -187,146 +189,138 @@ defmodule AshAgent.Runtime do
   end
 
   @doc """
-  Streams an agent response with the given arguments, raising on error.
-
-  Returns a stream that yields partial results or raises an exception.
+  Streams an agent response with the given context, raising on error.
   """
-  @spec stream!(module(), keyword() | map()) :: Enumerable.t() | no_return()
-  def stream!(module, args) do
+  def stream!(module, %Context{} = context) do
+    stream!(module, context, [])
+  end
+
+  def stream!(module, args) when is_map(args) and not is_struct(args) do
     stream!(module, args, [])
   end
 
-  @spec stream!(module(), keyword() | map(), keyword() | map()) :: Enumerable.t() | no_return()
-  def stream!(module, args, runtime_opts) do
+  def stream!(module, args) when is_list(args) do
+    stream!(module, Map.new(args), [])
+  end
+
+  def stream!(module, %Context{} = context, runtime_opts) do
+    case stream(module, context, runtime_opts) do
+      {:ok, stream} -> stream
+      {:error, error} -> raise error
+    end
+  end
+
+  def stream!(module, args, runtime_opts) when is_map(args) and not is_struct(args) do
     case stream(module, args, runtime_opts) do
       {:ok, stream} -> stream
       {:error, error} -> raise error
     end
   end
 
-  # Private functions
+  def stream!(module, args, runtime_opts) when is_list(args) do
+    stream!(module, Map.new(args), runtime_opts)
+  end
 
-  defp call_with_hooks(config, module, args) do
-    context = Hooks.build_context(module, args)
+  defp call_with_context(config, module, context) do
+    {system_prompt, messages} = Context.to_provider_format(context)
 
-    with {:ok, context} <- Hooks.execute(config.hooks, :before_call, context),
-         {:ok, prompt} <- render_prompt(config, context.input),
-         context = Hooks.with_prompt(context, prompt),
-         {:ok, context} <- Hooks.execute(config.hooks, :after_render, context),
+    hook_context = Hooks.build_context(module, %{context: context})
+
+    with {:ok, hook_context} <- Hooks.execute(config.hooks, :before_call, hook_context),
+         hook_context = Hooks.with_prompt(hook_context, system_prompt),
+         {:ok, hook_context} <- Hooks.execute(config.hooks, :after_render, hook_context),
          {:ok, schema} <- build_schema(config),
-         {:ok, result} <- execute_call(config, module, context, prompt, schema) do
-      context = Hooks.with_response(context, result)
+         {:ok, result} <-
+           execute_call(config, module, hook_context, system_prompt, messages, schema, context) do
+      hook_context = Hooks.with_response(hook_context, result)
 
-      case Hooks.execute(config.hooks, :after_call, context) do
-        {:ok, context} -> {:ok, context.response}
+      case Hooks.execute(config.hooks, :after_call, hook_context) do
+        {:ok, hook_context} -> {:ok, hook_context.response}
         {:error, transformed_error} -> {:error, transformed_error}
       end
     else
       {:error, error} = result ->
-        context = Hooks.with_error(context, error)
+        hook_context = Hooks.with_error(hook_context, error)
 
-        case Hooks.execute(config.hooks, :on_error, context) do
+        case Hooks.execute(config.hooks, :on_error, hook_context) do
           {:ok, _context} -> result
           {:error, transformed_error} -> {:error, transformed_error}
         end
     end
   end
 
-  defp execute_call(config, module, context, prompt, schema) do
+  defp execute_call(config, module, hook_context, system_prompt, messages, schema, context) do
     metadata = telemetry_metadata(config, module, :call)
-    metadata = Map.put(metadata, :input, context.input)
+    metadata = Map.put(metadata, :input, hook_context.input)
 
-    rendered_prompt =
-      if prompt do
-        case PromptRenderer.render(prompt, context.input, config) do
-          {:ok, rendered} -> rendered
-          {:error, _} -> nil
-        end
-      else
-        nil
-      end
-
-    if rendered_prompt do
-      emit_prompt_rendered(metadata, rendered_prompt)
+    if system_prompt do
+      emit_prompt_rendered(metadata, system_prompt)
     end
-
-    ctx = context_module().new(context.input, system_prompt: rendered_prompt)
 
     Telemetry.span(
       :call,
       metadata,
       fn ->
-        emit_llm_request(metadata, ctx, nil)
+        emit_llm_request(metadata, context, nil)
 
         response_result =
-          LLMClient.generate_object(
+          LLMClient.generate_object_with_messages(
             module,
             config.client,
-            prompt,
+            system_prompt,
+            messages,
             schema,
             config.client_opts,
-            context,
             provider_override: config.provider
           )
 
-        emit_llm_response(metadata, response_result, ctx, nil)
+        emit_llm_response(metadata, response_result, context, nil)
 
-        handle_call_response(response_result, config, metadata, ctx)
+        handle_call_response(response_result, config, metadata, context)
       end
     )
     |> unwrap_span_result()
   end
 
-  defp stream_with_hooks(config, module, args) do
-    context = Hooks.build_context(module, args)
+  defp stream_with_context(config, module, context) do
+    {system_prompt, messages} = Context.to_provider_format(context)
 
-    with {:ok, context} <- Hooks.execute(config.hooks, :before_call, context),
-         {:ok, prompt} <- render_prompt(config, context.input),
-         context = Hooks.with_prompt(context, prompt),
-         {:ok, context} <- Hooks.execute(config.hooks, :after_render, context),
+    hook_context = Hooks.build_context(module, %{context: context})
+
+    with {:ok, hook_context} <- Hooks.execute(config.hooks, :before_call, hook_context),
+         hook_context = Hooks.with_prompt(hook_context, system_prompt),
+         {:ok, _hook_context} <- Hooks.execute(config.hooks, :after_render, hook_context),
          {:ok, schema} <- build_schema(config) do
-      case execute_stream(config, module, context, prompt, schema) do
+      case execute_stream(config, module, system_prompt, messages, schema, context) do
         {:error, _} = error -> error
         stream -> {:ok, stream}
       end
     else
       {:error, error} = result ->
-        context = Hooks.with_error(context, error)
+        hook_context = Hooks.with_error(hook_context, error)
 
-        case Hooks.execute(config.hooks, :on_error, context) do
+        case Hooks.execute(config.hooks, :on_error, hook_context) do
           {:ok, _context} -> result
           {:error, transformed_error} -> {:error, transformed_error}
         end
     end
   end
 
-  defp execute_stream(config, module, context, prompt, schema) do
+  defp execute_stream(config, module, system_prompt, messages, schema, context) do
     metadata = telemetry_metadata(config, module, :stream)
-    metadata = Map.put(metadata, :input, context.input)
+    metadata = Map.put(metadata, :input, context)
 
-    rendered_prompt =
-      if prompt do
-        case PromptRenderer.render(prompt, context.input, config) do
-          {:ok, rendered} -> rendered
-          {:error, _} -> nil
-        end
-      else
-        nil
-      end
-
-    if rendered_prompt do
-      emit_prompt_rendered(metadata, rendered_prompt)
+    if system_prompt do
+      emit_prompt_rendered(metadata, system_prompt)
     end
 
-    _ctx = context_module().new(context.input, system_prompt: rendered_prompt)
-
-    case LLMClient.stream_object(
+    case LLMClient.stream_object_with_messages(
            module,
            config.client,
-           prompt,
+           system_prompt,
+           messages,
            schema,
            config.client_opts,
-           context,
            provider_override: config.provider
          ) do
       {:ok, stream_response} ->
@@ -435,16 +429,6 @@ defmodule AshAgent.Runtime do
     end
   end
 
-  defp render_prompt(config, input) do
-    case config.prompt do
-      nil ->
-        {:ok, nil}
-
-      prompt ->
-        PromptRenderer.render(prompt, input, config)
-    end
-  end
-
   defp build_schema(config) do
     case config.output_schema do
       nil ->
@@ -453,6 +437,30 @@ defmodule AshAgent.Runtime do
       schema ->
         {:ok, schema}
     end
+  end
+
+  defp build_context_from_args(module, args) do
+    {:ok, config} = get_agent_config(module)
+
+    system_prompt =
+      case config.instruction do
+        nil ->
+          nil
+
+        template ->
+          case AshAgent.Runtime.PromptRenderer.render(template, args, config) do
+            {:ok, rendered} -> rendered
+            {:error, _} -> nil
+          end
+      end
+
+    messages =
+      case system_prompt do
+        nil -> [AshAgent.Message.user(args)]
+        prompt -> [AshAgent.Message.system(prompt), AshAgent.Message.user(args)]
+      end
+
+    Context.new(messages)
   end
 
   defp telemetry_metadata(config, module, type) do
@@ -508,8 +516,14 @@ defmodule AshAgent.Runtime do
     case LLMClient.parse_response(config.output_schema, response) do
       {:ok, output} ->
         result = LLMClient.build_result(output, response, config.provider)
-        enriched_metadata = build_call_metadata(metadata, {:ok, result}, response, ctx)
-        {{:ok, result}, enriched_metadata}
+
+        result_with_context =
+          Map.put(result, :context, Context.add_assistant_message(ctx, output))
+
+        enriched_metadata =
+          build_call_metadata(metadata, {:ok, result_with_context}, response, ctx)
+
+        {{:ok, result_with_context}, enriched_metadata}
 
       {:error, _} = error ->
         {error, Map.put(metadata, :context, ctx)}
@@ -558,10 +572,6 @@ defmodule AshAgent.Runtime do
   end
 
   defp unwrap_span_result({result, _meta}), do: result
-
-  defp context_module do
-    AshAgent.RuntimeRegistry.get_context_module()
-  end
 
   defp resolve_tool_runtime(module) do
     case AshAgent.RuntimeRegistry.get_tool_runtime() do

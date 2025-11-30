@@ -116,28 +116,28 @@ defmodule AshAgent.Info do
   - `:client` - The client specification (string or tuple)
   - `:client_opts` - Additional client options
   - `:provider` - The provider module or preset
-  - `:prompt` - The prompt template
-  - `:input_schema` - The Zoi schema for input validation (optional)
+  - `:instruction` - The instruction template (system prompt)
+  - `:instruction_schema` - The Zoi schema for instruction template args
+  - `:input_schema` - The Zoi schema for user message validation
   - `:output_schema` - The Zoi schema for output validation
   - `:hooks` - Hooks module configured for the agent
   - `:token_budget` - Token budget limit (if configured)
   - `:budget_strategy` - Budget enforcement strategy
-  - `:context_module` - The context module from application config
 
   ## Examples
 
       iex> AshAgent.Info.agent_config(MyAgent)
       %{
-        client: "anthropic:claude-3-5-sonnet",
+        client: "anthropic:claude-sonnet-4-20250514",
         client_opts: [],
         provider: :req_llm,
-        prompt: "You are a helpful assistant",
+        instruction: %Solid.Template{...},
+        instruction_schema: %Zoi.Object{...},
         input_schema: %Zoi.Object{...},
         output_schema: %Zoi.Object{...},
         hooks: nil,
         token_budget: nil,
-        budget_strategy: :warn,
-        context_module: AshAgent.Context
+        budget_strategy: :warn
       }
   """
   @spec agent_config(Ash.Resource.t()) :: map()
@@ -148,13 +148,13 @@ defmodule AshAgent.Info do
       client: client_string,
       client_opts: client_opts,
       provider: Extension.get_opt(resource, [:agent], :provider, :req_llm),
-      prompt: Extension.get_opt(resource, [:agent], :prompt, nil, true),
+      instruction: Extension.get_opt(resource, [:agent], :instruction, nil, true),
+      instruction_schema: Extension.get_opt(resource, [:agent], :instruction_schema, nil, true),
       input_schema: Extension.get_opt(resource, [:agent], :input_schema, nil, true),
       output_schema: Extension.get_opt(resource, [:agent], :output_schema, nil, true),
       hooks: Extension.get_opt(resource, [:agent], :hooks, nil, true),
       token_budget: Extension.get_opt(resource, [:agent], :token_budget, nil),
       budget_strategy: Extension.get_opt(resource, [:agent], :budget_strategy, :warn),
-      context_module: AshAgent.Config.context_module(),
       profile: Extension.get_opt(resource, [:agent], :profile, nil)
     }
   end

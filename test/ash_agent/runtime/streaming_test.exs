@@ -105,11 +105,13 @@ defmodule AshAgent.Runtime.StreamingTest do
       provider StreamingMockProvider
       client :mock
 
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
+
       output_schema(
         Zoi.object(%{content: Zoi.string(), index: Zoi.integer() |> Zoi.optional()}, coerce: true)
       )
 
-      prompt "Stream test"
+      instruction("Stream test")
     end
   end
 
@@ -139,7 +141,9 @@ defmodule AshAgent.Runtime.StreamingTest do
         Zoi.object(%{content: Zoi.string(), index: Zoi.integer() |> Zoi.optional()}, coerce: true)
       )
 
-      prompt "Multi-chunk stream"
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
+
+      instruction("Multi-chunk stream")
     end
   end
 
@@ -169,7 +173,8 @@ defmodule AshAgent.Runtime.StreamingTest do
         Zoi.object(%{content: Zoi.string(), index: Zoi.integer() |> Zoi.optional()}, coerce: true)
       )
 
-      prompt "Delayed stream"
+      instruction("Delayed stream")
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
     end
   end
 
@@ -191,7 +196,8 @@ defmodule AshAgent.Runtime.StreamingTest do
         Zoi.object(%{content: Zoi.string(), index: Zoi.integer() |> Zoi.optional()}, coerce: true)
       )
 
-      prompt "Error stream"
+      instruction("Error stream")
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
     end
   end
 
@@ -207,13 +213,14 @@ defmodule AshAgent.Runtime.StreamingTest do
 
     agent do
       provider :mock
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       client [:mock, mock_chunks: []]
 
       output_schema(
         Zoi.object(%{content: Zoi.string(), index: Zoi.integer() |> Zoi.optional()}, coerce: true)
       )
 
-      prompt "Empty stream"
+      instruction("Empty stream")
     end
   end
 
@@ -230,12 +237,13 @@ defmodule AshAgent.Runtime.StreamingTest do
     agent do
       provider :mock
       client [:mock, mock_chunks: [%{content: "only", index: 0}]]
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
 
       output_schema(
         Zoi.object(%{content: Zoi.string(), index: Zoi.integer() |> Zoi.optional()}, coerce: true)
       )
 
-      prompt "Single chunk"
+      instruction("Single chunk")
     end
   end
 

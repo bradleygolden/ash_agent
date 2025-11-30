@@ -5,8 +5,9 @@ defmodule AshAgent.TemplateTest do
     use AshAgent.Template
 
     agent do
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       output_schema(Zoi.object(%{headline: Zoi.string()}, coerce: true))
-      prompt ~p"Summarize: {{ title }} (max {{ max_words }} words)"
+      instruction(~p"Summarize: {{ title }} (max {{ max_words }} words)")
     end
   end
 
@@ -14,10 +15,11 @@ defmodule AshAgent.TemplateTest do
     use AshAgent.Template
 
     agent do
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       output_schema(Zoi.object(%{headline: Zoi.string()}, coerce: true))
       token_budget(10_000)
       budget_strategy(:halt)
-      prompt ~p"Process: {{ text }}"
+      instruction(~p"Process: {{ text }}")
     end
   end
 

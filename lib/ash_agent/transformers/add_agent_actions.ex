@@ -44,7 +44,7 @@ defmodule AshAgent.Transformers.AddAgentActions do
       name: :call,
       type: :action,
       description: "Call the agent and return a structured response",
-      arguments: [input_argument()],
+      arguments: [context_argument()],
       returns: :map,
       run: {AshAgent.Actions.Call, []},
       primary?: false
@@ -56,20 +56,21 @@ defmodule AshAgent.Transformers.AddAgentActions do
       name: :stream,
       type: :action,
       description: "Stream partial responses from the agent",
-      arguments: [input_argument()],
+      arguments: [context_argument()],
       returns: {:array, :map},
       run: {AshAgent.Actions.Stream, []},
       primary?: false
     }
   end
 
-  defp input_argument do
+  defp context_argument do
     %Ash.Resource.Actions.Argument{
-      name: :input,
-      type: :map,
-      allow_nil?: true,
+      name: :context,
+      type: :struct,
+      constraints: [instance_of: AshAgent.Context],
+      allow_nil?: false,
       public?: true,
-      description: "Input map for the agent prompt template"
+      description: "Context containing messages for the agent"
     }
   end
 end
