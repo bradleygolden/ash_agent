@@ -7,9 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2024-11-29
+
 ### Changed
 
-- Replace `input` block and `output` with `input_schema` and `output_schema` using Zoi schemas
+- **BREAKING**: Replace `input` block and `output` with `input_schema` and `output_schema` using Zoi schemas
+- **BREAKING**: Replace `prompt` with `instruction` DSL
+- Add context builder pattern with `context/1`, `instruction/1`, `user/1` functions
+
+### Added
+
+- Add documentation for agentic loop patterns using `Zoi.union` for discriminated outputs
 
 ## [0.2.0] - 2024-11-27
 
