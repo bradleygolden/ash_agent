@@ -45,14 +45,13 @@ defmodule AshAgent.MixProject do
 
       # Optional dependencies
       {:igniter, "~> 0.3", optional: true},
-      {:ash_baml, ash_baml_dep()},
 
       # Dev and test dependencies
       {:ex_doc, "~> 0.34", only: [:dev, :test], runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:plug, "~> 1.16", only: :test}
-    ]
+    ] ++ ash_baml_dep()
   end
 
   defp description do
@@ -143,12 +142,12 @@ defmodule AshAgent.MixProject do
 
   defp ash_baml_dep do
     if hex_build?() do
-      [version: "~> 0.2.0", optional: true]
+      [{:ash_baml, "~> 0.2.0", optional: true}]
     else
       if local_dep?(:ash_baml) do
-        [in_umbrella: true]
+        [{:ash_baml, in_umbrella: true}]
       else
-        [version: "~> 0.2.0", optional: true]
+        [{:ash_baml, "~> 0.2.0", optional: true}]
       end
     end
   end
