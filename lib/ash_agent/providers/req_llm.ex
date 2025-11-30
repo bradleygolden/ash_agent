@@ -36,7 +36,7 @@ defmodule AshAgent.Providers.ReqLLM do
 
     with_retry(
       fn ->
-        if is_nil(schema) do
+        if is_nil(schema) or primitive_schema?(schema) do
           ReqLLM.generate_text(client, prompt_or_messages, req_opts)
         else
           ReqLLM.generate_object(client, prompt_or_messages, schema, req_opts)
@@ -51,12 +51,17 @@ defmodule AshAgent.Providers.ReqLLM do
   def stream(client, prompt, schema, opts, _context, tools, messages) do
     {prompt_or_messages, req_opts} = build_req_args(prompt, messages, opts, tools)
 
-    if is_nil(schema) do
+    if is_nil(schema) or primitive_schema?(schema) do
       ReqLLM.stream_text(client, prompt_or_messages, req_opts)
     else
       ReqLLM.stream_object(client, prompt_or_messages, schema, req_opts)
     end
   end
+
+  defp primitive_schema?(schema) when schema in [:string, :integer, :boolean, :float, :number],
+    do: true
+
+  defp primitive_schema?(_), do: false
 
   defp build_req_args(prompt, messages, opts, tools) do
     prompt_or_messages = if messages && length(messages) > 0, do: messages, else: prompt

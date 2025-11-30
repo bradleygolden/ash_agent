@@ -36,11 +36,6 @@ defmodule AshAgent.Integration.AgentActionsTest do
 
         instruction("Test")
       end
-
-      code_interface do
-        define :call, args: [:input]
-        define :stream, args: [:input]
-      end
     end
 
     describe "generated actions" do
@@ -51,36 +46,33 @@ defmodule AshAgent.Integration.AgentActionsTest do
         assert :map == call_action.returns
         assert {:array, :map} == stream_action.returns
       end
-
-      test "context attribute is automatically added" do
-        context_attr = Info.attribute(OllamaAgent, :context)
-
-        assert %Ash.Resource.Attribute{} = context_attr
-        assert context_attr.name == :context
-        assert context_attr.type == AshAgent.Context
-        assert context_attr.allow_nil? == true
-        assert context_attr.public? == true
-      end
     end
 
     describe "agent execution" do
-      test "code interface call reaches ollama" do
-        assert {:ok, reply} = OllamaAgent.call(%{message: "integration ping"})
+      test "Runtime.call reaches ollama" do
+        assert {:ok, %AshAgent.Result{output: reply}} =
+                 AshAgent.Runtime.call(OllamaAgent, %{message: "integration ping"})
+
         assert is_map(reply)
         assert is_binary(reply.content)
       end
 
-      test "stream action emits structured payload" do
-        input =
-          OllamaAgent
-          |> Ash.ActionInput.for_action(:stream, %{input: %{message: "stream integration"}})
-
-        assert {:ok, stream} = Ash.run_action(input)
+      test "Runtime.stream emits structured payload" do
+        assert {:ok, stream} =
+                 AshAgent.Runtime.stream(OllamaAgent, %{message: "stream integration"})
 
         results =
           stream
           |> Enum.to_list()
-          |> Enum.filter(&is_map/1)
+          |> Enum.filter(fn
+            {:content, _} -> true
+            {:done, _} -> true
+            _ -> false
+          end)
+          |> Enum.map(fn
+            {:content, data} -> data
+            {:done, %AshAgent.Result{output: data}} -> data
+          end)
 
         assert [_ | _] = results
         reply = List.last(results)

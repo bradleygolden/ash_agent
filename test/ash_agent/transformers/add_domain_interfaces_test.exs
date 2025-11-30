@@ -126,7 +126,7 @@ defmodule AshAgent.Transformers.AddDomainInterfacesTest do
 
     resources do
       resource AshAgent.Transformers.AddDomainInterfacesTest.AgentWithManualDefine do
-        define :call_agent_with_manual_define, action: :call, args: [:input]
+        define :call_agent_with_manual_define, action: :call, args: [:context]
       end
     end
   end

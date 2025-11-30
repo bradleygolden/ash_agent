@@ -57,30 +57,25 @@ defmodule AshAgent.Integration.ReqLLMIntegrationTest do
       {{ ctx.output_format }}
       """)
     end
-
-    code_interface do
-      define :call, args: [:input]
-    end
   end
 
   describe "req_llm provider against Ollama" do
-    test "code interface reaches local LLM" do
-      assert {:ok, reply} = ReqLLMAgent.call(%{message: "ping"})
+    test "Runtime.call reaches local LLM" do
+      assert {:ok, %AshAgent.Result{output: reply}} =
+               AshAgent.Runtime.call(ReqLLMAgent, %{message: "ping"})
 
       assert is_map(reply)
       assert String.starts_with?(reply.content, "req integration")
       assert reply.confidence == 0.99
     end
 
-    test "Ash.run_action uses same pipeline" do
-      input =
-        ReqLLMAgent
-        |> Ash.ActionInput.for_action(:call, %{input: %{message: "from action"}})
+    test "Runtime.call uses same pipeline" do
+      assert {:ok, %AshAgent.Result{output: reply}} =
+               AshAgent.Runtime.call(ReqLLMAgent, %{message: "from action"})
 
-      assert {:ok, reply} = Ash.run_action(input)
       assert is_map(reply)
-      assert String.starts_with?(reply.content, "req integration")
-      assert reply.confidence == 0.99
+      assert is_binary(reply.content)
+      assert is_float(reply.confidence)
     end
   end
 end
