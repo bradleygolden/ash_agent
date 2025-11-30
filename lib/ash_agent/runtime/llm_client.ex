@@ -81,6 +81,7 @@ defmodule AshAgent.Runtime.LLMClient do
       ) do
     provider_override = Keyword.get(options, :provider_override)
     tools = Keyword.get(options, :tools)
+    context = Keyword.get(options, :context)
 
     with {:ok, provider} <- resolve_provider(resource, provider_override) do
       opts =
@@ -90,7 +91,7 @@ defmodule AshAgent.Runtime.LLMClient do
 
       Logger.debug("LLMClient: Calling provider #{inspect(provider)} with messages")
 
-      case provider.call(client, nil, schema, opts, nil, tools, messages) do
+      case provider.call(client, nil, schema, opts, context, tools, messages) do
         {:ok, response} ->
           {:ok, response}
 
@@ -125,6 +126,7 @@ defmodule AshAgent.Runtime.LLMClient do
       ) do
     provider_override = Keyword.get(options, :provider_override)
     tools = Keyword.get(options, :tools)
+    context = Keyword.get(options, :context)
 
     with {:ok, provider} <- resolve_provider(resource, provider_override) do
       opts =
@@ -134,7 +136,7 @@ defmodule AshAgent.Runtime.LLMClient do
 
       Logger.debug("LLMClient: Streaming via provider #{inspect(provider)} with messages")
 
-      case provider.stream(client, nil, schema, opts, nil, tools, messages) do
+      case provider.stream(client, nil, schema, opts, context, tools, messages) do
         {:ok, stream} ->
           {:ok, stream}
 

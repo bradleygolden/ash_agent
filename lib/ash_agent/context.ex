@@ -38,15 +38,17 @@ defmodule AshAgent.Context do
   The context contains:
   - `:messages` - List of `AshAgent.Message` structs
   - `:metadata` - Optional metadata map for tracking state
+  - `:input` - Original input arguments (used by BAML provider)
   """
 
   alias AshAgent.Message
 
-  defstruct messages: [], metadata: %{}
+  defstruct messages: [], metadata: %{}, input: nil
 
   @type t :: %__MODULE__{
           messages: [Message.t()],
-          metadata: map()
+          metadata: map(),
+          input: map() | nil
         }
 
   @doc """
@@ -69,10 +71,12 @@ defmodule AshAgent.Context do
   def new(messages, opts \\ []) when is_list(messages) do
     flattened = flatten_messages(messages)
     metadata = Keyword.get(opts, :metadata, %{})
+    input = Keyword.get(opts, :input)
 
     %__MODULE__{
       messages: flattened,
-      metadata: metadata
+      metadata: metadata,
+      input: input
     }
   end
 

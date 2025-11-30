@@ -67,15 +67,20 @@ defmodule AshAgent.IntegrationTest do
     end
   end
 
-  # Helper functions for calling actions
+  # Helper functions for calling actions via Runtime
   defp call(resource, args) do
-    resource
-    |> Ash.ActionInput.for_action(:call, args)
-    |> Ash.run_action()
+    args = if is_list(args), do: Map.new(args), else: args
+
+    case AshAgent.Runtime.call(resource, args) do
+      {:ok, %AshAgent.Result{output: output}} -> {:ok, output}
+      {:error, _} = error -> error
+    end
   end
 
   defp call!(resource, args) do
-    AshAgent.Runtime.call!(resource, args)
+    args = if is_list(args), do: Map.new(args), else: args
+    %AshAgent.Result{output: output} = AshAgent.Runtime.call!(resource, args)
+    output
   end
 
   describe "call/1" do

@@ -50,11 +50,11 @@ defmodule AshAgent.Test.OllamaClient do
       {:ok, %AgentReply{content: reply_content(args), confidence: 0.99}}
     end
 
-    def stream(args, callback) do
-      stream(args, %{}, callback)
+    def stream(args, callback) when is_function(callback) do
+      stream(args, callback, %{})
     end
 
-    def stream(args, _opts, callback) do
+    def stream(args, callback, _opts) when is_function(callback) do
       message = Client.message_from(args)
 
       pid =
@@ -82,11 +82,11 @@ defmodule AshAgent.Test.OllamaClient do
       {:ok, build_response(args)}
     end
 
-    def stream(args, callback) do
-      stream(args, %{}, callback)
+    def stream(args, callback) when is_function(callback) do
+      stream(args, callback, %{})
     end
 
-    def stream(args, _opts, callback) do
+    def stream(args, callback, _opts) when is_function(callback) do
       pid =
         spawn(fn ->
           callback.({:done, build_response(args)})

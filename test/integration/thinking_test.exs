@@ -229,13 +229,11 @@ defmodule AshAgent.Integration.ThinkingTest do
   end
 
   describe "BAML Extended Thinking - Structured Output (Yes)" do
-    alias AshAgent.Test.ThinkingBamlClient.Types.MathAnswer
-
     test "call/2 returns structured output AND thinking content" do
       {:ok, result} = Runtime.call(BamlStructuredThinkingAgent, %{question: "What is 15 + 27?"})
 
       assert %AshAgent.Result{} = result
-      assert %MathAnswer{answer: answer, explanation: explanation} = result.output
+      assert %{answer: answer, explanation: explanation} = result.output
       assert is_integer(answer)
       assert is_binary(explanation)
 

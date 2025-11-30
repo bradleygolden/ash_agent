@@ -108,6 +108,12 @@ defmodule AshAgent.Providers.Baml do
     fetch_arguments_from_context(context)
   end
 
+  defp fetch_arguments_from_context(%AshAgent.Context{input: input}) when is_map(input),
+    do: {:ok, input}
+
+  defp fetch_arguments_from_context(%AshAgent.Context{input: input}) when is_list(input),
+    do: {:ok, Map.new(input)}
+
   defp fetch_arguments_from_context(%{input: input}) when is_map(input), do: {:ok, input}
 
   defp fetch_arguments_from_context(%{input: input}) when is_list(input),

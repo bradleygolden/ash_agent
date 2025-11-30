@@ -271,7 +271,8 @@ defmodule AshAgent.Runtime do
             messages,
             schema,
             config.client_opts,
-            provider_override: config.provider
+            provider_override: config.provider,
+            context: context
           )
 
         emit_llm_response(metadata, response_result, context, nil)
@@ -321,7 +322,8 @@ defmodule AshAgent.Runtime do
            messages,
            schema,
            config.client_opts,
-           provider_override: config.provider
+           provider_override: config.provider,
+           context: context
          ) do
       {:ok, stream_response} ->
         base_metadata = Map.put(metadata, :response, stream_response)
@@ -460,7 +462,7 @@ defmodule AshAgent.Runtime do
         prompt -> [AshAgent.Message.system(prompt), AshAgent.Message.user(args)]
       end
 
-    Context.new(messages)
+    Context.new(messages, input: args)
   end
 
   defp telemetry_metadata(config, module, type) do

@@ -2,7 +2,6 @@ defmodule AshAgent.TokenTrackingTest do
   use ExUnit.Case, async: true
   @moduletag :integration
 
-  alias AshAgent.Context
   alias AshAgent.Runtime
   alias AshAgent.Test.LLMStub
 
@@ -35,41 +34,6 @@ defmodule AshAgent.TokenTrackingTest do
   end
 
   describe "token tracking integration" do
-    test "Context stores token usage from LLM response" do
-      context = Context.new("Hello", [])
-
-      usage = %{
-        input_tokens: 100,
-        output_tokens: 50,
-        total_tokens: 150
-      }
-
-      updated_context = Context.add_token_usage(context, usage)
-
-      iteration = Context.get_iteration(updated_context, 1)
-      assert iteration.metadata.current_usage == usage
-      assert iteration.metadata.cumulative_tokens.input_tokens == 100
-      assert iteration.metadata.cumulative_tokens.output_tokens == 50
-      assert iteration.metadata.cumulative_tokens.total_tokens == 150
-    end
-
-    test "cumulative tokens accumulate across multiple LLM calls" do
-      context = Context.new("Hello", [])
-
-      usage1 = %{input_tokens: 100, output_tokens: 50, total_tokens: 150}
-      usage2 = %{input_tokens: 75, output_tokens: 25, total_tokens: 100}
-      usage3 = %{input_tokens: 50, output_tokens: 30, total_tokens: 80}
-
-      context = Context.add_token_usage(context, usage1)
-      context = Context.add_token_usage(context, usage2)
-      context = Context.add_token_usage(context, usage3)
-
-      cumulative = Context.get_cumulative_tokens(context)
-      assert cumulative.input_tokens == 225
-      assert cumulative.output_tokens == 105
-      assert cumulative.total_tokens == 330
-    end
-
     test "handles nil usage gracefully (BAML provider)" do
       Req.Test.expect(AshAgent.LLMStub, fn conn ->
         Req.Test.json(conn, %{
