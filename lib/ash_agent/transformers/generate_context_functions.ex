@@ -22,8 +22,8 @@ defmodule AshAgent.Transformers.GenerateContextFunctions do
 
   use Spark.Dsl.Transformer
 
-  alias Spark.Dsl.Transformer
   alias AshAgent.Runtime.PromptRenderer
+  alias Spark.Dsl.Transformer
 
   @impl true
   def transform(dsl_state) do

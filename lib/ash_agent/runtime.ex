@@ -34,7 +34,7 @@ defmodule AshAgent.Runtime do
   """
 
   alias AshAgent.{Context, Error, Info, ProviderRegistry}
-  alias AshAgent.Runtime.{Hooks, LLMClient}
+  alias AshAgent.Runtime.{Hooks, LLMClient, PromptRenderer}
   alias AshAgent.Telemetry
   alias ReqLLM.Response
   alias Spark.Dsl.Extension
@@ -448,7 +448,7 @@ defmodule AshAgent.Runtime do
           nil
 
         template ->
-          case AshAgent.Runtime.PromptRenderer.render(template, args, config) do
+          case PromptRenderer.render(template, args, config) do
             {:ok, rendered} -> rendered
             {:error, _} -> nil
           end
