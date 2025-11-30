@@ -31,7 +31,9 @@ defmodule AshAgent.Providers.BamlProviderTest do
         function: :ChatAgent,
         client_module: AshAgent.Test.BamlClient
 
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       output_schema(Zoi.object(%{content: Zoi.string()}, coerce: true))
+      instruction("Test")
     end
   end
 

@@ -5,7 +5,7 @@ defmodule AshAgent.Transformers.ValidateAgent do
   Ensures that:
   - The agent section is properly configured
   - Client configuration follows provider:model format
-  - Prompt templates are valid Solid templates
+  - Instruction templates are valid Solid templates
   - Provider capabilities are satisfied
   """
 
@@ -23,7 +23,7 @@ defmodule AshAgent.Transformers.ValidateAgent do
 
       _client ->
         with :ok <- validate_client(dsl_state),
-             :ok <- validate_prompt(dsl_state),
+             :ok <- validate_instruction(dsl_state),
              :ok <- validate_provider_capabilities(dsl_state) do
           {:ok, dsl_state}
         end
@@ -40,7 +40,7 @@ defmodule AshAgent.Transformers.ValidateAgent do
            DslError.exception(
              module: Transformer.get_persisted(dsl_state, :module),
              message:
-               "Client must be in 'provider:model' format (e.g., 'anthropic:claude-3-5-sonnet')",
+               "Client must be in 'provider:model' format (e.g., 'anthropic:claude-sonnet-4-20250514')",
              path: [:agent, :client]
            )}
         end
@@ -58,24 +58,24 @@ defmodule AshAgent.Transformers.ValidateAgent do
     end
   end
 
-  defp validate_prompt(dsl_state) do
-    prompt = Transformer.get_option(dsl_state, [:agent], :prompt)
+  defp validate_instruction(dsl_state) do
+    instruction = Transformer.get_option(dsl_state, [:agent], :instruction)
     provider = Transformer.get_option(dsl_state, [:agent], :provider, :req_llm)
     features = ProviderRegistry.features(provider)
 
     cond do
-      is_binary(prompt) or is_struct(prompt, Solid.Template) ->
+      is_binary(instruction) or is_struct(instruction, Solid.Template) ->
         :ok
 
-      prompt in [nil, ""] and :prompt_optional in features ->
+      instruction in [nil, ""] and :prompt_optional in features ->
         :ok
 
       true ->
         {:error,
          DslError.exception(
            module: Transformer.get_persisted(dsl_state, :module),
-           message: "Prompt must be provided unless the provider declares :prompt_optional",
-           path: [:agent, :prompt]
+           message: "Instruction must be provided unless the provider declares :prompt_optional",
+           path: [:agent, :instruction]
          )}
     end
   end

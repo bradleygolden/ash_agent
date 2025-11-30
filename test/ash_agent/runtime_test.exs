@@ -62,8 +62,9 @@ defmodule AshAgent.RuntimeTest do
 
     agent do
       client "anthropic:claude-3-5-sonnet"
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       output_schema(Zoi.object(%{result: Zoi.string()}, coerce: true))
-      prompt "Test prompt"
+      instruction("Test prompt")
     end
   end
 
@@ -79,8 +80,9 @@ defmodule AshAgent.RuntimeTest do
 
     agent do
       client "anthropic:claude-3-5-sonnet"
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       output_schema(Zoi.object(%{result: Zoi.string()}, coerce: true))
-      prompt "Process: {{ input }}"
+      instruction("Process: {{ input }}")
     end
   end
 
@@ -121,8 +123,9 @@ defmodule AshAgent.RuntimeTest do
 
     agent do
       client "anthropic:claude-3-5-sonnet"
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       output_schema(Zoi.object(%{result: Zoi.string()}, coerce: true))
-      prompt "Test with hooks"
+      instruction("Test with hooks")
       hooks(TestHooks)
     end
   end
@@ -139,8 +142,9 @@ defmodule AshAgent.RuntimeTest do
 
     agent do
       client(:mock_client, function: :streaming_chat_agent)
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       output_schema(Zoi.object(%{result: Zoi.string()}, coerce: true))
-      prompt "Uses provider-specific client opts"
+      instruction("Uses provider-specific client opts")
     end
   end
 
@@ -165,8 +169,9 @@ defmodule AshAgent.RuntimeTest do
         ]
       ]
 
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       output_schema(Zoi.object(%{result: Zoi.string()}, coerce: true))
-      prompt "Stream telemetry"
+      instruction("Stream telemetry")
     end
   end
 
@@ -182,8 +187,9 @@ defmodule AshAgent.RuntimeTest do
 
     agent do
       client "anthropic:claude-3-5-sonnet"
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       output_schema(nil)
-      prompt "Test"
+      instruction("Test")
     end
   end
 

@@ -22,6 +22,8 @@ defmodule AshAgent.Integration.AgentActionsTest do
           function: :AgentEcho,
           client_module: AshAgent.Test.OllamaClient
 
+        input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
+
         output_schema(
           Zoi.object(
             %{
@@ -31,6 +33,8 @@ defmodule AshAgent.Integration.AgentActionsTest do
             coerce: true
           )
         )
+
+        instruction("Test")
       end
 
       code_interface do

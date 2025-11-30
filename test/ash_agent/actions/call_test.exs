@@ -38,8 +38,9 @@ defmodule AshAgent.Actions.CallTest do
     agent do
       provider CallMockProvider
       client :mock
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       output_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
-      prompt "Test call prompt"
+      instruction("Test call prompt")
     end
   end
 
@@ -55,13 +56,15 @@ defmodule AshAgent.Actions.CallTest do
 
   describe "run/3" do
     test "returns ok tuple with result for valid input" do
-      input = %{resource: TestCallAgent, arguments: %{}}
+      context = AshAgent.Context.new([AshAgent.Message.user(%{message: "test"})])
+      input = %{resource: TestCallAgent, arguments: %{context: context}}
 
       assert {:ok, %AshAgent.Result{output: %{message: _}}} = Call.run(input, [], %{})
     end
 
     test "result contains expected content" do
-      input = %{resource: TestCallAgent, arguments: %{}}
+      context = AshAgent.Context.new([AshAgent.Message.user(%{message: "test"})])
+      input = %{resource: TestCallAgent, arguments: %{context: context}}
 
       {:ok, result} = Call.run(input, [], %{})
 
@@ -69,19 +72,22 @@ defmodule AshAgent.Actions.CallTest do
     end
 
     test "passes arguments through to runtime" do
-      input = %{resource: TestCallAgent, arguments: %{custom_arg: "value"}}
+      context = AshAgent.Context.new([AshAgent.Message.user(%{message: "test"})])
+      input = %{resource: TestCallAgent, arguments: %{context: context, custom_arg: "value"}}
 
       assert {:ok, _result} = Call.run(input, [], %{})
     end
 
-    test "handles empty arguments" do
-      input = %{resource: TestCallAgent, arguments: %{}}
+    test "handles empty context messages" do
+      context = AshAgent.Context.new([])
+      input = %{resource: TestCallAgent, arguments: %{context: context}}
 
       assert {:ok, %AshAgent.Result{output: %{message: _}}} = Call.run(input, [], %{})
     end
 
     test "returns error for invalid resource" do
-      input = %{resource: NonExistentModule, arguments: %{}}
+      context = AshAgent.Context.new([])
+      input = %{resource: NonExistentModule, arguments: %{context: context}}
 
       assert {:error, _} = Call.run(input, [], %{})
     end

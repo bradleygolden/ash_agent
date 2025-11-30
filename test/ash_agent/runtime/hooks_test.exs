@@ -2,6 +2,7 @@ defmodule AshAgent.Runtime.HooksTest do
   use ExUnit.Case, async: true
 
   alias AshAgent.Context
+  alias AshAgent.Message
   alias AshAgent.Runtime.Hooks
 
   describe "prepare_tool_results/1 hook" do
@@ -24,7 +25,7 @@ defmodule AshAgent.Runtime.HooksTest do
         iteration: 1,
         tool_calls: [%{"name" => "tool1"}],
         results: [{"tool1", {:ok, "original"}}],
-        context: %Context{},
+        context: Context.new([Message.system("test")]),
         token_usage: nil
       }
 
@@ -42,7 +43,7 @@ defmodule AshAgent.Runtime.HooksTest do
         iteration: 1,
         tool_calls: [],
         results: [{"tool1", {:ok, "data"}}],
-        context: %Context{},
+        context: Context.new([Message.system("test")]),
         token_usage: nil
       }
 
@@ -72,7 +73,7 @@ defmodule AshAgent.Runtime.HooksTest do
         iteration: 1,
         tool_calls: [],
         results: [{"tool1", {:ok, "this is a very long result that should be truncated"}}],
-        context: %Context{},
+        context: Context.new([Message.system("test")]),
         token_usage: nil
       }
 
@@ -94,7 +95,7 @@ defmodule AshAgent.Runtime.HooksTest do
         iteration: 1,
         tool_calls: [],
         results: [],
-        context: %Context{},
+        context: Context.new([Message.system("test")]),
         token_usage: nil
       }
 
@@ -130,7 +131,7 @@ defmodule AshAgent.Runtime.HooksTest do
           {"success_tool", {:ok, "data"}},
           {"error_tool", {:error, "tool failed"}}
         ],
-        context: %Context{},
+        context: Context.new([Message.system("test")]),
         token_usage: nil
       }
 
@@ -149,7 +150,7 @@ defmodule AshAgent.Runtime.HooksTest do
         iteration: 1,
         tool_calls: [],
         results: [{"tool", {:ok, "data"}}],
-        context: %Context{},
+        context: Context.new([Message.system("test")]),
         token_usage: nil
       }
 
@@ -163,19 +164,19 @@ defmodule AshAgent.Runtime.HooksTest do
         @behaviour Hooks
 
         def prepare_context(%{context: ctx}) do
-          modified = %{ctx | current_iteration: 999}
+          modified = Context.put_metadata(ctx, :modified, true)
           {:ok, modified}
         end
       end
 
       ctx = %{
         agent: MyAgent,
-        context: %Context{current_iteration: 1},
+        context: Context.new([Message.system("test")]),
         token_usage: nil,
         iteration: 1
       }
 
-      assert {:ok, %Context{current_iteration: 999}} =
+      assert {:ok, %Context{metadata: %{modified: true}}} =
                Hooks.execute(ContextModifyHook, :prepare_context, ctx)
     end
 
@@ -190,7 +191,7 @@ defmodule AshAgent.Runtime.HooksTest do
 
       ctx = %{
         agent: MyAgent,
-        context: %Context{},
+        context: Context.new([Message.system("test")]),
         token_usage: nil,
         iteration: 1
       }
@@ -214,7 +215,7 @@ defmodule AshAgent.Runtime.HooksTest do
 
       ctx = %{
         agent: MyAgent,
-        context: %Context{},
+        context: Context.new([Message.system("test")]),
         token_usage: %{input: 100, output: 50},
         iteration: 5
       }
@@ -233,7 +234,7 @@ defmodule AshAgent.Runtime.HooksTest do
 
       ctx = %{
         agent: TestAgent,
-        context: %Context{},
+        context: Context.new([Message.system("test")]),
         token_usage: nil,
         iteration: 1
       }
@@ -255,7 +256,7 @@ defmodule AshAgent.Runtime.HooksTest do
 
       ctx = %{
         agent: MyAgent,
-        context: %Context{},
+        context: Context.new([Message.system("test")]),
         messages: [%{"role" => "user", "content" => "Hello"}],
         tools: [],
         iteration: 1
@@ -278,7 +279,7 @@ defmodule AshAgent.Runtime.HooksTest do
 
       ctx = %{
         agent: MyAgent,
-        context: %Context{},
+        context: Context.new([Message.system("test")]),
         messages: [
           %{"role" => "system", "content" => "System"},
           %{"role" => "user", "content" => "User"}
@@ -302,7 +303,7 @@ defmodule AshAgent.Runtime.HooksTest do
 
       ctx = %{
         agent: MyAgent,
-        context: %Context{},
+        context: Context.new([Message.system("test")]),
         messages: [],
         tools: [],
         iteration: 1
@@ -325,7 +326,7 @@ defmodule AshAgent.Runtime.HooksTest do
 
       ctx = %{
         agent: MyAgent,
-        context: %Context{},
+        context: Context.new([Message.system("test")]),
         messages: [],
         tools: [%{"name" => "tool1"}, %{"name" => "tool2"}],
         iteration: 1
@@ -352,7 +353,7 @@ defmodule AshAgent.Runtime.HooksTest do
       ctx_ok = %{
         agent: MyAgent,
         iteration_number: 3,
-        context: %Context{},
+        context: Context.new([Message.system("test")]),
         result: nil,
         token_usage: nil,
         max_iterations: 10,
@@ -379,7 +380,7 @@ defmodule AshAgent.Runtime.HooksTest do
       ctx = %{
         agent: MyAgent,
         iteration_number: 1,
-        context: %Context{},
+        context: Context.new([Message.system("test")]),
         result: nil,
         token_usage: nil,
         max_iterations: 10,
@@ -401,7 +402,7 @@ defmodule AshAgent.Runtime.HooksTest do
       ctx = %{
         agent: MyAgent,
         iteration_number: 1,
-        context: %Context{},
+        context: Context.new([Message.system("test")]),
         result: nil,
         token_usage: nil,
         max_iterations: 10,
@@ -426,7 +427,7 @@ defmodule AshAgent.Runtime.HooksTest do
       ctx = %{
         agent: MyAgent,
         iteration_number: 3,
-        context: %Context{},
+        context: Context.new([Message.system("test")]),
         result: :success,
         token_usage: %{input: 100, output: 50},
         max_iterations: 10,
@@ -450,7 +451,7 @@ defmodule AshAgent.Runtime.HooksTest do
       ctx = %{
         agent: MyAgent,
         iteration_number: 1,
-        context: %Context{},
+        context: Context.new([Message.system("test")]),
         result: {:ok, "iteration_result"},
         token_usage: nil,
         max_iterations: 10,
@@ -475,7 +476,7 @@ defmodule AshAgent.Runtime.HooksTest do
       ctx = %{
         agent: MyAgent,
         iteration_number: 2,
-        context: %Context{},
+        context: Context.new([Message.system("test")]),
         result: :done,
         token_usage: nil,
         max_iterations: 10,
@@ -500,7 +501,7 @@ defmodule AshAgent.Runtime.HooksTest do
       ctx = %{
         agent: MyAgent,
         iteration_number: 1,
-        context: %Context{},
+        context: Context.new([Message.system("test")]),
         result: nil,
         token_usage: nil,
         max_iterations: 10,

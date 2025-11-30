@@ -3,7 +3,7 @@ defmodule AshAgent.Template do
   DSL for defining composable agent templates as Spark fragments.
 
   Templates are fragments of `Ash.Resource` that provide agent configuration
-  (output, inputs, prompt) but not client/provider. They can be used in two ways:
+  (output_schema, input_schema, instruction) but not client/provider. They can be used in two ways:
 
   ## Quick Start Mode
 
@@ -55,13 +55,13 @@ defmodule AshAgent.Template do
         use AshAgent.Template
 
         agent do
-          output :string
+          output_schema Zoi.string()
 
-          input do
-            argument :text, :string, allow_nil?: false
-          end
+          input_schema Zoi.object(%{
+            text: Zoi.string()
+          })
 
-          prompt ~p"Generate a title for: {{ text }}"
+          instruction ~p"Generate a title for: {{ text }}"
         end
       end
   """

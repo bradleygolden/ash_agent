@@ -14,12 +14,13 @@ defmodule AshAgent.Transformers.AddDomainInterfacesTest do
 
     agent do
       client "anthropic:claude-3-5-sonnet"
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       output_schema(Zoi.object(%{response: Zoi.string()}, coerce: true))
 
-      prompt ~p"""
+      instruction(~p"""
       You are a chat assistant.
       User: {{ message }}
-      """
+      """)
     end
   end
 
@@ -36,11 +37,12 @@ defmodule AshAgent.Transformers.AddDomainInterfacesTest do
 
     agent do
       client "anthropic:claude-3-5-sonnet"
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       output_schema(Zoi.object(%{response: Zoi.string()}, coerce: true))
 
-      prompt ~p"""
+      instruction(~p"""
       Summarize: {{ text }}
-      """
+      """)
     end
   end
 
@@ -78,8 +80,9 @@ defmodule AshAgent.Transformers.AddDomainInterfacesTest do
 
     agent do
       client "anthropic:claude-3-5-sonnet"
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       output_schema(Zoi.object(%{response: Zoi.string()}, coerce: true))
-      prompt ~p"Query: {{ query }}"
+      instruction(~p"Query: {{ query }}")
     end
   end
 
@@ -110,8 +113,9 @@ defmodule AshAgent.Transformers.AddDomainInterfacesTest do
 
     agent do
       client "anthropic:claude-3-5-sonnet"
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       output_schema(Zoi.object(%{response: Zoi.string()}, coerce: true))
-      prompt ~p"Input: {{ input }}"
+      instruction(~p"Input: {{ input }}")
     end
   end
 

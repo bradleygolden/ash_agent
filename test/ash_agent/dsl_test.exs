@@ -59,17 +59,17 @@ defmodule AshAgent.DSLTest do
       assert :client in schema_keys
       assert :input_schema in schema_keys
       assert :output_schema in schema_keys
-      assert :prompt in schema_keys
+      assert :instruction in schema_keys
       assert :hooks in schema_keys
       assert :token_budget in schema_keys
       assert :budget_strategy in schema_keys
     end
 
-    test "input_schema is optional" do
+    test "input_schema is required" do
       agent_section = DSL.agent()
       input_schema_opt = Keyword.get(agent_section.schema, :input_schema)
 
-      assert input_schema_opt[:required] == false
+      assert input_schema_opt[:required] == true
     end
 
     test "output_schema is required" do

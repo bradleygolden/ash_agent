@@ -15,8 +15,9 @@ defmodule AshAgent.BudgetEnforcementTest do
       client "mock:test"
       token_budget(1000)
       budget_strategy(:halt)
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       output_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
-      prompt "Test: {{ message }}"
+      instruction("Test: {{ message }}")
     end
 
     attributes do
@@ -34,8 +35,9 @@ defmodule AshAgent.BudgetEnforcementTest do
       client "mock:test"
       token_budget(1000)
       budget_strategy(:warn)
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       output_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
-      prompt "Test: {{ message }}"
+      instruction("Test: {{ message }}")
     end
 
     attributes do
@@ -51,8 +53,9 @@ defmodule AshAgent.BudgetEnforcementTest do
     agent do
       provider :mock
       client "mock:test"
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       output_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
-      prompt "Test: {{ message }}"
+      instruction("Test: {{ message }}")
     end
 
     attributes do

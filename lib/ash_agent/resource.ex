@@ -3,7 +3,7 @@ defmodule AshAgent.Resource do
   The AshAgent resource extension.
 
   This extension allows you to define LLM agents as Ash resources with type-safe
-  inputs/outputs, prompt templates, and automatic action generation.
+  inputs/outputs, instruction templates, and automatic action generation.
 
   ## Usage
 
@@ -18,53 +18,60 @@ defmodule AshAgent.Resource do
     agent do
       client "anthropic:claude-sonnet-4-20250514", temperature: 0.7
 
+      instruction ~p\"\"\"
+      You are a helpful assistant for {{ company_name }}.
+      \"\"\"
+
+      instruction_schema Zoi.object(%{
+        company_name: Zoi.string()
+      }, coerce: true)
+
       input_schema Zoi.object(%{message: Zoi.string()}, coerce: true)
 
       output_schema Zoi.object(%{content: Zoi.string()}, coerce: true)
-
-      prompt ~p\"\"\"
-      You are a helpful assistant.
-
-      User: {{ message }}
-      \"\"\"
     end
 
     code_interface do
-      define :call, args: [:message]
-      define :stream, args: [:message]
+      define :call, args: [:context]
+      define :stream, args: [:context]
     end
   end
   ```
 
-  Then call the agent:
+  Then call the agent using the generated context functions:
 
   ```elixir
-  # Via code interface (positional arguments)
-  {:ok, reply} = MyApp.ChatAgent.call("Hello!")
+  # Build context with instruction and user message
+  context =
+    [
+      MyApp.ChatAgent.instruction(company_name: "Acme Corp"),
+      MyApp.ChatAgent.user(message: "Hello!")
+    ]
+    |> MyApp.ChatAgent.context()
 
-  # Or keyword arguments
-  {:ok, reply} = MyApp.ChatAgent.call(message: "Hello!")
+  # Call the agent
+  {:ok, result} = MyApp.ChatAgent.call(context)
+  result.output.content
+  #=> "Hello! How can I help you today?"
 
-  # Or via Ash.ActionInput for advanced usage (actor, tenant, etc.)
-  MyApp.ChatAgent
-  |> Ash.ActionInput.for_action(:call, %{message: "Hello!"}, actor: current_user)
-  |> Ash.run_action()
+  # For multi-turn conversations, reuse the context from the result
+  new_context =
+    [
+      result.context,
+      MyApp.ChatAgent.user(message: "What's the weather?")
+    ]
+    |> MyApp.ChatAgent.context()
+
+  {:ok, result2} = MyApp.ChatAgent.call(new_context)
   ```
 
-  You can also define code interfaces in your domain:
+  ## Generated Functions
 
-  ```elixir
-  defmodule MyApp.Domain do
-    use Ash.Domain
+  The extension generates these functions on your agent module:
 
-    resources do
-      resource MyApp.ChatAgent do
-        define :call, args: [:message]
-        define :stream, args: [:message]
-      end
-    end
-  end
-  ```
+  - `context/1` - Wraps a list of messages into an `AshAgent.Context`
+  - `instruction/1` - Creates a system message (validates against instruction_schema)
+  - `user/1` - Creates a user message (validates against input_schema)
 
   ## Generated Actions
 
@@ -88,7 +95,7 @@ defmodule AshAgent.Resource do
     transformers: [
       AshAgent.Transformers.InjectExtensionConfig,
       AshAgent.Transformers.ValidateAgent,
-      AshAgent.Transformers.AddContextAttribute,
+      AshAgent.Transformers.GenerateContextFunctions,
       AshAgent.Transformers.AddAgentActions
     ],
     imports: [DSL]

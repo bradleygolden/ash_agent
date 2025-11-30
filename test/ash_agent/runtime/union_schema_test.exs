@@ -36,6 +36,8 @@ defmodule AshAgent.Runtime.UnionSchemaTest do
       provider UnionMockProvider
       client :mock
 
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
+
       output_schema(
         Zoi.union([
           # Tool call variant
@@ -59,7 +61,7 @@ defmodule AshAgent.Runtime.UnionSchemaTest do
         ])
       )
 
-      prompt "Test union schema"
+      instruction("Test union schema")
     end
   end
 

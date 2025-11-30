@@ -65,6 +65,94 @@ defmodule AshAgent.Runtime.LLMClient do
   end
 
   @doc """
+  Generates a structured object using separate system prompt and messages.
+
+  This is the context-based API that receives pre-formatted messages.
+  Returns `{:ok, response}` with the provider response, or `{:error, reason}`.
+  """
+  def generate_object_with_messages(
+        resource,
+        client,
+        system_prompt,
+        messages,
+        schema,
+        opts,
+        options \\ []
+      ) do
+    provider_override = Keyword.get(options, :provider_override)
+    tools = Keyword.get(options, :tools)
+
+    with {:ok, provider} <- resolve_provider(resource, provider_override) do
+      opts =
+        opts
+        |> merge_client_opts()
+        |> Keyword.put(:system_prompt, system_prompt)
+
+      Logger.debug("LLMClient: Calling provider #{inspect(provider)} with messages")
+
+      case provider.call(client, nil, schema, opts, nil, tools, messages) do
+        {:ok, response} ->
+          {:ok, response}
+
+        {:error, reason} ->
+          {:error,
+           Error.llm_error("Provider #{inspect(provider)} call failed: #{inspect(reason)}")}
+      end
+    end
+  rescue
+    e ->
+      {:error,
+       Error.llm_error("LLM generation failed", %{
+         client: client,
+         exception: e
+       })}
+  end
+
+  @doc """
+  Streams a structured object using separate system prompt and messages.
+
+  This is the context-based API that receives pre-formatted messages.
+  Returns `{:ok, stream}` with the provider stream response, or `{:error, reason}`.
+  """
+  def stream_object_with_messages(
+        resource,
+        client,
+        system_prompt,
+        messages,
+        schema,
+        opts,
+        options \\ []
+      ) do
+    provider_override = Keyword.get(options, :provider_override)
+    tools = Keyword.get(options, :tools)
+
+    with {:ok, provider} <- resolve_provider(resource, provider_override) do
+      opts =
+        opts
+        |> merge_client_opts()
+        |> Keyword.put(:system_prompt, system_prompt)
+
+      Logger.debug("LLMClient: Streaming via provider #{inspect(provider)} with messages")
+
+      case provider.stream(client, nil, schema, opts, nil, tools, messages) do
+        {:ok, stream} ->
+          {:ok, stream}
+
+        {:error, reason} ->
+          {:error,
+           Error.llm_error("Provider #{inspect(provider)} stream failed: #{inspect(reason)}")}
+      end
+    end
+  rescue
+    e ->
+      {:error,
+       Error.llm_error("LLM streaming failed", %{
+         client: client,
+         exception: e
+       })}
+  end
+
+  @doc """
   Streams a structured object from the LLM via the configured provider.
 
   Returns `{:ok, stream}` with the provider stream response, or `{:error, reason}`.

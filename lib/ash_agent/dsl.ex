@@ -3,7 +3,7 @@ defmodule AshAgent.DSL do
   DSL definitions for AshAgent extension.
 
   Provides the `agent` section for defining LLM agents with Zoi schema-based
-  inputs/outputs, prompt templates, and automatic function generation.
+  inputs/outputs, instruction templates, and automatic function generation.
   """
 
   @agent %Spark.Dsl.Section{
@@ -11,31 +11,42 @@ defmodule AshAgent.DSL do
     describe: """
     Configuration for agent behavior and LLM integration.
 
-    Defines the LLM client, prompt template, input schema, and output schema
-    for the agent using Zoi validation schemas.
+    Defines the LLM client, instruction template, input schema, and output schema
+    for the agent using Zoi validation schemas. The extension generates context
+    builder functions for creating properly structured message sequences.
     """,
     examples: [
       """
       agent do
-        client "anthropic:claude-3-5-sonnet", temperature: 0.5, max_tokens: 100
+        client "anthropic:claude-sonnet-4-20250514", temperature: 0.5
+
+        instruction ~p\"\"\"
+        You are a helpful assistant for {{ company_name }}.
+        Always respond in a professional tone.
+        \"\"\"
+
+        instruction_schema Zoi.object(%{
+          company_name: Zoi.string()
+        }, coerce: true)
 
         input_schema Zoi.object(%{
-          message: Zoi.string(),
-          context: Zoi.map() |> Zoi.optional() |> Zoi.default(%{})
+          message: Zoi.string()
         }, coerce: true)
 
         output_schema Zoi.object(%{
           content: Zoi.string()
         }, coerce: true)
-
-        prompt ~p\"\"\"
-        You are a helpful assistant.
-
-        {{ output_format }}
-
-        User: {{ message }}
-        \"\"\"
       end
+
+      # Usage with generated context functions:
+      # context =
+      #   [
+      #     ChatAgent.instruction(company_name: "Acme"),
+      #     ChatAgent.user(message: "Hello!")
+      #   ]
+      #   |> ChatAgent.context()
+      #
+      # ChatAgent.call(context)
       """
     ],
     schema: [
@@ -69,14 +80,56 @@ defmodule AshAgent.DSL do
         Common options: :temperature, :max_tokens
         """
       ],
-      input_schema: [
+      instruction: [
+        type: {:or, [:string, {:struct, Solid.Template}]},
+        required: true,
+        doc: """
+        System instruction template for the agent.
+
+        This defines the system prompt that sets the agent's behavior and context.
+        Rendered with arguments from `instruction_schema` at call time.
+
+        Use ~p sigil for compile-time validation:
+
+            instruction ~p\"\"\"
+            You are a helpful assistant for {{ company_name }}.
+            \"\"\"
+
+        When calling the agent, build context with generated functions:
+
+            context =
+              [
+                ChatAgent.instruction(company_name: "Acme"),
+                ChatAgent.user(message: "Hello!")
+              ]
+              |> ChatAgent.context()
+
+            ChatAgent.call(context)
+        """
+      ],
+      instruction_schema: [
         type: :any,
         required: false,
         doc: """
-        Zoi schema for input validation and coercion.
+        Zoi schema for instruction template arguments.
 
-        Use Zoi.object/2 with coerce: true for LLM inputs to handle
-        both atom and string keys.
+        Validates and coerces arguments passed to the generated `instruction/1` function.
+
+        Example:
+
+            instruction_schema Zoi.object(%{
+              company_name: Zoi.string(),
+              persona: Zoi.string() |> Zoi.optional() |> Zoi.default("helpful assistant")
+            }, coerce: true)
+        """
+      ],
+      input_schema: [
+        type: :any,
+        required: true,
+        doc: """
+        Zoi schema for user message content validation and coercion.
+
+        Validates arguments passed to the generated `user/1` function.
 
         Examples:
           input_schema Zoi.object(%{message: Zoi.string()}, coerce: true)
@@ -101,11 +154,6 @@ defmodule AshAgent.DSL do
           output_schema Zoi.object(%{content: Zoi.string()}, coerce: true) |> Zoi.to_struct(Reply)
           output_schema Zoi.string()
         """
-      ],
-      prompt: [
-        type: {:or, [:string, {:struct, Solid.Template}]},
-        required: false,
-        doc: "Prompt template using Liquid syntax. Use ~p sigil for compile-time validation."
       ],
       hooks: [
         type: :atom,
@@ -190,5 +238,7 @@ defmodule AshAgent.DSL do
     @agent.schema
     |> Keyword.delete(:client)
     |> Keyword.delete(:provider)
+    |> Keyword.update!(:instruction, fn opts -> Keyword.put(opts, :required, false) end)
+    |> Keyword.update!(:input_schema, fn opts -> Keyword.put(opts, :required, false) end)
   end
 end

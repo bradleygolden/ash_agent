@@ -21,15 +21,21 @@ defmodule AshAgent.Test.TestAgents do
 
     agent do
       client "anthropic:claude-3-5-sonnet"
+      instruction("Simple test")
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       output_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
-      prompt "Simple test"
+    end
+
+    code_interface do
+      define :call, args: [:context]
+      define :stream, args: [:context]
     end
   end
 
   defmodule AgentWithArguments do
     @moduledoc """
-    Agent that accepts input arguments.
-    Useful for testing prompt variable interpolation.
+    Agent that accepts instruction arguments.
+    Useful for testing instruction variable interpolation.
     """
     use Ash.Resource,
       domain: AshAgent.Test.TestAgents.TestDomain,
@@ -43,8 +49,15 @@ defmodule AshAgent.Test.TestAgents do
 
     agent do
       client "anthropic:claude-3-5-sonnet"
+      instruction(~p"Process: {{ input }}")
+      instruction_schema(Zoi.object(%{input: Zoi.string()}, coerce: true))
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       output_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
-      prompt ~p"Process: {{ input }}"
+    end
+
+    code_interface do
+      define :call, args: [:context]
+      define :stream, args: [:context]
     end
   end
 
@@ -63,6 +76,8 @@ defmodule AshAgent.Test.TestAgents do
 
     agent do
       client "anthropic:claude-3-5-sonnet"
+      instruction("Generate complex output")
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
 
       output_schema(
         Zoi.object(
@@ -75,8 +90,11 @@ defmodule AshAgent.Test.TestAgents do
           coerce: true
         )
       )
+    end
 
-      prompt "Generate complex output"
+    code_interface do
+      define :call, args: [:context]
+      define :stream, args: [:context]
     end
   end
 
@@ -95,15 +113,21 @@ defmodule AshAgent.Test.TestAgents do
 
     agent do
       client("anthropic:claude-3-5-sonnet", temperature: 0.5, max_tokens: 200)
+      instruction("Test with options")
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       output_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
-      prompt "Test with options"
+    end
+
+    code_interface do
+      define :call, args: [:context]
+      define :stream, args: [:context]
     end
   end
 
   defmodule AgentWithMultipleArgs do
     @moduledoc """
     Agent that accepts multiple arguments via template variables.
-    Useful for testing complex prompt templating.
+    Useful for testing complex instruction templating.
     """
     use Ash.Resource,
       domain: AshAgent.Test.TestAgents.TestDomain,
@@ -117,6 +141,19 @@ defmodule AshAgent.Test.TestAgents do
 
     agent do
       client "anthropic:claude-3-5-sonnet"
+      instruction(~p"Task: {{ task }} with priority {{ priority }}")
+
+      instruction_schema(
+        Zoi.object(
+          %{
+            task: Zoi.string(),
+            priority: Zoi.string()
+          },
+          coerce: true
+        )
+      )
+
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
 
       output_schema(
         Zoi.object(
@@ -129,8 +166,11 @@ defmodule AshAgent.Test.TestAgents do
           coerce: true
         )
       )
+    end
 
-      prompt ~p"Task: {{ task }} with priority {{ priority }}"
+    code_interface do
+      define :call, args: [:context]
+      define :stream, args: [:context]
     end
   end
 

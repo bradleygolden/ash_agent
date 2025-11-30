@@ -45,9 +45,10 @@ defmodule AshAgent.Integration.ThinkingTest do
         max_tokens: 16_000,
         provider_options: [thinking: %{type: "enabled", budget_tokens: 5000}]
 
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       output_schema(:string)
 
-      prompt "Answer briefly: {{ question }}"
+      instruction("Answer briefly: {{ question }}")
     end
   end
 
@@ -68,9 +69,12 @@ defmodule AshAgent.Integration.ThinkingTest do
         max_tokens: 16_000,
         provider_options: [thinking: %{type: "enabled", budget_tokens: 5000}]
 
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       output_schema(Zoi.object(%{answer: Zoi.integer(), explanation: Zoi.string()}, coerce: true))
 
-      prompt "Solve the math problem and provide the numeric answer with a brief explanation: {{ question }}"
+      instruction(
+        "Solve the math problem and provide the numeric answer with a brief explanation: {{ question }}"
+      )
     end
   end
 
@@ -89,7 +93,9 @@ defmodule AshAgent.Integration.ThinkingTest do
 
       client :thinking, function: :SolveWithThinking
 
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       output_schema(Zoi.object(%{answer: Zoi.integer(), explanation: Zoi.string()}, coerce: true))
+      instruction("BAML function")
     end
   end
 
@@ -108,7 +114,9 @@ defmodule AshAgent.Integration.ThinkingTest do
 
       client :thinking, function: :AnswerWithThinking
 
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       output_schema(:string)
+      instruction("BAML function")
     end
   end
 

@@ -232,8 +232,9 @@ defmodule AshAgent.Runtime.LLMClientStreamingTest do
         agent do
           provider FailingStreamProvider
           client :test
+          input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
           output_schema(Zoi.object(%{content: Zoi.string()}, coerce: true))
-          prompt "test"
+          instruction("test")
         end
       end
 

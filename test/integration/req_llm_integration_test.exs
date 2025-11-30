@@ -37,6 +37,8 @@ defmodule AshAgent.Integration.ReqLLMIntegrationTest do
         temperature: 0.0
       )
 
+      input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
+
       output_schema(
         Zoi.object(
           %{
@@ -47,7 +49,7 @@ defmodule AshAgent.Integration.ReqLLMIntegrationTest do
         )
       )
 
-      prompt(~p"""
+      instruction(~p"""
       Reply with JSON matching ctx.output_format exactly.
       content must start with "req integration:" followed by the message.
       confidence must be 0.99.

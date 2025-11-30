@@ -30,15 +30,22 @@ defmodule MyApp.Assistant do
   agent do
     client "anthropic:claude-sonnet-4-20250514"
 
+    instruction ~p"""
+    You are a helpful assistant for {{ company_name }}.
+    """
+
+    instruction_schema Zoi.object(%{
+      company_name: Zoi.string()
+    }, coerce: true)
+
     input_schema Zoi.object(%{message: Zoi.string()}, coerce: true)
 
     output_schema Zoi.object(%{content: Zoi.string()}, coerce: true)
+  end
 
-    prompt ~p"""
-    You are a helpful assistant.
-
-    User: {{ message }}
-    """
+  code_interface do
+    define :call, args: [:context]
+    define :stream, args: [:context]
   end
 end
 ```
@@ -55,40 +62,59 @@ defmodule MyApp.Agents do
 end
 ```
 
-Optionally add `AshAgent.Domain` extension for auto-generated code interfaces:
-
-```elixir
-defmodule MyApp.Agents do
-  use Ash.Domain,
-    extensions: [AshAgent.Domain]
-
-  resources do
-    resource MyApp.Assistant
-  end
-end
-
-# Generates: MyApp.Agents.call_assistant("Hello!")
-# Generates: MyApp.Agents.stream_assistant("Hello!")
-```
-
 ### 3. Call Your Agent
 
-```elixir
-# Via Ash action
-{:ok, reply} = MyApp.Assistant
-|> Ash.ActionInput.for_action(:call, %{message: "Hello!"})
-|> Ash.run_action()
+AshAgent uses a context-based API for building conversations:
 
-reply.content
+```elixir
+# Build context with instruction and user message
+context =
+  [
+    MyApp.Assistant.instruction(company_name: "Acme Corp"),
+    MyApp.Assistant.user(message: "Hello!")
+  ]
+  |> MyApp.Assistant.context()
+
+# Call the agent
+{:ok, result} = MyApp.Assistant.call(context)
+result.output.content
 #=> "Hello! How can I help you today?"
 
-# Or stream responses
-{:ok, stream} = MyApp.Assistant
-|> Ash.ActionInput.for_action(:stream, %{message: "Hello!"})
-|> Ash.run_action()
+# For multi-turn conversations, reuse the context from the result
+new_context =
+  [
+    result.context,
+    MyApp.Assistant.user(message: "What's the weather?")
+  ]
+  |> MyApp.Assistant.context()
 
-Enum.each(stream, &IO.inspect/1)
+{:ok, result2} = MyApp.Assistant.call(new_context)
 ```
+
+### Streaming Responses
+
+```elixir
+context =
+  [
+    MyApp.Assistant.instruction(company_name: "Acme Corp"),
+    MyApp.Assistant.user(message: "Tell me a story")
+  ]
+  |> MyApp.Assistant.context()
+
+{:ok, stream} = MyApp.Assistant.stream(context)
+
+Enum.each(stream, fn chunk ->
+  IO.write(chunk.content)
+end)
+```
+
+## Generated Functions
+
+AshAgent generates these functions on your agent module:
+
+- `context/1` - Wraps a list of messages into an `AshAgent.Context`
+- `instruction/1` - Creates a system message (validates against instruction_schema)
+- `user/1` - Creates a user message (validates against input_schema)
 
 ## DSL Reference
 
@@ -97,9 +123,10 @@ Enum.each(stream, &IO.inspect/1)
 | Option | Type | Required | Description |
 |--------|------|----------|-------------|
 | `client` | string/atom | Yes | LLM provider and model (e.g., `"anthropic:claude-sonnet-4-20250514"`) |
-| `input_schema` | Zoi schema | No | Zoi schema for input validation (e.g., `Zoi.object(%{message: Zoi.string()}, coerce: true)`) |
+| `instruction` | string/template | Depends | System instruction template. Use `~p` sigil for Liquid templates. Required unless provider declares `:prompt_optional`. |
+| `instruction_schema` | Zoi schema | No | Zoi schema for instruction template arguments |
+| `input_schema` | Zoi schema | Yes | Zoi schema for user message validation |
 | `output_schema` | Zoi schema | Yes | Zoi schema for output validation and structured output enforcement |
-| `prompt` | string/template | Depends | Liquid template for system prompt. Use `~p` sigil for compile-time validation. Required unless provider declares `:prompt_optional`. |
 | `provider` | atom | No | LLM provider (`:req_llm` default, `:baml`, or custom module) |
 | `hooks` | module | No | Module implementing `AshAgent.Runtime.Hooks` behaviour |
 | `token_budget` | integer | No | Maximum tokens for agent execution |
@@ -117,7 +144,9 @@ AshAgent supports multiple LLM providers through an abstraction layer.
 agent do
   provider :req_llm
   client "anthropic:claude-sonnet-4-20250514", temperature: 0.7, max_tokens: 1000
-  # ...
+  instruction "You are a helpful assistant."
+  input_schema Zoi.object(%{message: Zoi.string()})
+  output_schema Zoi.object(%{content: Zoi.string()})
 end
 ```
 
@@ -129,8 +158,9 @@ For structured outputs via [ash_baml](https://github.com/bradleygolden/ash_baml)
 agent do
   provider :baml
   client :my_client, function: :ChatAgent
-  output_schema Zoi.object(%{message: Zoi.string()}, coerce: true)
-  # prompt is optional with BAML provider
+  instruction "Prompt defined in BAML"
+  input_schema Zoi.object(%{message: Zoi.string()})
+  output_schema MyBamlTypes.ChatReply
 end
 ```
 
