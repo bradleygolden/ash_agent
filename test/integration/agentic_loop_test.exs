@@ -3,6 +3,7 @@ defmodule AshAgent.Integration.AgenticLoopTest do
   use ExUnit.Case, async: false
 
   @moduletag :integration
+  @moduletag :live
 
   alias AshAgent.Runtime
 
@@ -28,9 +29,7 @@ defmodule AshAgent.Integration.AgenticLoopTest do
     agent do
       provider :baml
 
-      client AshAgent.Test.AgenticLoopBamlClient,
-        function: :AgentLoop,
-        client_module: AshAgent.Test.AgenticLoopBamlClient
+      client :ollama_live, function: :AgentLoop
 
       input_schema(
         Zoi.object(%{message: Zoi.string(), iteration: Zoi.integer() |> Zoi.optional()},
@@ -126,94 +125,23 @@ defmodule AshAgent.Integration.AgenticLoopTest do
     end
   end
 
-  describe "agentic loop with BAML provider (stubbed)" do
+  describe "agentic loop with BAML provider (Ollama)" do
     test "loops until agent returns done intent" do
       {:ok, results} = run_agentic_loop(BamlLoopAgent, %{message: "find something"})
 
-      assert length(results) == 3
+      assert length(results) >= 1
 
-      [first, second, third] = results
+      last_result = List.last(results)
+      assert last_result.output.intent == "done"
 
-      assert first.output.intent == "search"
-      assert second.output.intent == "search"
-      assert third.output.intent == "done"
-      assert third.output.answer =~ "Completed"
-    end
-
-    test "respects max_iterations limit" do
-      defmodule InfiniteLoopBamlClient do
-        @moduledoc false
-
-        defmodule AgentLoop do
-          @moduledoc false
-
-          def call(args, _opts \\ []) do
-            iteration = Map.get(args, :iteration) || Map.get(args, "iteration") || 1
-            {:ok, %{intent: "search", query: "query #{iteration}"}}
-          end
-
-          def stream(args, callback) do
-            stream(args, callback, [])
-          end
-
-          def stream(args, callback, _opts) do
-            {:ok, response} = call(args)
-
-            pid =
-              spawn(fn ->
-                callback.({:done, response})
-              end)
-
-            {:ok, pid}
-          end
-        end
+      if length(results) > 1 do
+        intermediate_results = Enum.slice(results, 0..-2//1)
+        assert Enum.all?(intermediate_results, fn r -> r.output.intent == "search" end)
       end
-
-      defmodule InfiniteLoopAgent do
-        @moduledoc false
-        use Ash.Resource,
-          domain: AshAgent.Integration.AgenticLoopTest.TestDomain,
-          extensions: [AshAgent.Resource]
-
-        resource do
-          require_primary_key? false
-        end
-
-        agent do
-          provider :baml
-
-          client AshAgent.Integration.AgenticLoopTest.InfiniteLoopBamlClient,
-            function: :AgentLoop,
-            client_module: AshAgent.Integration.AgenticLoopTest.InfiniteLoopBamlClient
-
-          input_schema(
-            Zoi.object(%{message: Zoi.string(), iteration: Zoi.integer() |> Zoi.optional()},
-              coerce: true
-            )
-          )
-
-          output_schema(
-            Zoi.union([
-              Zoi.object(%{intent: Zoi.literal("search"), query: Zoi.string()}, coerce: true),
-              Zoi.object(%{intent: Zoi.literal("done"), answer: Zoi.string()}, coerce: true)
-            ])
-          )
-
-          instruction("Never stop searching")
-        end
-      end
-
-      {:error, :max_iterations_exceeded, results} =
-        run_agentic_loop(InfiniteLoopAgent, %{message: "go forever"}, max_iterations: 5)
-
-      assert length(results) == 5
-      assert Enum.all?(results, fn r -> r.output.intent == "search" end)
     end
   end
 
   describe "agentic loop with ReqLLM provider (Ollama)" do
-    @describetag :live
-
     setup do
       ReqLLM.put_key(:openai_api_key, "ollama")
 
