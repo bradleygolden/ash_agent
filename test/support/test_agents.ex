@@ -7,6 +7,7 @@ defmodule AshAgent.Test.TestAgents do
   """
 
   defmodule MinimalAgent do
+    @dialyzer :no_match
     @moduledoc """
     Minimal agent with just required configuration.
     Useful for testing basic functionality.
@@ -33,6 +34,7 @@ defmodule AshAgent.Test.TestAgents do
   end
 
   defmodule AgentWithArguments do
+    @dialyzer :no_match
     @moduledoc """
     Agent that accepts instruction arguments.
     Useful for testing instruction variable interpolation.
@@ -62,6 +64,7 @@ defmodule AshAgent.Test.TestAgents do
   end
 
   defmodule AgentWithComplexOutput do
+    @dialyzer :no_match
     @moduledoc """
     Agent with complex nested output structure.
     Useful for testing schema validation with multiple field types.
@@ -99,6 +102,7 @@ defmodule AshAgent.Test.TestAgents do
   end
 
   defmodule AgentWithClientOpts do
+    @dialyzer :no_match
     @moduledoc """
     Agent with custom client options.
     Useful for testing client configuration.
@@ -125,6 +129,7 @@ defmodule AshAgent.Test.TestAgents do
   end
 
   defmodule AgentWithMultipleArgs do
+    @dialyzer :no_match
     @moduledoc """
     Agent that accepts multiple arguments via template variables.
     Useful for testing complex instruction templating.
