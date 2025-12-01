@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add provider metadata extraction for session persistence
+
+### Fixed
+
+- Fix compile-time struct expansion for optional ash_baml dependency
+
 ## [0.3.0] - 2024-11-29
 
 ### Changed
