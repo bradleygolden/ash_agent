@@ -140,7 +140,8 @@ defmodule AshAgent.MixProject do
 
   defp dialyzer do
     [
-      plt_add_apps: [:mix, :ex_unit]
+      plt_add_apps: [:mix, :ex_unit],
+      list_unused_filters: true
     ]
   end
 
