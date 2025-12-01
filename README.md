@@ -35,12 +35,16 @@ defmodule MyApp.Assistant do
     """
 
     instruction_schema Zoi.object(%{
-      company_name: Zoi.string()
+      company_name: Zoi.string(description: "Name of the company the assistant represents")
     }, coerce: true)
 
-    input_schema Zoi.object(%{message: Zoi.string()}, coerce: true)
+    input_schema Zoi.object(%{
+      message: Zoi.string(description: "The user's question or request")
+    }, coerce: true)
 
-    output_schema Zoi.object(%{content: Zoi.string()}, coerce: true)
+    output_schema Zoi.object(%{
+      content: Zoi.string(description: "The assistant's helpful response")
+    }, coerce: true)
   end
 
   code_interface do
@@ -126,11 +130,19 @@ defmodule MyApp.LoopAgent do
     Choose one of the response types based on your next action.
     """
 
-    input_schema Zoi.object(%{message: Zoi.string()}, coerce: true)
+    input_schema Zoi.object(%{
+      message: Zoi.string(description: "The user's question")
+    }, coerce: true)
 
     output_schema Zoi.union([
-      Zoi.object(%{intent: Zoi.literal("search"), query: Zoi.string()}, coerce: true),
-      Zoi.object(%{intent: Zoi.literal("done"), answer: Zoi.string()}, coerce: true)
+      Zoi.object(%{
+        intent: Zoi.literal("search"),
+        query: Zoi.string(description: "Search query to find information")
+      }, coerce: true),
+      Zoi.object(%{
+        intent: Zoi.literal("done"),
+        answer: Zoi.string(description: "Final answer to the user's question")
+      }, coerce: true)
     ])
   end
 end
@@ -203,8 +215,12 @@ agent do
   provider :req_llm
   client "anthropic:claude-sonnet-4-20250514", temperature: 0.7, max_tokens: 1000
   instruction "You are a helpful assistant."
-  input_schema Zoi.object(%{message: Zoi.string()})
-  output_schema Zoi.object(%{content: Zoi.string()})
+  input_schema Zoi.object(%{
+    message: Zoi.string(description: "The user's message")
+  }, coerce: true)
+  output_schema Zoi.object(%{
+    content: Zoi.string(description: "The assistant's response")
+  }, coerce: true)
 end
 ```
 
@@ -217,7 +233,9 @@ agent do
   provider :baml
   client :my_client, function: :ChatAgent
   instruction "Prompt defined in BAML"
-  input_schema Zoi.object(%{message: Zoi.string()})
+  input_schema Zoi.object(%{
+    message: Zoi.string(description: "The user's message")
+  }, coerce: true)
   output_schema MyBamlTypes.ChatReply
 end
 ```
