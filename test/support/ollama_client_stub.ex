@@ -78,6 +78,7 @@ defmodule AshAgent.Test.OllamaClient do
 
   defmodule AgentToolEcho do
     @moduledoc false
+    @dialyzer :no_match
     def call(args, _opts \\ []) do
       {:ok, build_response(args)}
     end
