@@ -1,0 +1,6 @@
+
+DOS.StringToAtom: Unsafe `String.to_atom`,lib/ash_agent/runtime/llm_client.ex:727,2A64E3F
+DOS.StringToAtom: Unsafe `String.to_atom`,lib/ash_agent/domain/transformers/generate_agents.ex:89,2E01B27
+DOS.StringToAtom: Unsafe `String.to_atom`,lib/ash_agent/runtime/llm_client.ex:730,41AF091
+DOS.StringToAtom: Unsafe `String.to_atom`,lib/ash_agent/domain/transformers/generate_agents.ex:94,5A3236D
+DOS.StringToAtom: Unsafe `String.to_atom`,lib/ash_agent/transformers/add_domain_interfaces.ex:71,644E61B

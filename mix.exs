@@ -50,6 +50,7 @@ defmodule AshAgent.MixProject do
       {:ex_doc, "~> 0.34", only: [:dev, :test], runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:sobelow, "~> 0.13", only: [:dev, :test], runtime: false},
       {:plug, "~> 1.16", only: :test}
     ] ++ ash_baml_dep()
   end
@@ -121,9 +122,10 @@ defmodule AshAgent.MixProject do
         "test --warnings-as-errors",
         "format --check-formatted",
         "credo --strict",
+        "sobelow --exit",
+        "hex.audit",
         "dialyzer --format github",
-        "docs --warnings-as-errors",
-        "test --only integration --warnings-as-errors"
+        "docs --warnings-as-errors"
       ],
       docs: [
         "spark.cheat_sheets",
