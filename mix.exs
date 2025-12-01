@@ -17,12 +17,12 @@ defmodule AshAgent.MixProject do
       docs: docs(),
       aliases: aliases(),
       elixirc_paths: elixirc_paths(Mix.env()),
-      dialyzer: dialyzer(),
-      preferred_cli_env: [
-        check: :test,
-        precommit: :test
-      ]
+      dialyzer: dialyzer()
     ]
+  end
+
+  def cli do
+    [preferred_envs: [precommit: :test]]
   end
 
   def application do
@@ -124,8 +124,8 @@ defmodule AshAgent.MixProject do
         "format --check-formatted",
         "credo --strict",
         "sobelow --exit",
-        "hex.audit",
-        "dialyzer --format github",
+        "deps.audit",
+        "dialyzer",
         "docs --warnings-as-errors"
       ],
       docs: [

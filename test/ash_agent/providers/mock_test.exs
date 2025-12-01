@@ -201,6 +201,11 @@ defmodule AshAgent.Providers.MockTest do
   end
 
   describe "Provider behaviour compliance" do
+    setup do
+      Code.ensure_loaded!(Mock)
+      :ok
+    end
+
     test "implements call/7 callback" do
       assert function_exported?(Mock, :call, 7)
     end

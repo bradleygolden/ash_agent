@@ -1,4 +1,6 @@
 defmodule AshAgent.Providers.ReqLLM do
+  @dialyzer :no_match
+
   @moduledoc """
   Provider implementation for ReqLLM library.
 

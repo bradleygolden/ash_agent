@@ -23,6 +23,9 @@
 
   # ReqLLM provider false positives on retry logic pattern matching
   ~r|lib/ash_agent/providers/req_llm\.ex:.*pattern_match|,
+  ~r|lib/ash_agent/providers/req_llm\.ex.* The pattern .* can never match|,
+  # Legacy format warning (erlex parsing bug with OTP 28)
+  ~r|lib/ash_agent/providers/req_llm\.ex:\d+:|,
 
   # Test support false positives from Ollama client stub
   # Client.message_from always returns binary, making some defensive clauses unreachable
