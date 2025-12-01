@@ -146,23 +146,24 @@ defmodule AshAgent.MixProject do
   end
 
   defp ash_baml_dep do
-    if hex_build?() do
-      [{:ash_baml, "~> 0.2.0", optional: true}]
+    [ash_baml_dep_entry()]
+  end
+
+  defp ash_baml_dep_entry do
+    if skip_local_deps?() do
+      {:ash_baml, "~> 0.2.0", optional: true}
     else
-      if local_dep?(:ash_baml) do
-        [{:ash_baml, in_umbrella: true}]
-      else
-        [{:ash_baml, "~> 0.2.0", optional: true}]
-      end
+      local_dep_or_hex(:ash_baml, {"~> 0.2.0", optional: true}, "../ash_baml")
     end
   end
 
-  defp hex_build?, do: System.get_env("HEX_BUILD") == "true"
-
-  defp local_dep?(app) do
-    app
-    |> to_string()
-    |> then(&Path.expand("../#{&1}/mix.exs", __DIR__))
-    |> File.exists?()
+  defp local_dep_or_hex(dep, {version, opts}, path) do
+    if File.exists?(Path.expand("#{path}/mix.exs", __DIR__)) do
+      {dep, [path: path] ++ [opts]}
+    else
+      {dep, version, opts}
+    end
   end
+
+  defp skip_local_deps?, do: System.get_env("SKIP_LOCAL_DEPS") == "true"
 end
