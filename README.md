@@ -288,6 +288,7 @@ AshAgent is part of the [AshAgent Stack](https://github.com/bradleygolden/ash_ag
 
 - [ash_baml](https://github.com/bradleygolden/ash_baml) - BAML integration for structured outputs
 - [ash_agent_tools](https://github.com/bradleygolden/ash_agent_tools) - Tool calling support
+- [ash_agent_session](https://github.com/bradleygolden/ash_agent_session) - Session persistence for multi-turn conversations
 
 ## Links
 
