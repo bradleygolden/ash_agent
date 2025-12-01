@@ -54,4 +54,48 @@ defmodule AshAgent.Providers.BamlProviderTest do
       assert {:done, %AshAgent.Result{output: %{content: "one two"}}} = List.last(chunks)
     end
   end
+
+  describe "metadata extraction with :baml provider" do
+    test "Result.metadata is populated with Metadata struct" do
+      {:ok, result} = Runtime.call(Agent, message: "test")
+
+      assert %AshAgent.Metadata{} = result.metadata
+      assert result.metadata.provider == :baml
+    end
+
+    test "metadata contains timing fields from runtime" do
+      {:ok, result} = Runtime.call(Agent, message: "test")
+
+      assert %DateTime{} = result.metadata.started_at
+      assert %DateTime{} = result.metadata.completed_at
+      assert is_integer(result.metadata.duration_ms)
+      assert result.metadata.duration_ms >= 0
+    end
+
+    test "metadata is JSON-serializable" do
+      {:ok, result} = Runtime.call(Agent, message: "test")
+
+      assert {:ok, json} = Jason.encode(result.metadata)
+      assert {:ok, decoded} = Jason.decode(json)
+      assert decoded["provider"] == "baml"
+    end
+
+    test "streaming result includes metadata struct" do
+      {:ok, stream} = Runtime.stream(Agent, message: "test")
+      chunks = Enum.to_list(stream)
+      {:done, result} = List.last(chunks)
+
+      assert %AshAgent.Metadata{} = result.metadata
+    end
+
+    test "streaming result includes timing metadata" do
+      {:ok, stream} = Runtime.stream(Agent, message: "test")
+      chunks = Enum.to_list(stream)
+      {:done, result} = List.last(chunks)
+
+      assert %DateTime{} = result.metadata.started_at
+      assert %DateTime{} = result.metadata.completed_at
+      assert is_integer(result.metadata.duration_ms)
+    end
+  end
 end

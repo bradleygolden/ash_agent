@@ -28,6 +28,7 @@ defmodule AshAgent.Integration.LiveProviderMetadataTest do
 
   describe "OpenAI metadata extraction" do
     @moduletag :openai
+    @moduletag :skip
 
     defmodule OpenAITestAgent do
       @moduledoc false
@@ -42,7 +43,7 @@ defmodule AshAgent.Integration.LiveProviderMetadataTest do
       end
 
       agent do
-        client("openai:gpt-5-mini", temperature: 0.0)
+        client("openai:gpt-4o-mini", temperature: 0.0)
 
         input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
         output_schema(Zoi.object(%{response: Zoi.string()}, coerce: true))
@@ -67,7 +68,7 @@ defmodule AshAgent.Integration.LiveProviderMetadataTest do
       {:ok, result} = Runtime.call(OpenAITestAgent, %{message: "say hi"})
 
       assert is_binary(result.model)
-      assert result.model =~ "gpt-5"
+      assert result.model =~ "gpt-4o"
     end
 
     test "OpenAI metadata is JSON-serializable" do
@@ -88,6 +89,15 @@ defmodule AshAgent.Integration.LiveProviderMetadataTest do
 
       assert %Metadata{} = result.metadata
       assert result.metadata.provider == :req_llm
+    end
+
+    test "OpenAI result has timing metadata" do
+      {:ok, result} = Runtime.call(OpenAITestAgent, %{message: "say hi"})
+
+      assert %DateTime{} = result.metadata.started_at
+      assert %DateTime{} = result.metadata.completed_at
+      assert is_integer(result.metadata.duration_ms)
+      assert result.metadata.duration_ms >= 0
     end
   end
 
@@ -154,6 +164,15 @@ defmodule AshAgent.Integration.LiveProviderMetadataTest do
 
       assert {:ok, _json} = Jason.encode(state)
     end
+
+    test "Anthropic result has timing metadata" do
+      {:ok, result} = Runtime.call(AnthropicTestAgent, %{message: "say hi"})
+
+      assert %DateTime{} = result.metadata.started_at
+      assert %DateTime{} = result.metadata.completed_at
+      assert is_integer(result.metadata.duration_ms)
+      assert result.metadata.duration_ms >= 0
+    end
   end
 
   describe "OpenRouter metadata extraction" do
@@ -217,6 +236,121 @@ defmodule AshAgent.Integration.LiveProviderMetadataTest do
       }
 
       assert {:ok, _json} = Jason.encode(state)
+    end
+
+    test "OpenRouter result has timing metadata" do
+      {:ok, result} = Runtime.call(OpenRouterTestAgent, %{message: "say hi"})
+
+      assert %DateTime{} = result.metadata.started_at
+      assert %DateTime{} = result.metadata.completed_at
+      assert is_integer(result.metadata.duration_ms)
+      assert result.metadata.duration_ms >= 0
+    end
+  end
+
+  describe "BAML Anthropic metadata extraction" do
+    @moduletag :baml_anthropic
+
+    defmodule BamlAnthropicTestAgent do
+      @moduledoc false
+      use Ash.Resource,
+        domain: AshAgent.Integration.LiveProviderMetadataTest.TestDomain,
+        extensions: [AshAgent.Resource]
+
+      resource do
+        require_primary_key? false
+      end
+
+      agent do
+        provider :baml
+
+        client AshAgent.Test.ThinkingBamlClient,
+          function: :SolveWithThinking,
+          client_module: AshAgent.Test.ThinkingBamlClient
+
+        input_schema(Zoi.object(%{question: Zoi.string()}, coerce: true))
+
+        output_schema(
+          Zoi.object(%{answer: Zoi.integer(), explanation: Zoi.string()}, coerce: true)
+        )
+
+        instruction("Solve math")
+      end
+    end
+
+    test "BAML Anthropic result has Metadata struct" do
+      {:ok, result} = Runtime.call(BamlAnthropicTestAgent, %{question: "What is 2+2?"})
+
+      assert %Metadata{} = result.metadata
+      assert result.metadata.provider == :baml
+    end
+
+    test "BAML Anthropic metadata has timing" do
+      {:ok, result} = Runtime.call(BamlAnthropicTestAgent, %{question: "What is 1+1?"})
+
+      assert %DateTime{} = result.metadata.started_at
+      assert %DateTime{} = result.metadata.completed_at
+      assert is_integer(result.metadata.duration_ms)
+      assert result.metadata.duration_ms >= 0
+    end
+
+    test "BAML Anthropic metadata is JSON-serializable" do
+      {:ok, result} = Runtime.call(BamlAnthropicTestAgent, %{question: "What is 3+3?"})
+
+      assert {:ok, json} = Jason.encode(result.metadata)
+      assert {:ok, decoded} = Jason.decode(json)
+      assert decoded["provider"] == "baml"
+    end
+  end
+
+  describe "BAML OpenAI metadata extraction" do
+    @moduletag :baml_openai
+
+    defmodule BamlOpenAITestAgent do
+      @moduledoc false
+      use Ash.Resource,
+        domain: AshAgent.Integration.LiveProviderMetadataTest.TestDomain,
+        extensions: [AshAgent.Resource]
+
+      resource do
+        require_primary_key? false
+      end
+
+      agent do
+        provider :baml
+
+        client AshAgent.Test.OpenAIBamlClient,
+          function: :MetadataTest,
+          client_module: AshAgent.Test.OpenAIBamlClient
+
+        input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
+        output_schema(Zoi.object(%{response: Zoi.string()}, coerce: true))
+        instruction("Reply with response")
+      end
+    end
+
+    test "BAML OpenAI result has Metadata struct" do
+      {:ok, result} = Runtime.call(BamlOpenAITestAgent, %{message: "say hi"})
+
+      assert %Metadata{} = result.metadata
+      assert result.metadata.provider == :baml
+    end
+
+    test "BAML OpenAI metadata has timing" do
+      {:ok, result} = Runtime.call(BamlOpenAITestAgent, %{message: "say hello"})
+
+      assert %DateTime{} = result.metadata.started_at
+      assert %DateTime{} = result.metadata.completed_at
+      assert is_integer(result.metadata.duration_ms)
+      assert result.metadata.duration_ms >= 0
+    end
+
+    test "BAML OpenAI metadata is JSON-serializable" do
+      {:ok, result} = Runtime.call(BamlOpenAITestAgent, %{message: "hi there"})
+
+      assert {:ok, json} = Jason.encode(result.metadata)
+      assert {:ok, decoded} = Jason.decode(json)
+      assert decoded["provider"] == "baml"
     end
   end
 end

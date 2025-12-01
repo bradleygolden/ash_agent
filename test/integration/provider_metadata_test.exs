@@ -320,4 +320,43 @@ defmodule AshAgent.Integration.ProviderMetadataTest do
       assert {:ok, _json} = Jason.encode(state)
     end
   end
+
+  describe "runtime timing capture" do
+    test "metadata includes started_at timestamp" do
+      {:ok, result} = AshAgent.Runtime.call(MetadataTestAgent, %{message: "timing test"})
+
+      assert %DateTime{} = result.metadata.started_at
+    end
+
+    test "metadata includes completed_at timestamp" do
+      {:ok, result} = AshAgent.Runtime.call(MetadataTestAgent, %{message: "timing test"})
+
+      assert %DateTime{} = result.metadata.completed_at
+    end
+
+    test "metadata includes duration_ms" do
+      {:ok, result} = AshAgent.Runtime.call(MetadataTestAgent, %{message: "timing test"})
+
+      assert is_integer(result.metadata.duration_ms)
+      assert result.metadata.duration_ms >= 0
+    end
+
+    test "completed_at is after or equal to started_at" do
+      {:ok, result} = AshAgent.Runtime.call(MetadataTestAgent, %{message: "timing test"})
+
+      assert DateTime.compare(result.metadata.completed_at, result.metadata.started_at) in [
+               :gt,
+               :eq
+             ]
+    end
+
+    test "duration_ms is consistent with timestamps" do
+      {:ok, result} = AshAgent.Runtime.call(MetadataTestAgent, %{message: "timing test"})
+
+      calculated_duration =
+        DateTime.diff(result.metadata.completed_at, result.metadata.started_at, :millisecond)
+
+      assert result.metadata.duration_ms == calculated_duration
+    end
+  end
 end
