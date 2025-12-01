@@ -51,6 +51,7 @@ defmodule AshAgent.Telemetry do
       |> maybe_put_usage(response)
       |> maybe_put_usage(Map.get(metadata, :response))
       |> maybe_put_usage(Map.get(metadata, :result))
+      |> maybe_put_provider_metadata(Map.get(metadata, :response))
 
     Map.put(metadata, :status, :ok)
   end
@@ -69,6 +70,16 @@ defmodule AshAgent.Telemetry do
     case LLMClient.response_usage(metadata[:provider], response) do
       nil -> metadata
       usage -> Map.put(metadata, :usage, usage)
+    end
+  end
+
+  defp maybe_put_provider_metadata(metadata, response) do
+    case LLMClient.extract_provider_metadata(metadata[:provider], response) do
+      provider_meta when is_map(provider_meta) and map_size(provider_meta) > 0 ->
+        Map.put(metadata, :provider_metadata, provider_meta)
+
+      _ ->
+        metadata
     end
   end
 

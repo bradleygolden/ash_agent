@@ -136,6 +136,22 @@ defmodule AshAgent.Providers.ReqLLM do
 
   def extract_thinking(_response), do: :default
 
+  @impl true
+  def extract_metadata(%ReqLLM.Response{} = response) do
+    usage = ReqLLM.Response.usage(response) || %{}
+
+    %{
+      provider: :req_llm,
+      reasoning_tokens: Map.get(usage, :reasoning_tokens),
+      cached_tokens: Map.get(usage, :cached_tokens) || Map.get(usage, :cache_read_input_tokens),
+      input_cost: Map.get(usage, :input_cost),
+      output_cost: Map.get(usage, :output_cost),
+      total_cost: Map.get(usage, :total_cost)
+    }
+  end
+
+  def extract_metadata(_response), do: :default
+
   defp extract_text_from_content_blocks([%{"type" => "text", "text" => text} | _])
        when is_binary(text),
        do: text

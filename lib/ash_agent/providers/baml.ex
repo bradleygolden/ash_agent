@@ -423,6 +423,34 @@ defmodule AshAgent.Providers.Baml do
   def extract_thinking(%AshBaml.Response{} = response), do: AshBaml.Response.thinking(response)
   def extract_thinking(_response), do: nil
 
+  @impl true
+  def extract_metadata(%AshBaml.Response{} = response) do
+    %{
+      provider: :baml,
+      duration_ms: get_in(response.timing, [:duration_ms]),
+      time_to_first_token_ms: get_in(response.timing, [:time_to_first_token_ms]),
+      started_at: convert_utc_ms_to_datetime(get_in(response.timing, [:start_time_utc_ms])),
+      request_id: response.request_id,
+      client_name: response.client_name,
+      num_attempts: response.num_attempts,
+      tags: response.tags,
+      raw_http_response: response.http_response_body
+    }
+  end
+
+  def extract_metadata(_response), do: :default
+
+  defp convert_utc_ms_to_datetime(nil), do: nil
+
+  defp convert_utc_ms_to_datetime(ms) when is_number(ms) do
+    case DateTime.from_unix(trunc(ms), :millisecond) do
+      {:ok, dt} -> dt
+      _ -> nil
+    end
+  end
+
+  defp convert_utc_ms_to_datetime(_), do: nil
+
   # Private helpers for BAML-specific extraction
 
   defp tool_call_struct?(struct_name, struct_map) do

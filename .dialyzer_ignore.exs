@@ -27,5 +27,9 @@
   # Test support false positives from Ollama client stub
   # Client.message_from always returns binary, making some defensive clauses unreachable
   ~r/test\/support\/ollama_client_stub\.ex.* The pattern variable .* can never match/,
-  ~r/test\/support\/ollama_client_stub\.ex.* The guard clause can never succeed/
+  ~r/test\/support\/ollama_client_stub\.ex.* The guard clause can never succeed/,
+
+  # Test agents false positives from Zoi schema type inference
+  # Zoi.object/2 returns opaque types that Dialyzer cannot fully analyze
+  ~r/test\/support\/test_agents\.ex.* The guard clause can never succeed/
 ]

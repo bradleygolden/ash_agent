@@ -316,14 +316,17 @@ defmodule AshAgent.Runtime.LLMClient do
 
     if actual_stream do
       state_ref = make_ref()
-      Process.put({__MODULE__, state_ref}, {nil, nil})
+      started_at = DateTime.utc_now()
+      Process.put({__MODULE__, state_ref}, {nil, nil, started_at})
 
       tagged_stream =
         actual_stream
         |> Stream.flat_map(&tag_chunk(&1, output_schema))
         |> Stream.map(fn chunk ->
-          {last_content, accumulated_thinking} = Process.get({__MODULE__, state_ref}, {nil, nil})
-          accumulate_chunk(state_ref, chunk, last_content, accumulated_thinking)
+          {last_content, accumulated_thinking, _started_at} =
+            Process.get({__MODULE__, state_ref}, {nil, nil, started_at})
+
+          accumulate_chunk(state_ref, chunk, last_content, accumulated_thinking, started_at)
           chunk
         end)
 
@@ -332,11 +335,17 @@ defmodule AshAgent.Runtime.LLMClient do
           fn -> nil end,
           fn
             nil ->
-              {last_content, accumulated_thinking} =
-                Process.get({__MODULE__, state_ref}, {nil, nil})
+              {last_content, accumulated_thinking, started_at} =
+                Process.get({__MODULE__, state_ref}, {nil, nil, started_at})
 
               Process.delete({__MODULE__, state_ref})
-              finalize_tagged_stream_result(last_content, accumulated_thinking, stream_response)
+
+              finalize_tagged_stream_result(
+                last_content,
+                accumulated_thinking,
+                stream_response,
+                started_at
+              )
 
             :done ->
               {:halt, :done}
@@ -347,13 +356,17 @@ defmodule AshAgent.Runtime.LLMClient do
       Stream.concat(tagged_stream, done_stream)
     else
       state_ref = make_ref()
-      Process.put({__MODULE__, state_ref}, {nil, nil})
+      started_at = DateTime.utc_now()
+      Process.put({__MODULE__, state_ref}, {nil, nil, started_at})
 
       content_stream =
         stream_response
         |> stream_to_structs(output_schema)
         |> Stream.map(fn chunk ->
-          Process.put({__MODULE__, state_ref}, {chunk, nil})
+          {_last, _thinking, started_at} =
+            Process.get({__MODULE__, state_ref}, {nil, nil, started_at})
+
+          Process.put({__MODULE__, state_ref}, {chunk, nil, started_at})
           {:content, chunk}
         end)
 
@@ -362,9 +375,11 @@ defmodule AshAgent.Runtime.LLMClient do
           fn -> nil end,
           fn
             nil ->
-              {last_content, _thinking} = Process.get({__MODULE__, state_ref}, {nil, nil})
+              {last_content, _thinking, started_at} =
+                Process.get({__MODULE__, state_ref}, {nil, nil, started_at})
+
               Process.delete({__MODULE__, state_ref})
-              finalize_stream_result(last_content, stream_response, provider)
+              finalize_stream_result(last_content, stream_response, provider, started_at)
 
             :done ->
               {:halt, :done}
@@ -400,36 +415,72 @@ defmodule AshAgent.Runtime.LLMClient do
     end
   end
 
-  defp accumulate_chunk(state_ref, {:thinking, text}, last_content, accumulated_thinking) do
+  defp accumulate_chunk(
+         state_ref,
+         {:thinking, text},
+         last_content,
+         accumulated_thinking,
+         started_at
+       ) do
     new_thinking = (accumulated_thinking || "") <> text
-    Process.put({__MODULE__, state_ref}, {last_content, new_thinking})
+    Process.put({__MODULE__, state_ref}, {last_content, new_thinking, started_at})
   end
 
-  defp accumulate_chunk(state_ref, {:content, struct}, _last_content, accumulated_thinking) do
-    Process.put({__MODULE__, state_ref}, {struct, accumulated_thinking})
+  defp accumulate_chunk(
+         state_ref,
+         {:content, struct},
+         _last_content,
+         accumulated_thinking,
+         started_at
+       ) do
+    Process.put({__MODULE__, state_ref}, {struct, accumulated_thinking, started_at})
   end
 
-  defp accumulate_chunk(_state_ref, _chunk, _last_content, _accumulated_thinking), do: :ok
+  defp accumulate_chunk(_state_ref, _chunk, _last_content, _accumulated_thinking, _started_at),
+    do: :ok
 
-  defp finalize_tagged_stream_result(nil, _thinking, _stream_response), do: {:halt, :done}
+  defp finalize_tagged_stream_result(nil, _thinking, _stream_response, _started_at),
+    do: {:halt, :done}
 
-  defp finalize_tagged_stream_result(last_content, accumulated_thinking, stream_response) do
+  defp finalize_tagged_stream_result(
+         last_content,
+         accumulated_thinking,
+         stream_response,
+         started_at
+       ) do
+    completed_at = DateTime.utc_now()
+
+    runtime_timing = %{
+      started_at: started_at,
+      completed_at: completed_at,
+      duration_ms: DateTime.diff(completed_at, started_at, :millisecond)
+    }
+
     result = %Result{
       output: last_content,
       thinking: accumulated_thinking,
       usage: nil,
-      model: nil,
-      finish_reason: nil,
+      model: extract_model(stream_response),
+      finish_reason: extract_finish_reason(stream_response),
+      metadata: AshAgent.Metadata.new(%{}, runtime_timing),
       raw_response: stream_response
     }
 
     {[{:done, result}], :done}
   end
 
-  defp finalize_stream_result(nil, _stream_response, _provider), do: {:halt, :done}
+  defp finalize_stream_result(nil, _stream_response, _provider, _started_at), do: {:halt, :done}
 
-  defp finalize_stream_result(last_content, stream_response, provider) do
-    result = build_result(last_content, stream_response, provider)
+  defp finalize_stream_result(last_content, stream_response, provider, started_at) do
+    completed_at = DateTime.utc_now()
+
+    runtime_timing = %{
+      started_at: started_at,
+      completed_at: completed_at,
+      duration_ms: DateTime.diff(completed_at, started_at, :millisecond)
+    }
+
+    result = build_result(last_content, stream_response, provider, runtime_timing)
     {[{:done, result}], :done}
   end
 
@@ -590,20 +641,44 @@ defmodule AshAgent.Runtime.LLMClient do
   - `output` - The parsed output struct
   - `provider_response` - The raw response from the provider
   - `provider` - The provider module or atom
+  - `runtime_timing` - Optional map with `:started_at`, `:completed_at`, `:duration_ms`
 
   ## Returns
 
   An `%AshAgent.Result{}` struct with the output and extracted metadata.
   """
-  def build_result(output, provider_response, provider) do
+  def build_result(output, provider_response, provider, runtime_timing \\ %{}) do
+    provider_metadata = extract_provider_metadata(provider, provider_response)
+
     %Result{
       output: output,
       thinking: extract_thinking_from_provider(provider, provider_response),
       usage: response_usage(provider, provider_response),
       model: extract_model(provider_response),
       finish_reason: extract_finish_reason(provider_response),
+      metadata: AshAgent.Metadata.new(provider_metadata, runtime_timing),
       raw_response: provider_response
     }
+  end
+
+  @doc """
+  Extracts provider-specific metadata from a response using the provider's callback.
+
+  Falls back to an empty map if the provider doesn't implement `extract_metadata/1`
+  or returns `:default`.
+  """
+  def extract_provider_metadata(provider, response) do
+    provider_module = resolve_provider_module(provider)
+
+    if provider_module && function_exported?(provider_module, :extract_metadata, 1) do
+      case provider_module.extract_metadata(response) do
+        :default -> %{}
+        metadata when is_map(metadata) -> metadata
+        _ -> %{}
+      end
+    else
+      %{}
+    end
   end
 
   @doc """
