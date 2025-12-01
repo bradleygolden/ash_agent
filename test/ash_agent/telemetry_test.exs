@@ -64,8 +64,9 @@ defmodule AshAgent.TelemetryTest do
         {{:ok, %{data: "response"}}, %{agent: TestAgent, provider: :mock, client: "test-client"}}
       end)
 
-      assert_receive {:telemetry_event, [:ash_agent, :call, :stop], _measurements, stop_metadata}
-      assert stop_metadata.agent == TestAgent
+      assert_receive {:telemetry_event, [:ash_agent, :call, :stop], _measurements,
+                      %{agent: TestAgent} = stop_metadata}
+
       assert stop_metadata.provider == :mock
       assert stop_metadata.client == "test-client"
     end
@@ -78,7 +79,9 @@ defmodule AshAgent.TelemetryTest do
         {{:ok, %{result: "success"}}, metadata}
       end)
 
-      assert_receive {:telemetry_event, [:ash_agent, :call, :stop], _measurements, stop_metadata}
+      assert_receive {:telemetry_event, [:ash_agent, :call, :stop], _measurements,
+                      %{agent: TestAgent} = stop_metadata}
+
       assert stop_metadata.status == :ok
     end
 
@@ -89,7 +92,9 @@ defmodule AshAgent.TelemetryTest do
         {{:error, "something failed"}, metadata}
       end)
 
-      assert_receive {:telemetry_event, [:ash_agent, :call, :stop], _measurements, stop_metadata}
+      assert_receive {:telemetry_event, [:ash_agent, :call, :stop], _measurements,
+                      %{agent: TestAgent} = stop_metadata}
+
       assert stop_metadata.status == :error
       assert stop_metadata.error == "something failed"
     end
