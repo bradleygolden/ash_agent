@@ -148,7 +148,7 @@ defmodule AshAgent.MixProject do
 
   defp local_dep_or_hex(dep, {version, opts}, path) do
     if File.exists?(Path.expand("#{path}/mix.exs", __DIR__)) do
-      {dep, [path: path] ++ [opts]}
+      {dep, Keyword.put(opts, :path, path)}
     else
       {dep, version, opts}
     end
