@@ -263,6 +263,8 @@ defmodule AshAgent.Runtime do
       fn ->
         emit_llm_request(metadata, context, nil)
 
+        started_at = DateTime.utc_now()
+
         response_result =
           LLMClient.generate_object_with_messages(
             module,
@@ -275,9 +277,17 @@ defmodule AshAgent.Runtime do
             context: context
           )
 
+        completed_at = DateTime.utc_now()
+
+        runtime_timing = %{
+          started_at: started_at,
+          completed_at: completed_at,
+          duration_ms: DateTime.diff(completed_at, started_at, :millisecond)
+        }
+
         emit_llm_response(metadata, response_result, context, nil)
 
-        handle_call_response(response_result, config, metadata, context)
+        handle_call_response(response_result, config, metadata, context, runtime_timing)
       end
     )
     |> unwrap_span_result()
@@ -514,10 +524,10 @@ defmodule AshAgent.Runtime do
   defp track_stream_chunk({:done, result}, index), do: {[{:done, result}], {index + 1, result}}
   defp track_stream_chunk(tagged_chunk, index), do: {[tagged_chunk], {index + 1, nil}}
 
-  defp handle_call_response({:ok, response}, config, metadata, ctx) do
+  defp handle_call_response({:ok, response}, config, metadata, ctx, runtime_timing) do
     case LLMClient.parse_response(config.output_schema, response) do
       {:ok, output} ->
-        result = LLMClient.build_result(output, response, config.provider)
+        result = LLMClient.build_result(output, response, config.provider, runtime_timing)
 
         result_with_context =
           Map.put(result, :context, Context.add_assistant_message(ctx, output))
@@ -532,7 +542,7 @@ defmodule AshAgent.Runtime do
     end
   end
 
-  defp handle_call_response(error, _config, metadata, ctx) do
+  defp handle_call_response(error, _config, metadata, ctx, _runtime_timing) do
     {error, Map.put(metadata, :context, ctx)}
   end
 

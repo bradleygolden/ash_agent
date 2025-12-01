@@ -304,6 +304,8 @@ defmodule AshAgent.Integration.ProviderMetadataTest do
   end
 
   describe "mock provider state capture" do
+    alias AshAgent.Integration.ProviderMetadataTest.MockMetadataAgent
+
     test "mock provider returns configurable metadata for testing" do
       {:ok, result} = AshAgent.Runtime.call(MockMetadataAgent, %{input: "state capture"})
 

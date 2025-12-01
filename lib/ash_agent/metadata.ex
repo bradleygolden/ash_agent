@@ -44,6 +44,7 @@ defmodule AshAgent.Metadata do
       }
   """
 
+  @derive Jason.Encoder
   defstruct [
     :duration_ms,
     :time_to_first_token_ms,
