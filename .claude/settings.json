@@ -1,33 +1,12 @@
 {
-  "includeCoAuthoredBy": false,
-  "enabledPlugins": {
-    "ash@elixir": true,
-    "core@elixir": true,
-    "credo@elixir": true,
-    "dialyzer@elixir": true,
-    "ex_doc@elixir": true,
-    "ex_unit@elixir": true,
-    "meta@elixir": true
-  },
   "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash -c 'input=$(cat); file_path=$(echo \"$input\" | jq -r \".tool_parameters.file_path // empty\"); if [[ \"$file_path\" =~ test/.*_test\\.exs$ ]]; then cd \"$PROJECT_ROOT\" && mix test.check_mirror; fi'"
-          }
-        ]
-      }
-    ],
     "PreToolUse": [
       {
         "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
-            "command": "bash -c 'input=$(cat); command=$(echo \"$input\" | jq -r \".tool_parameters.command // empty\"); if [[ \"$command\" =~ git[[:space:]]+commit ]]; then cd \"$PROJECT_ROOT\" && mix test.check_mirror; fi'"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/precommit.sh"
           }
         ]
       }
