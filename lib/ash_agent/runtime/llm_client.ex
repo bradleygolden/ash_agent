@@ -233,7 +233,7 @@ defmodule AshAgent.Runtime.LLMClient do
              })}
         end
 
-      match?(%AshBaml.Response{}, response) ->
+      match?(%{__struct__: AshBaml.Response}, response) ->
         parse_response(output_schema, AshBaml.Response.unwrap(response))
 
       true ->
@@ -570,7 +570,7 @@ defmodule AshAgent.Runtime.LLMClient do
 
   defp extract_text(%ReqLLM.Response{} = response), do: ReqLLM.Response.text(response)
 
-  defp extract_text(%AshBaml.Response{} = response),
+  defp extract_text(%{__struct__: struct_mod} = response) when struct_mod == AshBaml.Response,
     do: extract_text(AshBaml.Response.unwrap(response))
 
   defp extract_text(%{text: text}) when is_binary(text), do: text

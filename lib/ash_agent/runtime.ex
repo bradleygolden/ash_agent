@@ -561,7 +561,8 @@ defmodule AshAgent.Runtime do
     end
   end
 
-  defp add_usage_metadata(metadata, %AshBaml.Response{} = response) do
+  defp add_usage_metadata(metadata, %{__struct__: struct_mod} = response)
+       when struct_mod == AshBaml.Response do
     case response.usage do
       %{} = usage -> Map.put(metadata, :usage, usage)
       _ -> metadata

@@ -420,11 +420,14 @@ defmodule AshAgent.Providers.Baml do
   def extract_tool_calls(_response), do: :default
 
   @impl true
-  def extract_thinking(%AshBaml.Response{} = response), do: AshBaml.Response.thinking(response)
+  def extract_thinking(%{__struct__: struct_mod} = response) when struct_mod == AshBaml.Response,
+    do: AshBaml.Response.thinking(response)
+
   def extract_thinking(_response), do: nil
 
   @impl true
-  def extract_metadata(%AshBaml.Response{} = response) do
+  def extract_metadata(%{__struct__: struct_mod} = response)
+      when struct_mod == AshBaml.Response do
     %{
       provider: :baml,
       duration_ms: get_in(response.timing, [:duration_ms]),
