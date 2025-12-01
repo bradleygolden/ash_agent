@@ -53,7 +53,27 @@ defmodule AshAgent.MixProject do
       {:sobelow, "~> 0.13", only: [:dev, :test], runtime: false},
       {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false},
       {:plug, "~> 1.16", only: :test}
-    ] ++ ash_baml_dep()
+    ] ++ sibling_deps()
+  end
+
+  defp sibling_deps do
+    if in_umbrella?() do
+      [{:ash_baml, in_umbrella: true}]
+    else
+      [{:ash_baml, "~> 0.2.0", optional: true}]
+    end
+  end
+
+  defp in_umbrella? do
+    # FORCE_HEX_DEPS=true bypasses umbrella detection for hex.publish
+    if System.get_env("FORCE_HEX_DEPS") == "true" do
+      false
+    else
+      parent_mix = Path.expand("../../mix.exs", __DIR__)
+
+      File.exists?(parent_mix) and
+        parent_mix |> File.read!() |> String.contains?("apps_path")
+    end
   end
 
   defp description do
@@ -140,26 +160,4 @@ defmodule AshAgent.MixProject do
       list_unused_filters: true
     ]
   end
-
-  defp ash_baml_dep do
-    [ash_baml_dep_entry()]
-  end
-
-  defp ash_baml_dep_entry do
-    if skip_local_deps?() do
-      {:ash_baml, "~> 0.2.0", optional: true}
-    else
-      local_dep_or_hex(:ash_baml, {"~> 0.2.0", optional: true}, "../ash_baml")
-    end
-  end
-
-  defp local_dep_or_hex(dep, {version, opts}, path) do
-    if File.exists?(Path.expand("#{path}/mix.exs", __DIR__)) do
-      {dep, Keyword.put(opts, :path, path)}
-    else
-      {dep, version, opts}
-    end
-  end
-
-  defp skip_local_deps?, do: System.get_env("SKIP_LOCAL_DEPS") == "true"
 end
