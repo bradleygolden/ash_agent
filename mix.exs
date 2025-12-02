@@ -57,23 +57,16 @@ defmodule AshAgent.MixProject do
   end
 
   defp sibling_deps do
-    if in_umbrella?() do
-      [{:ash_baml, in_umbrella: true}]
+    if local_dev?() do
+      [{:ash_baml, path: "../ash_baml"}]
     else
       [{:ash_baml, "~> 0.2.0", optional: true}]
     end
   end
 
-  defp in_umbrella? do
-    # FORCE_HEX_DEPS=true bypasses umbrella detection for hex.publish
-    if System.get_env("FORCE_HEX_DEPS") == "true" do
-      false
-    else
-      parent_mix = Path.expand("../../mix.exs", __DIR__)
-
-      File.exists?(parent_mix) and
-        parent_mix |> File.read!() |> String.contains?("apps_path")
-    end
+  defp local_dev? do
+    System.get_env("HEX_DEPS") != "true" and
+      File.exists?(Path.expand("../ash_baml/mix.exs", __DIR__))
   end
 
   defp description do
