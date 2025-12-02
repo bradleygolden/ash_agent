@@ -1,13 +1,22 @@
-defmodule AshAgent.BudgetEnforcementTest do
-  use ExUnit.Case, async: true
-  @moduletag :integration
+defmodule AshAgent.Integration.Stub.BudgetEnforcementTest do
+  @moduledoc false
+  use AshAgent.IntegrationCase
 
   alias AshAgent.{Error, Info}
-  alias AshAgent.Test.TestDomain
+
+  defmodule TestDomain do
+    @moduledoc false
+    use Ash.Domain, validate_config_inclusion?: false
+
+    resources do
+      allow_unregistered? true
+    end
+  end
 
   defmodule AgentWithBudgetHalt do
+    @moduledoc false
     use Ash.Resource,
-      domain: TestDomain,
+      domain: AshAgent.Integration.Stub.BudgetEnforcementTest.TestDomain,
       extensions: [AshAgent.Resource]
 
     agent do
@@ -26,8 +35,9 @@ defmodule AshAgent.BudgetEnforcementTest do
   end
 
   defmodule AgentWithBudgetWarn do
+    @moduledoc false
     use Ash.Resource,
-      domain: TestDomain,
+      domain: AshAgent.Integration.Stub.BudgetEnforcementTest.TestDomain,
       extensions: [AshAgent.Resource]
 
     agent do
@@ -46,8 +56,9 @@ defmodule AshAgent.BudgetEnforcementTest do
   end
 
   defmodule AgentWithoutBudget do
+    @moduledoc false
     use Ash.Resource,
-      domain: TestDomain,
+      domain: AshAgent.Integration.Stub.BudgetEnforcementTest.TestDomain,
       extensions: [AshAgent.Resource]
 
     agent do

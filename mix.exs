@@ -143,7 +143,13 @@ defmodule AshAgent.MixProject do
         "docs",
         "spark.replace_doc_links"
       ],
-      "spark.formatter": "spark.formatter --extensions AshAgent.Resource,AshAgent.Domain"
+      "spark.formatter": "spark.formatter --extensions AshAgent.Resource,AshAgent.Domain",
+      "test.integration": ["test --only integration"],
+      "test.integration.req_llm": ["test --only integration --only backend:req_llm"],
+      "test.integration.baml": ["test --only integration --only backend:baml"],
+      "test.integration.openai": ["test --only integration --only provider:openai"],
+      "test.integration.anthropic": ["test --only integration --only provider:anthropic"],
+      "test.integration.ollama": ["test --only integration --only provider:ollama"]
     ]
   end
 

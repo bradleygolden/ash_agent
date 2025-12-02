@@ -1,14 +1,23 @@
-defmodule AshAgent.TokenTrackingTest do
-  use ExUnit.Case, async: true
-  @moduletag :integration
+defmodule AshAgent.Integration.Stub.TokenTrackingTest do
+  @moduledoc false
+  use AshAgent.IntegrationCase
 
   alias AshAgent.Runtime
   alias AshAgent.Test.LLMStub
 
+  defmodule TestDomain do
+    @moduledoc false
+    use Ash.Domain, validate_config_inclusion?: false
+
+    resources do
+      allow_unregistered? true
+    end
+  end
+
   defmodule TokenTrackingAgent do
     @moduledoc false
     use Ash.Resource,
-      domain: AshAgent.TokenTrackingTest.TestDomain,
+      domain: AshAgent.Integration.Stub.TokenTrackingTest.TestDomain,
       extensions: [AshAgent.Resource]
 
     resource do
@@ -20,16 +29,6 @@ defmodule AshAgent.TokenTrackingTest do
       input_schema(Zoi.object(%{message: Zoi.string()}, coerce: true))
       output_schema(Zoi.object(%{result: Zoi.string()}, coerce: true))
       instruction("Test prompt")
-    end
-  end
-
-  defmodule TestDomain do
-    @moduledoc false
-    use Ash.Domain, validate_config_inclusion?: false
-
-    resources do
-      allow_unregistered? true
-      resource TokenTrackingAgent
     end
   end
 
