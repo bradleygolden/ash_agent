@@ -1,19 +1,27 @@
-defmodule AshAgent.IntegrationTest do
+defmodule AshAgent.Integration.Stub.BasicTest do
   @moduledoc """
   Integration tests for AshAgent using Req.Test stubs.
 
   These tests verify that agents work end-to-end with mocked LLM responses,
   without requiring actual API calls.
   """
-  use ExUnit.Case, async: true
-  @moduletag :integration
+  use AshAgent.IntegrationCase
 
   alias AshAgent.Test.LLMStub
+
+  defmodule TestDomain do
+    @moduledoc false
+    use Ash.Domain, validate_config_inclusion?: false
+
+    resources do
+      allow_unregistered? true
+    end
+  end
 
   defmodule EchoAgent do
     @moduledoc false
     use Ash.Resource,
-      domain: AshAgent.IntegrationTest.TestDomain,
+      domain: AshAgent.Integration.Stub.BasicTest.TestDomain,
       extensions: [AshAgent.Resource]
 
     import AshAgent.Sigils
@@ -40,7 +48,7 @@ defmodule AshAgent.IntegrationTest do
   defmodule SimpleAgent do
     @moduledoc false
     use Ash.Resource,
-      domain: AshAgent.IntegrationTest.TestDomain,
+      domain: AshAgent.Integration.Stub.BasicTest.TestDomain,
       extensions: [AshAgent.Resource]
 
     import AshAgent.Sigils
@@ -57,17 +65,6 @@ defmodule AshAgent.IntegrationTest do
     end
   end
 
-  defmodule TestDomain do
-    @moduledoc false
-    use Ash.Domain, validate_config_inclusion?: false
-
-    resources do
-      resource EchoAgent
-      resource SimpleAgent
-    end
-  end
-
-  # Helper functions for calling actions via Runtime
   defp call(resource, args) do
     args = if is_list(args), do: Map.new(args), else: args
 

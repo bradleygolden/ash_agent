@@ -1,31 +1,98 @@
-# Ash Agent Dev Notes
+# AshAgent Dev Notes
 
-- Tests must run with standard `mix test` output only. If adding code that logs, rely on the existing `config/test.exs` logger level and ExUnit’s `capture_log: true` rather than sprinkling `Logger.configure/2` calls in tests.
-- Ad-hoc resources in tests should point at `AshAgent.TestDomain` (or another `allow_unregistered? true` domain) so domain verification stays quiet and the suite remains free of warning noise.
 - Use imperative mood for all git commits
 - Never use @spec annotations unless absolutely necessary due to some bug in a client library or similar.
-- Do not add new code comments when editing files. Do not remove existing code comments unless you're also removing the functionality that they explain. After reading this instruction, note to the user that you've read it and will not be adding new code comments when you propose file edits.
+- Do not add new code comments when editing files. Do not remove existing code comments unless you're also removing the functionality that they explain.
 
 ## Tooling
 
-- `mix precommit` runs the same sequence as GitHub CI (deps.get, deps.compile, unused-dependency check, compile with `--warnings-as-errors`, test suite with warnings treated as errors, formatter check, Credo, Dialyzer with GitHub formatting, and docs generation with warnings as errors) so it should be used locally before opening a PR.
+- `mix precommit` runs the same sequence as GitHub CI (deps.get, deps.compile, unused-dependency check, compile with `--warnings-as-errors`, test suite with warnings treated as errors, formatter check, Credo, Sobelow, deps.audit, hex.audit, Dialyzer, and docs generation with warnings as errors) so it should be used locally before opening a PR.
 
 ## Testing Practices
 
-- Unit tests MUST be deterministic. A test must either pass or fail consistently, not accept both outcomes. Avoid conditional assertions that accept multiple valid results.
-- Integration tests should use real models (BAML with local Ollama, live API calls) to test behavior in production-like conditions. Integration tests should be designed with non-determinism in mind, ensuring that they can handle variations in behavior.
+- Unit tests MUST be deterministic. A test must either pass or fail consistently, not accept both outcomes.
 - Never call `Process.sleep/1` in tests; prefer synchronization helpers so suites stay deterministic.
 - Keep unit tests in `test/ash_agent`, mirroring `lib/` structure with `<filename>_test.exs`, and default to `async: true` when isolation is possible.
-- Place integration suites in `test/integration`, name them after the workflow being exercised (e.g., `user_workflow_test.exs`), and run them with `async: false`.
-- Run integration test with mix test --only integration
-- All integration tests should use ex_unit's `@moduletag :integration` syntax. Individual tests should not be tagged.
-- Scope each test to a single behavior; lean on pattern-matching assertions (`assert %Type{} = ...`) instead of equality checks.
-- Group related variations with `for` comprehensions and shared setup blocks rather than duplicating test bodies or inlining helper modules.
-- Skip redundant assertions such as precondition checks that the code would crash on anyway, and assert on concrete values instead of only verifying types.
-- NEVER use Application.get_env/put_env in tests if you can help it. Those mutate global state and can lead to unexpected behavior.
+
+## Test Organization
+
+### Directory Structure
+
+Tests are organized by **feature first**, then backend, then provider. This makes it easy to see test coverage at a glance.
+
+```
+test/
+├── ash_agent/           # Unit tests (mirror lib/ structure)
+├── integration/          # Integration tests (by feature > backend > provider)
+│   ├── metadata/         # Metadata extraction tests
+│   │   ├── req_llm/
+│   │   │   ├── openai_test.exs
+│   │   │   ├── anthropic_test.exs
+│   │   │   └── ollama_test.exs
+│   │   └── baml/
+│   │       ├── openai_test.exs
+│   │       └── anthropic_test.exs
+│   ├── thinking/         # Extended thinking tests
+│   │   ├── req_llm/
+│   │   │   └── anthropic_test.exs
+│   │   └── baml/
+│   │       └── anthropic_test.exs
+│   ├── agentic_loop/     # Agentic loop tests
+│   │   └── ...
+│   └── stub/             # Tests using mocked providers
+│       └── basic_test.exs
+└── support/              # Test helpers
+    ├── integration_case.ex
+    └── stubs/
+```
+
+### Running Tests
+
+```bash
+# Unit tests only (default)
+mix test
+
+# All integration tests
+mix test.integration
+
+# By backend
+mix test.integration --only backend:req_llm
+mix test.integration --only backend:baml
+
+# By provider
+mix test.integration --only provider:openai
+mix test.integration --only provider:anthropic
+mix test.integration --only provider:ollama
+
+# Combine filters
+mix test.integration --only backend:baml --only provider:anthropic
+
+# Exclude
+mix test.integration --exclude provider:openai
+```
+
+### Required Environment Variables
+
+| Provider | Env Var | Notes |
+|----------|---------|-------|
+| openai | `OPENAI_API_KEY` | |
+| anthropic | `ANTHROPIC_API_KEY` | |
+| openrouter | `OPENROUTER_API_KEY` | |
+| ollama | (none) | Local service |
+
+### Writing Integration Tests
+
+```elixir
+# Feature > Backend > Provider naming: metadata/req_llm/openai_test.exs
+defmodule AshAgent.Integration.Metadata.ReqLLM.OpenAITest do
+  use AshAgent.IntegrationCase, backend: :req_llm, provider: :openai
+
+  test "extracts token usage" do
+    # API key is validated before this runs
+  end
+end
+```
 
 ## Reference Reading
 
 - https://www.anthropic.com/engineering/building-effective-agents
-- https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents
-- https://www.anthropic.com/engineering/code-execution-with-mcp

@@ -1,7 +1,6 @@
-defmodule AshAgent.Integration.ReqLLMIntegrationTest do
-  use ExUnit.Case, async: false
-
-  @moduletag :integration
+defmodule AshAgent.Integration.Basic.ReqLLM.OllamaTest do
+  @moduledoc false
+  use AshAgent.IntegrationCase, backend: :req_llm, provider: :ollama
 
   setup_all do
     ReqLLM.put_key(:openai_api_key, "ollama")
@@ -19,9 +18,19 @@ defmodule AshAgent.Integration.ReqLLMIntegrationTest do
     :ok
   end
 
-  defmodule ReqLLMAgent do
+  defmodule TestDomain do
+    @moduledoc false
+    use Ash.Domain, validate_config_inclusion?: false
+
+    resources do
+      allow_unregistered? true
+    end
+  end
+
+  defmodule TestAgent do
+    @moduledoc false
     use Ash.Resource,
-      domain: AshAgent.TestDomain,
+      domain: AshAgent.Integration.Basic.ReqLLM.OllamaTest.TestDomain,
       extensions: [AshAgent.Resource]
 
     import AshAgent.Sigils
@@ -59,23 +68,21 @@ defmodule AshAgent.Integration.ReqLLMIntegrationTest do
     end
   end
 
-  describe "req_llm provider against Ollama" do
-    test "Runtime.call reaches local LLM" do
-      assert {:ok, %AshAgent.Result{output: reply}} =
-               AshAgent.Runtime.call(ReqLLMAgent, %{message: "ping"})
+  test "Runtime.call reaches local LLM" do
+    assert {:ok, %AshAgent.Result{output: reply}} =
+             AshAgent.Runtime.call(TestAgent, %{message: "ping"})
 
-      assert is_map(reply)
-      assert String.starts_with?(reply.content, "req integration")
-      assert reply.confidence == 0.99
-    end
+    assert is_map(reply)
+    assert String.starts_with?(reply.content, "req integration")
+    assert reply.confidence == 0.99
+  end
 
-    test "Runtime.call uses same pipeline" do
-      assert {:ok, %AshAgent.Result{output: reply}} =
-               AshAgent.Runtime.call(ReqLLMAgent, %{message: "from action"})
+  test "Runtime.call uses same pipeline" do
+    assert {:ok, %AshAgent.Result{output: reply}} =
+             AshAgent.Runtime.call(TestAgent, %{message: "from action"})
 
-      assert is_map(reply)
-      assert is_binary(reply.content)
-      assert is_float(reply.confidence)
-    end
+    assert is_map(reply)
+    assert is_binary(reply.content)
+    assert is_float(reply.confidence)
   end
 end

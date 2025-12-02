@@ -1,7 +1,6 @@
-defmodule AshAgent.Providers.BamlProviderTest do
+defmodule AshAgent.Integration.Stub.BamlProviderTest do
   @moduledoc false
-  use ExUnit.Case, async: true
-  @moduletag :integration
+  use AshAgent.IntegrationCase
 
   alias AshAgent.Runtime
 
@@ -10,14 +9,14 @@ defmodule AshAgent.Providers.BamlProviderTest do
     use Ash.Domain, validate_config_inclusion?: false
 
     resources do
-      resource AshAgent.Providers.BamlProviderTest.Agent
+      allow_unregistered? true
     end
   end
 
-  defmodule Agent do
+  defmodule TestAgent do
     @moduledoc false
     use Ash.Resource,
-      domain: AshAgent.Providers.BamlProviderTest.TestDomain,
+      domain: AshAgent.Integration.Stub.BamlProviderTest.TestDomain,
       extensions: [AshAgent.Resource]
 
     resource do
@@ -40,13 +39,13 @@ defmodule AshAgent.Providers.BamlProviderTest do
   describe "call/2 with :baml provider" do
     test "delegates to configured BAML function" do
       assert {:ok, %AshAgent.Result{output: %{content: "BAML reply: hello"}}} =
-               Runtime.call(Agent, message: "hello")
+               Runtime.call(TestAgent, message: "hello")
     end
   end
 
   describe "stream/2 with :baml provider" do
     test "wraps BAML streaming into Elixir stream" do
-      assert {:ok, stream} = Runtime.stream(Agent, message: "one two")
+      assert {:ok, stream} = Runtime.stream(TestAgent, message: "one two")
 
       chunks = Enum.to_list(stream)
       content_chunks = Enum.filter(chunks, &match?({:content, _}, &1))
@@ -57,14 +56,14 @@ defmodule AshAgent.Providers.BamlProviderTest do
 
   describe "metadata extraction with :baml provider" do
     test "Result.metadata is populated with Metadata struct" do
-      {:ok, result} = Runtime.call(Agent, message: "test")
+      {:ok, result} = Runtime.call(TestAgent, message: "test")
 
       assert %AshAgent.Metadata{} = result.metadata
       assert result.metadata.provider == :baml
     end
 
     test "metadata contains timing fields from runtime" do
-      {:ok, result} = Runtime.call(Agent, message: "test")
+      {:ok, result} = Runtime.call(TestAgent, message: "test")
 
       assert %DateTime{} = result.metadata.started_at
       assert %DateTime{} = result.metadata.completed_at
@@ -73,7 +72,7 @@ defmodule AshAgent.Providers.BamlProviderTest do
     end
 
     test "metadata is JSON-serializable" do
-      {:ok, result} = Runtime.call(Agent, message: "test")
+      {:ok, result} = Runtime.call(TestAgent, message: "test")
 
       assert {:ok, json} = Jason.encode(result.metadata)
       assert {:ok, decoded} = Jason.decode(json)
@@ -81,7 +80,7 @@ defmodule AshAgent.Providers.BamlProviderTest do
     end
 
     test "streaming result includes metadata struct" do
-      {:ok, stream} = Runtime.stream(Agent, message: "test")
+      {:ok, stream} = Runtime.stream(TestAgent, message: "test")
       chunks = Enum.to_list(stream)
       {:done, result} = List.last(chunks)
 
@@ -89,7 +88,7 @@ defmodule AshAgent.Providers.BamlProviderTest do
     end
 
     test "streaming result includes timing metadata" do
-      {:ok, stream} = Runtime.stream(Agent, message: "test")
+      {:ok, stream} = Runtime.stream(TestAgent, message: "test")
       chunks = Enum.to_list(stream)
       {:done, result} = List.last(chunks)
 
